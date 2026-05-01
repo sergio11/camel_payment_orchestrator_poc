@@ -1,0 +1,235 @@
+asyncapi: 3.0.0
+info:
+  title: Payment Events
+  version: 1.0.0
+  description: AsyncAPI specification for Payment Orchestration Layer events
+
+defaultContentType: application/json
+
+servers:
+  kafka:
+    host: localhost:9092
+    protocol: kafka
+    description: Kafka broker for development
+
+channels:
+  payment.received:
+    address: payments.events.received
+    description: Event published when a new payment is received
+    messages:
+      $ref: '#/components/messages/PaymentReceived'
+    publish:
+      summary: Payment received
+      description: Published when a new payment request enters the system
+
+  payment.processed:
+    address: payments.events.processed
+    description: Event published when a payment has been processed
+    messages:
+      $ref: '#/components/messages/PaymentProcessed'
+    publish:
+      summary: Payment processed
+      description: Published after successful payment processing
+
+  payment.failed:
+    address: payments.events.failed
+    description: Event published when payment processing fails
+    messages:
+      $ref: '#/components/messages/PaymentFailed'
+    publish:
+      summary: Payment failed
+      description: Published when payment processing fails
+
+  fraud.detected:
+    address: fraud.events.detected
+    description: Event published when fraud is detected
+    messages:
+      $ref: '#/components/messages/FraudDetected'
+    publish:
+      summary: Fraud detected
+      description: Published when fraud check detects high risk
+
+  payment.status.changed:
+    address: payments.events.status.changed
+    description: Event published when payment status changes
+    messages:
+      $ref: '#/components/messages/PaymentStatusChanged'
+    publish:
+      summary: Payment status changed
+      description: Published when payment status transitions
+
+components:
+  messages:
+    PaymentReceived:
+      name: PaymentReceived
+      title: Payment Received Event
+      summary: Event triggered when a new payment request is received
+      payload:
+        $ref: '#/components/schemas/PaymentReceivedPayload'
+
+    PaymentProcessed:
+      name: PaymentProcessed
+      title: Payment Processed Event
+      summary: Event triggered when a payment has been successfully processed
+      payload:
+        $ref: '#/components/schemas/PaymentProcessedPayload'
+
+    PaymentFailed:
+      name: PaymentFailed
+      title: Payment Failed Event
+      summary: Event triggered when payment processing fails
+      payload:
+        $ref: '#/components/schemas/PaymentFailedPayload'
+
+    FraudDetected:
+      name: FraudDetected
+      title: Fraud Detected Event
+      summary: Event triggered when fraud detection identifies high risk
+      payload:
+        $ref: '#/components/schemas/FraudDetectedPayload'
+
+    PaymentStatusChanged:
+      name: PaymentStatusChanged
+      title: Payment Status Changed Event
+      summary: Event triggered when payment status changes
+      payload:
+        $ref: '#/components/schemas/PaymentStatusChangedPayload'
+
+  schemas:
+    PaymentReceivedPayload:
+      type: object
+      required:
+        - paymentId
+        - amount
+        - currency
+        - customerId
+        - paymentMethod
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+          enum: [USD, EUR, GBP, MXN, JPY]
+        customerId:
+          type: string
+        paymentMethod:
+          type: string
+        country:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    PaymentProcessedPayload:
+      type: object
+      required:
+        - paymentId
+        - status
+        - provider
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [APPROVED]
+        provider:
+          type: string
+        providerTransactionId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    PaymentFailedPayload:
+      type: object
+      required:
+        - paymentId
+        - status
+        - failureReason
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [FAILED, REJECTED]
+        failureReason:
+          type: string
+        providerAttempted:
+          type: string
+          attempts:
+            type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    FraudDetectedPayload:
+      type: object
+      required:
+        - paymentId
+        - riskScore
+        - triggeredRules
+        - action
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        customerId:
+          type: string
+        riskScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+        triggeredRules:
+          type: array
+          items:
+            type: string
+          example: ["HIGH_AMOUNT", "HIGH_RISK_COUNTRY"]
+        action:
+          type: string
+          enum: [REVIEW, REJECT, APPROVE]
+        timestamp:
+          type: string
+          format: date-time
+
+    PaymentStatusChangedPayload:
+      type: object
+      required:
+        - paymentId
+        - previousStatus
+        - newStatus
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        previousStatus:
+          type: string
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+        newStatus:
+          type: string
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+        reason:
+          type: string
+        timestamp:
+          type: string
+          format: date-time

@@ -1,0 +1,17 @@
+{
+  "name": "poc-camel",
+  "version": "1.0.0",
+  "description": "Payment Orchestration Layer - SDD Workflow",
+  "scripts": {
+    "openspec": "openspec",
+    "openspec:list": "openspec list",
+    "openspec:validate": "openspec validate",
+    "openspec:validate:changes": "openspec validate changes",
+    "openspec:validate:specs": "openspec validate specs",
+    "spec:validate": "npx spectral lint specs/openapi/*.yaml specs/asyncapi/*.yaml"
+  },
+  "devDependencies": {
+    "@stoplight/spectral-cli": "^6.11.0",
+    "openspec": "^1.0.0"
+  }
+}

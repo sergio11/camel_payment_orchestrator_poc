@@ -1,0 +1,62 @@
+{
+  "dashboard": {
+    "title": "Payment Orchestration Dashboard",
+    "tags": ["payment", "camel", "quarkus"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "Payment Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(payment_requests_total[5m])",
+            "legendFormat": "Requests/sec"
+          }
+        ]
+      },
+      {
+        "title": "Payment Success Rate",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "sum(rate(payment_status{status=\"APPROVED\"}[5m])) / sum(rate(payment_requests_total[5m])) * 100"
+          }
+        ]
+      },
+      {
+        "title": "Payment Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(payment_latency_seconds_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(payment_latency_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          }
+        ]
+      },
+      {
+        "title": "Fraud Detection Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(fraud_detected_total[5m])",
+            "legendFormat": "Fraud detected"
+          }
+        ]
+      },
+      {
+        "title": "Provider Fallback Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(provider_fallback_total[5m])",
+            "legendFormat": "Fallbacks"
+          }
+        ]
+      }
+    ]
+  }
+}

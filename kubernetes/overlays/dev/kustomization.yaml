@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base/api-gateway-deployment.yaml
+  - ../../base/payment-processor-deployment.yaml
+  - ../../base/services.yaml
+  - ../../base/configmaps.yaml
+
+namespace: poc-camel
+
+commonLabels:
+  app: poc-camel
+  environment: dev
+
+configMapGenerator:
+  - name: app-config
+    literals:
+      - QUARKUS_PROFILE=dev
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
+
+replicas:
+  - name: api-gateway
+    count: 1
+  - name: payment-processor
+    count: 2

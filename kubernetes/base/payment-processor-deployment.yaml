@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-processor
+  labels:
+    app: payment-processor
+    component: processor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-processor
+  template:
+    metadata:
+      labels:
+        app: payment-processor
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/q/metrics"
+    spec:
+      containers:
+      - name: payment-processor
+        image: poc-camel/payment-processor:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8778
+          name: jolokia
+        env:
+        - name: QUARKUS_PROFILE
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: profile
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: kafka.servers
+        - name: JAEGER_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: jaeger.endpoint
+        - name: PROVIDER_A_URL
+          valueFrom:
+            secretKeyRef:
+              name: provider-secrets
+              key: provider-a-url
+        - name: PROVIDER_B_URL
+          valueFrom:
+            secretKeyRef:
+              name: provider-secrets
+              key: provider-b-url
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10

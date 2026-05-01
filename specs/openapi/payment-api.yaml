@@ -1,0 +1,338 @@
+openapi: 3.0.3
+info:
+  title: Payment Orchestration API
+  version: 1.0.0
+  description: REST API for Payment Orchestration Layer - Payment processing, fraud checking, and provider routing
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+
+paths:
+  /payments:
+    post:
+      operationId: createPayment
+      summary: Create a new payment
+      description: Submit a payment request for processing through fraud check and provider routing
+      tags:
+        - Payments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        201:
+          description: Payment created and processing initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        422:
+          $ref: '#/components/responses/FraudRejected'
+        500:
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      operationId: listPayments
+      summary: List payments
+      description: Retrieve all payments with optional filtering
+      tags:
+        - Payments
+      parameters:
+        - $ref: '#/components/parameters/customerId'
+        - $ref: '#/components/parameters/status'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        200:
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentResponse'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /payments/{id}:
+    get:
+      operationId: getPayment
+      summary: Get payment by ID
+      description: Retrieve details of a specific payment
+      tags:
+        - Payments
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Payment unique identifier
+      responses:
+        200:
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /payments/{id}/status:
+    get:
+      operationId: getPaymentStatus
+      summary: Get payment status
+      description: Simplified endpoint to check current payment status
+      tags:
+        - Payments
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: Payment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatusResponse'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns the health status of the service
+      tags:
+        - Health
+      responses:
+        200:
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [UP, DOWN]
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        status:
+                          type: string
+
+components:
+  parameters:
+    customerId:
+      name: customerId
+      in: query
+      schema:
+        type: string
+      description: Filter by customer ID
+    status:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+      description: Filter by payment status
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        maximum: 100
+      description: Maximum number of results
+    offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+      description: Number of results to skip
+
+  schemas:
+    PaymentRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - customerId
+        - paymentMethod
+      properties:
+        amount:
+          type: number
+          format: decimal
+          minimum: 0.01
+          example: 99.99
+        currency:
+          type: string
+          enum: [USD, EUR, GBP, MXN, JPY]
+          example: USD
+        customerId:
+          type: string
+          maxLength: 50
+          example: cust-12345
+        paymentMethod:
+          type: string
+          enum: [CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER, WALLET, CRYPTO]
+          example: CREDIT_CARD
+        country:
+          type: string
+          maxLength: 2
+          description: Country code (ISO 3166-1 alpha-2)
+          example: US
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional payment metadata
+          example:
+            orderId: order-67890
+            description: Purchase of goods
+
+    PaymentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        customerId:
+          type: string
+        paymentMethod:
+          type: string
+        country:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+          example: PENDING
+        provider:
+          type: string
+          description: Selected payment provider
+          nullable: true
+        failureReason:
+          type: string
+          description: Reason for failure if status is FAILED
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+          example: 2026-05-01T10:30:00Z
+        updatedAt:
+          type: string
+          format: date-time
+
+    PaymentStatusResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+        lastUpdated:
+          type: string
+          format: date-time
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human readable message
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      example:
+        error: VALIDATION_ERROR
+        message: Invalid payment request
+        details:
+          - field: amount
+            message: Amount must be greater than 0
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      example:
+        error: NOT_FOUND
+        message: Payment not found
+
+    FraudRejected:
+      description: Payment rejected by fraud engine
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      example:
+        error: FRAUD_REJECTED
+        message: Payment rejected due to high risk score
+        details:
+          - field: riskScore
+            message: "Risk score: 85 (threshold: 80)"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      example:
+        error: INTERNAL_ERROR
+        message: An unexpected error occurred

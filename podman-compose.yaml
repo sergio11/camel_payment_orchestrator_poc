@@ -1,0 +1,117 @@
+version: "3.9"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: poc-camel-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - poc-camel-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo stat | nc zookeeper 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: poc-camel-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - poc-camel-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: poc-camel-kafka-ui
+    depends_on:
+      - kafka
+      - zookeeper
+    ports:
+      - "8088:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: poc-camel
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - poc-camel-net
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: poc-camel-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus-config.yaml:/etc/prometheus/prometheus.yml:ro
+      - poc-camel-prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-ui'
+    networks:
+      - poc-camel-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.48
+    container_name: poc-camel-jaeger
+    ports:
+      - "16686:16686"
+      - "6831:6831"
+      - "14268:14268"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+      SPAN_STORAGE_TYPE: badger
+    networks:
+      - poc-camel-net
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: poc-camel-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana-config.ini:/etc/grafana/grafana.ini:ro
+      - poc-camel-grafana-data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    networks:
+      - poc-camel-net
+    depends_on:
+      - prometheus
+
+networks:
+  poc-camel-net:
+    driver: bridge
+
+volumes:
+  poc-camel-prometheus-data:
+  poc-camel-grafana-data:
