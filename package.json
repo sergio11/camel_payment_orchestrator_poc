@@ -4,14 +4,14 @@
   "description": "Payment Orchestration Layer - SDD Workflow",
   "scripts": {
     "openspec": "openspec",
+    "openspec:validate": "openspec validate --all",
     "openspec:list": "openspec list",
-    "openspec:validate": "openspec validate",
-    "openspec:validate:changes": "openspec validate changes",
-    "openspec:validate:specs": "openspec validate specs",
-    "spec:validate": "npx spectral lint specs/openapi/*.yaml specs/asyncapi/*.yaml"
+    "openspec:show": "openspec show",
+    "openspec:validate:changes": "openspec validate --changes",
+    "openspec:validate:specs": "openspec validate --specs",
+    "arch:check": "npm run arch:check --prefix backend && npm run arch:check --prefix frontend"
   },
   "devDependencies": {
-    "@stoplight/spectral-cli": "^6.11.0",
-    "openspec": "^1.0.0"
+    "@fission-ai/openspec": "latest"
   }
 }

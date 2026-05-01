@@ -3,23 +3,29 @@
 
 require "rake"
 require "fileutils"
-require "yaml"
 
-ROOT = File.expand_path(__dir__)
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-def run_cmd(cmd, chdir: nil, fail: true)
+def run_cmd(cmd, chdir: nil)
   puts ">> #{cmd}"
   ok = if chdir
          Dir.chdir(chdir) { system(cmd) }
        else
          system(cmd)
        end
-  raise "Command failed: #{cmd}" if fail && !ok
-  ok
+  raise "Command failed: #{cmd}" unless ok
+end
+
+def run_openspec(cmd)
+  run_cmd("npm.cmd run openspec -- #{cmd}")
+end
+
+ROOT = File.expand_path(__dir__)
+OPEN_SPEC_CHANGES = File.join(ROOT, "specs", "changes")
+OPEN_SPEC_TEMPLATES = File.join(ROOT, "config", "templates", "change")
+
+def resolve_change_id(args)
+  change_id = args[:change] || ENV["CHANGE"]
+  raise "Missing change id. Use CHANGE=<id> or rake sdd:<task>[<id>]" if change_id.nil? || change_id.strip.empty?
+  change_id.strip
 end
 
 def load_env
@@ -32,10 +38,15 @@ def load_env
     key, val = line.split("=", 2)
     ENV[key] ||= val
   end
+  # Fallback to local DB if we are likely on a dev machine and DB_URL points to docker service 'db'
+  if ENV["DATABASE_URL"] && ENV["DATABASE_URL"].include?("@db:") && ENV["DATABASE_URL_LOCAL"]
+    puts ">> Using DATABASE_URL_LOCAL as fallback for local execution"
+    ENV["DATABASE_URL"] = ENV["DATABASE_URL_LOCAL"]
+  end
 end
 
 def change_dir(change_id)
-  File.join(ROOT, "specs", "changes", change_id)
+  File.join(OPEN_SPEC_CHANGES, change_id)
 end
 
 def ensure_change_exists!(change_id)
@@ -43,152 +54,158 @@ def ensure_change_exists!(change_id)
   raise "Change not found: #{path}" unless Dir.exist?(path)
 end
 
-# ============================================================================
-# Constants
-# ============================================================================
+def parse_task_stats(tasks_file)
+  return { total: 0, done: 0, pending: 0, pending_items: [] } unless File.exist?(tasks_file)
 
-OPENSPEC_CHANGES = File.join(ROOT, "specs", "changes")
-TEMPLATES_DIR = File.join(ROOT, "config", "templates", "change")
+  total = 0
+  done = 0
+  pending_items = []
+
+  File.readlines(tasks_file, chomp: true).each do |line|
+    case line
+    when /^\s*-\s*\[[xX]\]\s+(.+)$/
+      total += 1
+      done += 1
+    when /^\s*-\s*\[\s\]\s+(.+)$/
+      total += 1
+      pending_items << Regexp.last_match(1).strip
+    end
+  end
+
+  {
+    total: total,
+    done: done,
+    pending: total - done,
+    pending_items: pending_items
+  }
+end
+
+def print_task_summary(change_id)
+  tasks_file = File.join(change_dir(change_id), "tasks.md")
+  stats = parse_task_stats(tasks_file)
+
+  puts "Change: #{change_id}"
+  puts "Tasks: #{stats[:done]}/#{stats[:total]} completed"
+  puts "Pending: #{stats[:pending]}"
+
+  unless stats[:pending_items].empty?
+    puts "Next pending tasks:"
+    stats[:pending_items].first(5).each { |item| puts "- #{item}" }
+  end
+
+  stats
+end
+
+def scaffold_change!(change_id)
+  target_dir = change_dir(change_id)
+  specs_dir = File.join(target_dir, "specs")
+
+  FileUtils.mkdir_p(target_dir)
+  FileUtils.mkdir_p(specs_dir)
+
+  {
+    "proposal.md" => File.join(OPEN_SPEC_TEMPLATES, "proposal.md"),
+    "design.md" => File.join(OPEN_SPEC_TEMPLATES, "design.md"),
+    "tasks.md" => File.join(OPEN_SPEC_TEMPLATES, "tasks.md")
+  }.each do |name, template|
+    target = File.join(target_dir, name)
+    if File.exist?(target)
+      puts "skip #{target} (already exists)"
+    else
+      FileUtils.cp(template, target)
+      puts "created #{target}"
+    end
+  end
+
+  delta_template = File.join(OPEN_SPEC_TEMPLATES, "spec-delta.md")
+  sample_delta = File.join(specs_dir, "platform-foundation", "spec.md")
+  unless File.exist?(sample_delta)
+    FileUtils.mkdir_p(File.dirname(sample_delta))
+    FileUtils.cp(delta_template, sample_delta)
+    puts "created #{sample_delta}"
+  end
+end
 
 # ============================================================================
 # Namespace: sdd (Spec-Driven Development)
 # ============================================================================
 
 namespace :sdd do
-  desc "One-time setup: install deps, create cluster, start services"
+  desc "One-time setup for SDD workflow (root + backend + frontend dependencies)"
   task :setup do
-    puts "=== SDD Setup ==="
-    
-    if File.exist?(File.join(ROOT, "Gemfile"))
-      run_cmd("bundle install")
-    end
-    
-    if File.exist?(File.join(ROOT, "package.json"))
-      run_cmd("npm install")
-    end
-    
-    puts "\n=== Setting up Kind Cluster ==="
-    run_cmd("kind get clusters 2>nul | findstr /C:poc-camel >nul 2>&1 || kind create cluster --name poc-camel", fail: false)
-    
-    puts "\n=== Starting Podman Services ==="
-    Rake::Task["podman:up"].invoke
-    
-    puts "\n=== Setup Complete ==="
-    puts "Run: rake sdd:list"
+    load_env
+    run_cmd("npm.cmd install")
+    run_cmd("npm.cmd install", chdir: File.join(ROOT, "backend")) if Dir.exist?(File.join(ROOT, "backend"))
+    run_cmd("npm.cmd install", chdir: File.join(ROOT, "frontend")) if Dir.exist?(File.join(ROOT, "frontend"))
+    Rake::Task["db:push"].invoke if Rake::Task.task_defined?("db:push")
+    run_cmd("npm.cmd run openspec:list")
   end
 
-  desc "Initialize new change (usage: rake sdd:init[phase-1-foundation])"
+  desc "Initialize/scaffold a new change (usage: rake sdd:init[my-change-id])"
   task :init, [:change] do |_, args|
-    change_id = args[:change] || ENV["CHANGE"]
-    raise "Missing CHANGE id. Usage: rake sdd:init[phase-1-foundation]" if change_id.nil? || change_id.strip.empty?
-    
-    change_id = change_id.strip
-    target_dir = change_dir(change_id)
-    specs_dir = File.join(target_dir, "specs")
-    
-    FileUtils.mkdir_p(target_dir)
-    FileUtils.mkdir_p(specs_dir)
-    
-    templates = {
-      "proposal.md" => File.join(TEMPLATES_DIR, "proposal.md"),
-      "design.md" => File.join(TEMPLATES_DIR, "design.md"),
-      "tasks.md" => File.join(TEMPLATES_DIR, "tasks.md"),
-      "risks.md" => File.join(TEMPLATES_DIR, "risks.md"),
-      "api-changes.md" => File.join(TEMPLATES_DIR, "api-changes.md")
-    }
-    
-    templates.each do |name, template|
-      target = File.join(target_dir, name)
-      if File.exist?(target)
-        puts "SKIP #{target} (already exists)"
-      elsif File.exist?(template)
-        FileUtils.cp(template, target)
-        puts "CREATED #{target}"
-      else
-        File.write(target, "# #{name.gsub("-", " ").titleize}\n\n")
-        puts "CREATED #{target} (empty template)"
-      end
-    end
-    
-    puts "\nNext steps:"
-    puts "- Edit specs/changes/#{change_id}/proposal.md"
-    puts "- Edit specs/changes/#{change_id}/design.md"
-    puts "- Edit specs/changes/#{change_id}/tasks.md"
+    change_id = resolve_change_id(args)
+    scaffold_change!(change_id)
+    puts
+    puts "Next:"
+    puts "- Fill proposal/design/tasks in openspec/changes/#{change_id}/"
     puts "- Run: rake sdd:check[#{change_id}]"
   end
 
-  desc "List all changes"
+  desc "List OpenSpec items through SDD entrypoint"
   task :list do
-    puts "=== Changes ==="
-    if Dir.exist?(OPENSPEC_CHANGES)
-      Dir.glob("#{OPENSPEC_CHANGES}/*").sort.each do |dir|
-        next unless Dir.exist?(dir)
-        id = File.basename(dir)
-        tasks_file = File.join(dir, "tasks.md")
-        stats = parse_task_stats(tasks_file)
-        puts "#{id}: #{stats[:done]}/#{stats[:total]} tasks"
-      end
-    else
-      puts "No changes found. Run: rake sdd:init[phase-1-foundation]"
-    end
+    run_cmd("npm.cmd run openspec:list")
   end
 
-  desc "Show change details (usage: rake sdd:show[phase-1-foundation])"
+  desc "Show a change or spec (usage: rake sdd:show[phase-1-bootstrap])"
   task :show, [:target] do |_, args|
     target = args[:target] || ENV["TARGET"]
     if target.nil? || target.strip.empty?
-      raise "Missing TARGET. Usage: rake sdd:show[phase-1-foundation]"
+      raise "Missing target. Use: rake sdd:show[phase-1-bootstrap] or TARGET=phase-1-bootstrap rake sdd:show"
     end
-    
-    path = change_dir(target)
-    raise "Change not found: #{path}" unless Dir.exist?(path)
-    
-    puts "=== Change: #{target} ==="
-    
-    %w[proposal design tasks risks api-changes].each do |doc|
-      file = File.join(path, "#{doc}.md")
-      if File.exist?(file)
-        puts "\n--- #{doc.upcase} ---"
-        puts File.read(file)[0..500]
-      end
-    end
+    run_openspec("show #{target}")
   end
 
   desc "Validate all changes and specs"
   task :validate do
-    puts "=== Validating Specs ==="
-    Rake::Task["spec:validate"].invoke
-    
-    puts "\n=== Validating Changes ==="
-    Rake::Task["sdd:validate_changes"].invoke
+    run_cmd("npm.cmd run openspec:validate")
   end
 
-  desc "Show progress (usage: rake sdd:status[phase-1-foundation])"
+  desc "Validate changes only"
+  task :validate_changes do
+    run_cmd("npm.cmd run openspec:validate:changes")
+  end
+
+  desc "Validate specs only"
+  task :validate_specs do
+    run_cmd("npm.cmd run openspec:validate:specs")
+  end
+
+  desc "Show current progress and next pending tasks (usage: rake sdd:status[change-id])"
   task :status, [:change] do |_, args|
     change_id = resolve_change_id(args)
     ensure_change_exists!(change_id)
     print_task_summary(change_id)
   end
 
-  desc "Validate change workflow (usage: rake sdd:check[phase-1-foundation])"
+  desc "Validate a change workflow (tasks + OpenSpec change validation)"
   task :check, [:change] do |_, args|
     change_id = resolve_change_id(args)
     ensure_change_exists!(change_id)
-    
     print_task_summary(change_id)
-    Rake::Task["spec:validate"].invoke
+    Rake::Task["sdd:validate_changes"].invoke
+    run_openspec("validate #{change_id}")
   end
 
-  desc "Ship gate: requires zero pending tasks and passing validation"
+  desc "Gate for merge: requires zero pending tasks and passing validation"
   task :ship, [:change] do |_, args|
     change_id = resolve_change_id(args)
     ensure_change_exists!(change_id)
-    
     stats = print_task_summary(change_id)
     raise "Cannot ship: #{stats[:pending]} pending tasks in #{change_id}" if stats[:pending] > 0
-    
-    Rake::Task["spec:validate"].invoke
-    puts "Ship gate PASSED for #{change_id}"
+
+    Rake::Task["sdd:validate_changes"].invoke
+    run_openspec("validate #{change_id}")
+    puts "Ship gate passed for #{change_id}"
   end
 end
 
@@ -396,51 +413,72 @@ namespace :dev do
   end
 end
 
-# ============================================================================
-# Helper Methods
-# ============================================================================
+namespace :docker do
+  desc "Start containers in detached mode"
+  task :up do
+    run_cmd("docker compose up -d")
+  end
 
-def resolve_change_id(args)
-  change_id = args[:change] || ENV["CHANGE"]
-  raise "Missing change id. Use CHANGE=<id> or rake sdd:<task>[<id>]" if change_id.nil? || change_id.strip.empty?
-  change_id.strip
-end
+  desc "Start containers with forced rebuild"
+  task :up_build do
+    run_cmd("docker compose up -d --build")
+  end
 
-def parse_task_stats(tasks_file)
-  return { total: 0, done: 0, pending: 0, pending_items: [] } unless File.exist?(tasks_file)
+  desc "Stop and remove containers"
+  task :down do
+    run_cmd("docker compose down")
+  end
 
-  total = 0
-  done = 0
-  pending_items = []
+  desc "Rebuild stack (down + up --build)"
+  task :rebuild do
+    Rake::Task["docker:down"].invoke
+    Rake::Task["docker:up_build"].invoke
+  end
 
-  File.readlines(tasks_file, chomp: true).each do |line|
-    case line
-    when /^\s*-\s*\[[xX]\]\s+(.+)$/
-      total += 1
-      done += 1
-    when /^\s*-\s*\[\s\]\s+(.+)$/
-      total += 1
-      pending_items << Regexp.last_match(1).strip
+  desc "Rebuild and start frontend service only"
+  task :rebuild_frontend do
+    run_cmd("docker compose up -d --build frontend")
+  end
+
+  desc "Rebuild and start backend service only"
+  task :rebuild_backend do
+    run_cmd("docker compose up -d --build backend")
+  end
+
+  desc "Restart running services"
+  task :restart do
+    run_cmd("docker compose restart")
+  end
+
+  desc "Show service status"
+  task :ps do
+    run_cmd("docker compose ps")
+  end
+
+  desc "Follow logs (usage: rake docker:logs or rake docker:logs[backend])"
+  task :logs, [:service] do |_, args|
+    service = args[:service] || ENV["SERVICE"]
+    if service && !service.strip.empty?
+      run_cmd("docker compose logs -f #{service.strip}")
+    else
+      run_cmd("docker compose logs -f")
     end
   end
-
-  { total: total, done: done, pending: total - done, pending_items: pending_items }
 end
 
-def print_task_summary(change_id)
-  tasks_file = File.join(change_dir(change_id), "tasks.md")
-  stats = parse_task_stats(tasks_file)
-
-  puts "Change: #{change_id}"
-  puts "Tasks: #{stats[:done]}/#{stats[:total]} completed"
-  puts "Pending: #{stats[:pending]}"
-
-  unless stats[:pending_items].empty?
-    puts "\nNext pending tasks:"
-    stats[:pending_items].first(5).each { |item| puts "- #{item}" }
+namespace :db do
+  desc "Push schema changes to the database (prisma db push)"
+  task :push do
+    load_env
+    run_cmd("npx.cmd prisma db push --schema=prisma/schema.prisma", chdir: File.join(ROOT, "backend")) if Dir.exist?(File.join(ROOT, "backend"))
   end
 
-  stats
+  desc "Open Prisma Studio"
+  task :studio do
+    load_env
+    run_cmd("npx.cmd prisma studio --schema=prisma/schema.prisma", chdir: File.join(ROOT, "backend")) if Dir.exist?(File.join(ROOT, "backend"))
+  end
 end
 
-task default: ["sdd:list"]
+desc "List available Rake tasks"
+task default: ["-T"]
