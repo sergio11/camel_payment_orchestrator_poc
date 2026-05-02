@@ -24,12 +24,12 @@ poc_camel/
 - **Runtime**: Java 17 LTS
 - **Framework**: Quarkus 3.x + Camel Quarkus
 - **Build**: Maven 3.9
-- **Services**: Podman Compose
-  - Kafka 3.5 (broker)
-  - Prometheus 2.47 (metrics)
-  - Jaeger 1.48 (tracing)
-  - Grafana 10.1 (dashboards)
-- **Kubernetes**: Kind (in Podman Desktop)
+- **Services**: Podman Kube (`podman kube play`)
+  - Kafka 3.5 (broker) - Podman Pod
+  - Prometheus 2.47 (metrics) - Podman Pod
+  - Jaeger 1.48 (tracing) - Podman Pod
+  - Grafana 10.1 (dashboards) - Podman Pod
+- **Kubernetes Simulation**: Podman Kube manifests (YAML)
 
 ### Local Services Configuration
 - Kafka: localhost:9092 (external), kafka:29092 (internal)

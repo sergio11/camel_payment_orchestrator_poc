@@ -19,8 +19,8 @@ def run_openspec(cmd)
 end
 
 ROOT = File.expand_path(__dir__)
-OPEN_SPEC_CHANGES = File.join(ROOT, "specs", "changes")
-OPEN_SPEC_TEMPLATES = File.join(ROOT, "config", "templates", "change")
+OPEN_SPEC_CHANGES = File.join(ROOT, "openspec", "changes")
+OPEN_SPEC_TEMPLATES = File.join(ROOT, "openspec", "templates", "change")
 
 def resolve_change_id(args)
   change_id = args[:change] || ENV["CHANGE"]
@@ -38,7 +38,7 @@ def load_env
     key, val = line.split("=", 2)
     ENV[key] ||= val
   end
-  # Fallback to local DB if we are likely on a dev machine and DB_URL points to docker service 'db'
+  # Fallback to local DB if we are likely on a dev machine and DB_URL points to podman service 'db'
   if ENV["DATABASE_URL"] && ENV["DATABASE_URL"].include?("@db:") && ENV["DATABASE_URL_LOCAL"]
     puts ">> Using DATABASE_URL_LOCAL as fallback for local execution"
     ENV["DATABASE_URL"] = ENV["DATABASE_URL_LOCAL"]
@@ -214,55 +214,46 @@ end
 # ============================================================================
 
 namespace :podman do
-  desc "Start services (Kafka, Prometheus, Jaeger) in detached mode"
+  desc "Start infrastructure services (Kafka, Monitoring, Jaeger) via Podman Kube"
   task :up do
-    compose_file = File.join(ROOT, "podman-compose.yaml")
-    if File.exist?(compose_file)
-      run_cmd("podman compose -f #{compose_file} up -d")
-      Rake::Task["podman:ps"].invoke
-    else
-      puts "WARN: podman-compose.yaml not found"
+    infra_dir = File.join(ROOT, "kubernetes", "infrastructure")
+    Dir.glob("#{infra_dir}/*.yaml").each do |manifest|
+      run_cmd("podman kube play #{manifest}")
+    end
+    Rake::Task["podman:ps"].invoke
+  end
+
+  desc "Stop and remove infrastructure pods"
+  task :down do
+    # Podman kube doesn't have a direct 'down' for files in all versions, 
+    # so we remove the pods by name based on the manifests
+    pods = ["kafka-stack", "monitoring-stack", "jaeger"]
+    pods.each do |pod|
+      run_cmd("podman pod rm -f #{pod}", fail: false)
     end
   end
 
-  desc "Start services with forced rebuild"
-  task :up_build do
-    compose_file = File.join(ROOT, "podman-compose.yaml")
-    run_cmd("podman compose -f #{compose_file} up -d --build")
-  end
-
-  desc "Stop and remove containers"
-  task :down do
-    compose_file = File.join(ROOT, "podman-compose.yaml")
-    run_cmd("podman compose -f #{compose_file} down", fail: false)
-  end
-
-  desc "Rebuild stack (down + up --build)"
+  desc "Rebuild and restart infrastructure"
   task :rebuild do
     Rake::Task["podman:down"].invoke
-    Rake::Task["podman:up_build"].invoke
+    Rake::Task["podman:up"].invoke
   end
 
-  desc "Show service status"
+  desc "Show pod status"
   task :ps do
-    compose_file = File.join(ROOT, "podman-compose.yaml")
-    run_cmd("podman compose -f #{compose_file} ps")
+    run_cmd("podman pod ps")
   end
 
-  desc "Follow logs (usage: rake podman:logs or rake podman:logs[service])"
-  task :logs, [:service] do |_, args|
-    service = args[:service] || ENV["SERVICE"]
-    compose_file = File.join(ROOT, "podman-compose.yaml")
-    if service && !service.strip.empty?
-      run_cmd("podman compose -f #{compose_file} logs -f #{service.strip}")
-    else
-      run_cmd("podman compose -f #{compose_file} logs -f")
-    end
+  desc "Show container logs (usage: rake podman:logs[pod-name])"
+  task :logs, [:pod] do |_, args|
+    pod = args[:pod] || "kafka-stack"
+    run_cmd("podman pod logs -f #{pod}")
   end
 
-  desc "Clean volumes"
+  desc "Clean all podman resources"
   task :clean do
-    run_cmd("podman volume rm -f poc-camel-kafka poc-camel-prometheus poc-camel-jaeger 2>nul", fail: false)
+    run_cmd("podman pod rm -a -f", fail: false)
+    run_cmd("podman volume rm -a -f", fail: false)
   end
 end
 
@@ -413,58 +404,6 @@ namespace :dev do
   end
 end
 
-namespace :docker do
-  desc "Start containers in detached mode"
-  task :up do
-    run_cmd("docker compose up -d")
-  end
-
-  desc "Start containers with forced rebuild"
-  task :up_build do
-    run_cmd("docker compose up -d --build")
-  end
-
-  desc "Stop and remove containers"
-  task :down do
-    run_cmd("docker compose down")
-  end
-
-  desc "Rebuild stack (down + up --build)"
-  task :rebuild do
-    Rake::Task["docker:down"].invoke
-    Rake::Task["docker:up_build"].invoke
-  end
-
-  desc "Rebuild and start frontend service only"
-  task :rebuild_frontend do
-    run_cmd("docker compose up -d --build frontend")
-  end
-
-  desc "Rebuild and start backend service only"
-  task :rebuild_backend do
-    run_cmd("docker compose up -d --build backend")
-  end
-
-  desc "Restart running services"
-  task :restart do
-    run_cmd("docker compose restart")
-  end
-
-  desc "Show service status"
-  task :ps do
-    run_cmd("docker compose ps")
-  end
-
-  desc "Follow logs (usage: rake docker:logs or rake docker:logs[backend])"
-  task :logs, [:service] do |_, args|
-    service = args[:service] || ENV["SERVICE"]
-    if service && !service.strip.empty?
-      run_cmd("docker compose logs -f #{service.strip}")
-    else
-      run_cmd("docker compose logs -f")
-    end
-  end
-end
 
 namespace :db do
   desc "Push schema changes to the database (prisma db push)"
