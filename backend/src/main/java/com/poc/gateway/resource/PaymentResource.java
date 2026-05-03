@@ -50,9 +50,9 @@ public class PaymentResource {
     public Response getPaymentStatus(@PathParam("id") String id) {
         PaymentResponse response = paymentService.getPayment(id);
         PaymentStatusResponse statusResponse = new PaymentStatusResponse(
-            response.getId(),
-            response.getStatus(),
-            response.getUpdatedAt()
+            response.id(),
+            response.status(),
+            response.updatedAt()
         );
         return Response.ok(statusResponse).build();
     }

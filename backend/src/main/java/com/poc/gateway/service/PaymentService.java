@@ -11,7 +11,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class PaymentService {
@@ -37,6 +36,6 @@ public class PaymentService {
         return repository.findAll(customerId, paymentStatus, limit, offset)
             .stream()
             .map(PaymentMapper::toResponse)
-            .collect(Collectors.toList());
+            .toList();
     }
 }

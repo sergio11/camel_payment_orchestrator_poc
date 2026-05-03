@@ -7,27 +7,24 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Provider
 public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
     @Override
     public Response toResponse(Exception exception) {
-        if (exception instanceof ConstraintViolationException) {
-            return handleValidationException((ConstraintViolationException) exception);
+        if (exception instanceof ConstraintViolationException cve) {
+            return handleValidationException(cve);
         }
-        if (exception instanceof PaymentNotFoundException) {
-            return handleNotFound((PaymentNotFoundException) exception);
+        if (exception instanceof PaymentNotFoundException pnfe) {
+            return handleNotFound(pnfe);
         }
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-            .entity(ErrorResponse.from("INTERNAL_ERROR", "An unexpected error occurred"))
-            .build();
+        return handleGeneric(exception);
     }
 
     private Response handleValidationException(ConstraintViolationException e) {
         List<ErrorDetail> details = e.getConstraintViolations().stream()
             .map(v -> new ErrorDetail(v.getPropertyPath().toString(), v.getMessage()))
-            .collect(Collectors.toList());
+            .toList();
         return Response.status(Response.Status.BAD_REQUEST)
             .entity(ErrorResponse.from("VALIDATION_ERROR", "Invalid request", details))
             .build();
@@ -36,6 +33,12 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
     private Response handleNotFound(PaymentNotFoundException e) {
         return Response.status(Response.Status.NOT_FOUND)
             .entity(ErrorResponse.from("NOT_FOUND", e.getMessage()))
+            .build();
+    }
+
+    private Response handleGeneric(Exception e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+            .entity(ErrorResponse.from("INTERNAL_ERROR", "An unexpected error occurred"))
             .build();
     }
 }

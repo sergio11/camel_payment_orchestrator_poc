@@ -1,119 +1,69 @@
 package com.poc.gateway.entity;
 
-import jakarta.enterprise.context.ApplicationScoped;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
-@ApplicationScoped
-public class Payment {
-    private UUID id;
-    private BigDecimal amount;
-    private String currency;
-    private String customerId;
-    private String paymentMethod;
-    private String country;
-    private PaymentStatus status;
-    private String provider;
-    private String failureReason;
-    private Map<String, Object> metadata;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-
-    public UUID getId() {
-        return id;
+public record Payment(
+    UUID id,
+    BigDecimal amount,
+    String currency,
+    String customerId,
+    String paymentMethod,
+    String country,
+    PaymentStatus status,
+    String provider,
+    String failureReason,
+    Map<String, Object> metadata,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt
+) {
+    public static Payment create(
+        BigDecimal amount,
+        String currency,
+        String customerId,
+        String paymentMethod,
+        String country,
+        Map<String, Object> metadata
+    ) {
+        return new Payment(
+            UUID.randomUUID(),
+            amount,
+            currency,
+            customerId,
+            paymentMethod,
+            country,
+            PaymentStatus.PENDING,
+            null,
+            null,
+            metadata,
+            LocalDateTime.now(),
+            LocalDateTime.now()
+        );
     }
 
-    public void setId(UUID id) {
-        this.id = id;
+    public Payment withStatus(PaymentStatus newStatus) {
+        return new Payment(
+            id, amount, currency, customerId, paymentMethod,
+            country, newStatus, provider, failureReason,
+            metadata, createdAt, LocalDateTime.now()
+        );
     }
 
-    public BigDecimal getAmount() {
-        return amount;
+    public Payment withProvider(String provider) {
+        return new Payment(
+            id, amount, currency, customerId, paymentMethod,
+            country, status, provider, failureReason,
+            metadata, createdAt, LocalDateTime.now()
+        );
     }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public String getCurrency() {
-        return currency;
-    }
-
-    public void setCurrency(String currency) {
-        this.currency = currency;
-    }
-
-    public String getCustomerId() {
-        return customerId;
-    }
-
-    public void setCustomerId(String customerId) {
-        this.customerId = customerId;
-    }
-
-    public String getPaymentMethod() {
-        return paymentMethod;
-    }
-
-    public void setPaymentMethod(String paymentMethod) {
-        this.paymentMethod = paymentMethod;
-    }
-
-    public String getCountry() {
-        return country;
-    }
-
-    public void setCountry(String country) {
-        this.country = country;
-    }
-
-    public PaymentStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(PaymentStatus status) {
-        this.status = status;
-    }
-
-    public String getProvider() {
-        return provider;
-    }
-
-    public void setProvider(String provider) {
-        this.provider = provider;
-    }
-
-    public String getFailureReason() {
-        return failureReason;
-    }
-
-    public void setFailureReason(String failureReason) {
-        this.failureReason = failureReason;
-    }
-
-    public Map<String, Object> getMetadata() {
-        return metadata;
-    }
-
-    public void setMetadata(Map<String, Object> metadata) {
-        this.metadata = metadata;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public Payment withFailure(String failureReason) {
+        return new Payment(
+            id, amount, currency, customerId, paymentMethod,
+            country, PaymentStatus.FAILED, provider, failureReason,
+            metadata, createdAt, LocalDateTime.now()
+        );
     }
 }
