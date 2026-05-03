@@ -124,12 +124,16 @@ poc_camel/
 
 ## Technology Stack
 
-- **Runtime**: Java 17 LTS
+- **Runtime**: Java 17 LTS (with Modern Features)
 - **Framework**: Quarkus 3.x + Camel Quarkus
 - **Message Broker**: Apache Kafka
 - **Orchestration**: Kubernetes (Kind)
 - **Observability**: Prometheus + Grafana + Jaeger
 - **Spec-first**: OpenAPI 3.0 + AsyncAPI 3.0
+
+## Java Standards
+
+See [openspec/tech/java-modern.md](openspec/tech/java-modern.md) for mandatory modern Java features.
 
 ## License
 
