@@ -348,17 +348,32 @@ namespace :spec do
 end
 
 # ============================================================================
-# Namespace: build (Build & Test)
+# Namespace: build (Build & Test) - Uses Podman container for Maven
 # ============================================================================
 
 namespace :build do
-  desc "Build Maven project"
+  MAVEN_IMAGE = "maven:3.9-eclipse-temurin-17"
+
+  desc "Build Maven project using Podman container"
   task :maven do
-    Dir.glob("#{ROOT}/**/pom.xml").each do |pom|
-      project_dir = File.dirname(pom)
-      puts "Building #{project_dir}..."
-      run_cmd("mvn clean package -DskipTests", chdir: project_dir)
-    end
+    puts "=== Building with Podman container ==="
+    cmd = "podman run --rm " \
+         "-v #{ROOT}:/workspace:Z " \
+         "-w /workspace " \
+         "#{MAVEN_IMAGE} " \
+         "mvn clean package -DskipTests"
+    run_cmd(cmd)
+  end
+
+  desc "Run tests using Podman container"
+  task :test do
+    puts "=== Running tests with Podman container ==="
+    cmd = "podman run --rm " \
+         "-v #{ROOT}:/workspace:Z " \
+         "-w /workspace " \
+         "#{MAVEN_IMAGE} " \
+         "mvn test"
+    run_cmd(cmd)
   end
 
   desc "Build container images"
