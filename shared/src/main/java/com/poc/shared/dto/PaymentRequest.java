@@ -1,8 +1,9 @@
-package com.poc.gateway.dto;
+package com.poc.shared.dto;
 
-import com.poc.gateway.validator.SupportedCurrency;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 public record PaymentRequest(
@@ -13,7 +14,7 @@ public record PaymentRequest(
     BigDecimal amount,
 
     @NotNull(message = "Currency is required")
-    @SupportedCurrency
+    @Size(min = 3, max = 3, message = "Currency must be 3 characters (ISO 4217)")
     String currency,
 
     @NotBlank(message = "Customer ID is required")
@@ -24,7 +25,7 @@ public record PaymentRequest(
     @Pattern(regexp = "CREDIT_CARD|DEBIT_CARD|BANK_TRANSFER|WALLET|CRYPTO", message = "Invalid payment method")
     String paymentMethod,
 
-    @Size(max = 2, message = "Country code max 2 characters")
+    @Size(max = 2, message = "Country code max 2 characters (ISO 3166-1 alpha-2)")
     String country,
 
     Map<String, Object> metadata

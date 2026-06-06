@@ -1,7 +1,7 @@
 package com.poc.gateway.exception;
 
-import com.poc.gateway.dto.ErrorResponse;
-import com.poc.gateway.dto.ErrorResponse.ErrorDetail;
+import com.poc.shared.dto.ErrorResponse;
+import com.poc.shared.dto.ErrorResponse.ErrorDetail;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;

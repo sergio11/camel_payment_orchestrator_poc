@@ -1,4 +1,4 @@
-package com.poc.gateway.dto;
+package com.poc.shared.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.math.BigDecimal;
@@ -16,10 +16,10 @@ public record PaymentResponse(
     String provider,
     String failureReason,
     Map<String, Object> metadata,
-    
+
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "UTC")
     LocalDateTime createdAt,
-    
+
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "UTC")
     LocalDateTime updatedAt
 ) {}

@@ -14,6 +14,13 @@
     <name>Payment Orchestration Layer - Backend</name>
 
     <dependencies>
+        <!-- Shared Module -->
+        <dependency>
+            <groupId>com.fission.poc</groupId>
+            <artifactId>poc-camel-shared</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Quarkus Core -->
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -24,16 +31,6 @@
             <artifactId>quarkus-resteasy-reactive-jackson</artifactId>
         </dependency>
         
-        <!-- Camel Quarkus -->
-        <dependency>
-            <groupId>org.apache.camel.quarkus</groupId>
-            <artifactId>camel-quarkus-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.camel.quarkus</groupId>
-            <artifactId>camel-quarkus-microprofile-health</artifactId>
-        </dependency>
-        
         <!-- Observability -->
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -42,10 +39,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-smallrye-opentracing</artifactId>
         </dependency>
 
         <!-- Validation -->
@@ -79,6 +72,7 @@
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
                 <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
                 <executions>
                     <execution>
                         <goals>

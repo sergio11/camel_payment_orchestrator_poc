@@ -1,7 +1,7 @@
 package com.poc.gateway.mapper;
 
-import com.poc.gateway.dto.PaymentRequest;
-import com.poc.gateway.dto.PaymentResponse;
+import com.poc.shared.dto.PaymentRequest;
+import com.poc.shared.dto.PaymentResponse;
 import com.poc.gateway.entity.Payment;
 import java.time.LocalDateTime;
 

@@ -1,8 +1,8 @@
 package com.poc.gateway.resource;
 
-import com.poc.gateway.dto.PaymentRequest;
-import com.poc.gateway.dto.PaymentResponse;
-import com.poc.gateway.dto.PaymentStatusResponse;
+import com.poc.shared.dto.PaymentRequest;
+import com.poc.shared.dto.PaymentResponse;
+import com.poc.shared.dto.PaymentStatusResponse;
 import com.poc.gateway.service.PaymentService;
 import jakarta.inject.Inject;
 import jakarta.validation.Valid;

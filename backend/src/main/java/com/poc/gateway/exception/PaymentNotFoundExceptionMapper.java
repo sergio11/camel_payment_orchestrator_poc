@@ -1,6 +1,6 @@
 package com.poc.gateway.exception;
 
-import com.poc.gateway.dto.ErrorResponse;
+import com.poc.shared.dto.ErrorResponse;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;

@@ -1,7 +1,7 @@
 package com.poc.gateway.service;
 
-import com.poc.gateway.dto.PaymentRequest;
-import com.poc.gateway.dto.PaymentResponse;
+import com.poc.shared.dto.PaymentRequest;
+import com.poc.shared.dto.PaymentResponse;
 import com.poc.gateway.entity.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
