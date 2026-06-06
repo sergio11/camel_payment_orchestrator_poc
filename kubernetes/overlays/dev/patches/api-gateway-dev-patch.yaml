@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: poc-camel
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          env:
+            - name: QUARKUS_LOG_CONSOLE_JSON
+              value: "false"
+            - name: QUARKUS_LOG_CATEGORY_"COM_POC"_LEVEL
+              value: "DEBUG"

@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: poc-camel
+
+resources:
+  - api-gateway-deployment.yaml
+  - payment-processor-deployment.yaml
+  - services.yaml
+  - configmaps.yaml
+  - secrets.yaml
+  - hpa.yaml
+
+commonLabels:
+  app: poc-camel
+  managed-by: kustomize
+
+commonAnnotations:
+  managed-by: kustomize
+  version: "1.0.0"
+
+configMapGenerator:
+  - name: app-config
+    behavior: replace
+    files:
+      - application.properties
+  - name: fraud-rules-config
+    behavior: replace
+
+secretGenerator:
+  - name: provider-secrets
+    behavior: replace
+    literals:
+      - provider.a.api.key=changeme
+      - provider.a.api.secret=changeme
+      - provider.b.api.key=changeme
+      - provider.b.api.secret=changeme
+
+patchesStrategicMerge: []
+
+# Images (will be overridden by overlays)
+images:
+  - name: poc-camel/api-gateway
+    newTag: latest
+  - name: poc-camel/payment-processor
+    newTag: latest

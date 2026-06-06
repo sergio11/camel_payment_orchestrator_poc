@@ -2,34 +2,54 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
+  namespace: poc-camel
+  labels:
+    app: poc-camel
+    component: config
 data:
-  profile: "dev"
-  kafka.servers: "kafka:9092"
-  jaeger.endpoint: "http://jaeger:14268/api/traces"
+  kafka.bootstrap.servers: "kafka:29092"
+  kafka.topic.payments.received: "payments.events.received"
+  kafka.topic.fraud.detected: "fraud.events.detected"
+  kafka.topic.audit: "payments.events.audit"
+  kafka.topic.dead.letter: "payments.events.dead-letter"
+  camel.component.kafka.brokers: "kafka:29092"
+  camel.component.kafka.auto-offset-reset: "earliest"
+  camel.component.kafka.enable-auto-commit: "false"
+  camel.component.kafka.consumer.group-id: "payment-processor-group"
+  camel.main.route-controller-supervision-enabled: "true"
+  camel.main.route-controller-backlog-tracing-enabled: "true"
+  camel.main.auto-startup: "true"
+  quarkus.smallrye-openapi.path: "/openapi"
+  quarkus.swagger-ui.always-include: "true"
+  quarkus.swagger-ui.path: "/swagger-ui"
+  quarkus.smallrye-health.root-path: "/health"
+  quarkus.micrometer.export.prometheus.enabled: "true"
+  quarkus.micrometer.export.prometheus.path: "/metrics"
+  quarkus.log.console.json: "true"
+  quarkus.log.console.format: "%d{yyyy-MM-dd HH:mm:ss} %-5p traceId=%X{traceId} [%c{1.}] %s%e%n"
+  quarkus.log.category."org.apache.camel".level: "INFO"
+  quarkus.log.category."com.poc.processor".level: "DEBUG"
+  quarkus.log.category."org.apache.kafka".level: "WARN"
+  provider.a-url: "http://provider-a:9090/provider-a"
+  provider.b-url: "http://provider-b:9091/provider-b"
+  provider.circuit-breaker.failure-threshold: "50"
+  provider.circuit-breaker.wait-duration: "5s"
+  provider.max-retries: "5"
+  provider.retry-backoff: "2s"
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: prometheus-config
+  name: fraud-rules-config
+  namespace: poc-camel
+  labels:
+    app: poc-camel
+    component: config
 data:
-  prometheus.yml: |
-    global:
-      scrape_interval: 15s
-    scrape_configs:
-      - job_name: 'payment-processor'
-        metrics_path: '/q/metrics'
-        static_configs:
-          - targets: ['payment-processor:8080']
-      - job_name: 'api-gateway'
-        metrics_path: '/q/metrics'
-        static_configs:
-          - targets: ['api-gateway:8080']
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: provider-secrets
-type: Opaque
-stringData:
-  provider-a-url: "http://provider-a:8081"
-  provider-b-url: "http://provider-b:8082"
+  fraud.rules.high-amount-threshold: "15000"
+  fraud.rules.high-risk-countries: "XX,YY"
+  fraud.rules.rapid-retry-threshold: "3"
+  fraud.rules.new-method-days-threshold: "30"
+  fraud.rules.unusual-hour-start: "2"
+  fraud.rules.unusual-hour-end: "5"
+  fraud.rules.max-risk-score: "100"

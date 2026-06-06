@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+
+# Maven
+target/
+*.jar
+*.war
+*.ear
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+docs/
+
+# Test outputs
+surefire-reports/
+failsafe-reports/
+*.xml
+
+# Docker
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Local config
+.env
+.env.local
+*.local
+
+# Node
+node_modules/
+package-lock.json
+package.json
+
+# Ruby
+Gemfile.lock
+
+# Coverage
+jacoco/
+coverage/
+*.exec
+
+# Temporary
+*.tmp
+*.temp
+temp/
+tmp/

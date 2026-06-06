@@ -1,0 +1,46 @@
+# Multi-stage Dockerfile for Payment Processor
+# Stage 1: Build with Maven
+FROM maven:3.9-eclipse-temurin-17 AS builder
+
+WORKDIR /workspace
+
+# Copy parent pom and modules for dependency caching
+COPY pom.xml .
+COPY shared/pom.xml shared/
+COPY payment-processor/pom.xml payment-processor/
+
+# Download dependencies (cache layer)
+RUN mvn dependency:go-offline -B -pl shared,payment-processor -am
+
+# Copy source code
+COPY shared/src shared/src
+COPY payment-processor/src payment-processor/src
+
+# Build the application
+RUN mvn clean package -DskipTests -pl payment-processor -am
+
+# Stage 2: Runtime with Quarkus
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1000 appgroup && adduser -u 1000 -G appgroup -s /bin/sh -D appuser
+
+# Copy built jar from builder
+COPY --from=builder /workspace/payment-processor/target/quarkus-app/ /app/
+
+# Change ownership
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
+# Expose HTTP port
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health/ready || exit 1
+
+# Run the application
+ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-jar", "quarkus-run.jar"]

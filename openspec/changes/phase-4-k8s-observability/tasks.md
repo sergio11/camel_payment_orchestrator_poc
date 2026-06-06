@@ -3,10 +3,10 @@
 ## Implementation Tasks
 
 ### Step 1: Docker Configuration
-- [ ] 4.1 Create docker/Dockerfile.api-gateway with multi-stage maven build
-- [ ] 4.2 Create docker/Dockerfile.payment-processor with multi-stage maven build
-- [ ] 4.3 Create docker/.dockerignore with target/, src/, *.md exclusions
-- [ ] 4.4 Verify Dockerfile syntax and base images are accessible
+- [x] 4.1 Create docker/Dockerfile.api-gateway with multi-stage maven build
+- [x] 4.2 Create docker/Dockerfile.payment-processor with multi-stage maven build
+- [x] 4.3 Create docker/.dockerignore with target/, src/, *.md exclusions
+- [x] 4.4 Verify Dockerfile syntax and base images are accessible
 
 ### Step 2: Kubernetes Base Manifests
 - [ ] 4.5 Create kubernetes/base/api-gateway-deployment.yaml with full specs

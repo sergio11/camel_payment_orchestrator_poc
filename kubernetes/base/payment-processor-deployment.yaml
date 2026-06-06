@@ -2,9 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: payment-processor
+  namespace: poc-camel
   labels:
     app: payment-processor
     component: processor
+    version: "1.0.0"
 spec:
   replicas: 2
   selector:
@@ -14,62 +16,88 @@ spec:
     metadata:
       labels:
         app: payment-processor
+        component: processor
+        version: "1.0.0"
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "8081"
         prometheus.io/path: "/q/metrics"
     spec:
+      serviceAccountName: poc-camel-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
-      - name: payment-processor
-        image: poc-camel/payment-processor:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 8080
-          name: http
-        - containerPort: 8778
-          name: jolokia
-        env:
-        - name: QUARKUS_PROFILE
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: profile
-        - name: KAFKA_BOOTSTRAP_SERVERS
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: kafka.servers
-        - name: JAEGER_ENDPOINT
-          valueFrom:
-            configMapKeyRef:
-              name: app-config
-              key: jaeger.endpoint
-        - name: PROVIDER_A_URL
-          valueFrom:
-            secretKeyRef:
-              name: provider-secrets
-              key: provider-a-url
-        - name: PROVIDER_B_URL
-          valueFrom:
-            secretKeyRef:
-              name: provider-secrets
-              key: provider-b-url
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /q/health/live
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /q/health/ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 10
+        - name: payment-processor
+          image: poc-camel/payment-processor:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: http
+              protocol: TCP
+          env:
+            - name: QUARKUS_HTTP_HOST
+              value: "0.0.0.0"
+            - name: QUARKUS_HTTP_PORT
+              value: "8081"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: kafka.bootstrap.servers
+            - name: QUARKUS_LOG_CONSOLE_JSON
+              value: "true"
+            - name: QUARKUS_LOG_CONSOLE_FORMAT
+              value: "%d{yyyy-MM-dd HH:mm:ss} %-5p traceId=%X{traceId} [%c{1.}] %s%e%n"
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - configMapRef:
+                name: fraud-rules-config
+            - secretRef:
+                name: provider-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - payment-processor
+                topologyKey: kubernetes.io/hostname

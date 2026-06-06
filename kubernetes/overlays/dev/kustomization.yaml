@@ -1,27 +1,47 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-resources:
-  - ../../base/api-gateway-deployment.yaml
-  - ../../base/payment-processor-deployment.yaml
-  - ../../base/services.yaml
-  - ../../base/configmaps.yaml
-
 namespace: poc-camel
 
+resources:
+  - ../../base
+
 commonLabels:
-  app: poc-camel
   environment: dev
 
-configMapGenerator:
-  - name: app-config
-    literals:
-      - QUARKUS_PROFILE=dev
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
-
+# Override replicas for dev environment
 replicas:
   - name: api-gateway
     count: 1
   - name: payment-processor
     count: 2
+
+# Dev-specific patches
+patches:
+  - path: patches/api-gateway-dev-patch.yaml
+    target:
+      kind: Deployment
+      name: api-gateway
+  - path: patches/payment-processor-dev-patch.yaml
+    target:
+      kind: Deployment
+      name: payment-processor
+
+# Dev-specific images (use local images loaded into Kind)
+images:
+  - name: poc-camel/api-gateway
+    newTag: dev
+  - name: poc-camel/payment-processor
+    newTag: dev
+
+# Dev-specific config
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - quarkus.log.category."com.poc".level=DEBUG
+      - quarkus.log.console.json=false
+  - name: fraud-rules-config
+    behavior: merge
+    literals:
+      - fraud.rules.high-amount-threshold=10000

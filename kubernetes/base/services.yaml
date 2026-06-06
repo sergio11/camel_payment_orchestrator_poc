@@ -2,56 +2,53 @@ apiVersion: v1
 kind: Service
 metadata:
   name: api-gateway
+  namespace: poc-camel
+  labels:
+    app: api-gateway
+    component: backend
 spec:
   type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
   selector:
     app: api-gateway
-  ports:
-  - name: http
-    port: 8080
-    targetPort: 8080
-  - name: metrics
-    port: 8778
-    targetPort: 8778
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: payment-processor
+  namespace: poc-camel
+  labels:
+    app: payment-processor
+    component: processor
 spec:
   type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: 8081
+      protocol: TCP
+      name: http
   selector:
     app: payment-processor
-  ports:
-  - name: http
-    port: 8080
-    targetPort: 8080
-  - name: metrics
-    port: 8778
-    targetPort: 8778
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: kafka
+  name: api-gateway-external
+  namespace: poc-camel
+  labels:
+    app: api-gateway
+    component: backend
 spec:
-  type: ClusterIP
-  selector:
-    app: kafka
+  type: NodePort
   ports:
-  - name: kafka
-    port: 9092
-    targetPort: 9092
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: prometheus
-spec:
-  type: ClusterIP
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+      nodePort: 30080
   selector:
-    app: prometheus
-  ports:
-  - name: http
-    port: 9090
-    targetPort: 9090
+    app: api-gateway
