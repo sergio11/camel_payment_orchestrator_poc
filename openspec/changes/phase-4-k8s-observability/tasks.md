@@ -9,57 +9,57 @@
 - [x] 4.4 Verify Dockerfile syntax and base images are accessible
 
 ### Step 2: Kubernetes Base Manifests
-- [ ] 4.5 Create kubernetes/base/api-gateway-deployment.yaml with full specs
-- [ ] 4.6 Create kubernetes/base/payment-processor-deployment.yaml with full specs
-- [ ] 4.7 Create kubernetes/base/services.yaml (api-gateway, payment-processor ClusterIP)
-- [ ] 4.8 Create kubernetes/base/configmaps.yaml (app-config, fraud-rules-config)
-- [ ] 4.9 Create kubernetes/base/secrets.yaml (provider-secrets)
-- [ ] 4.10 Create kubernetes/base/hpa.yaml with CPU 70%, memory 80%, min 2, max 10
-- [ ] 4.11 Create kubernetes/base/kustomization.yaml with all resources
+- [x] 4.5 Create kubernetes/base/api-gateway-deployment.yaml with full specs
+- [x] 4.6 Create kubernetes/base/payment-processor-deployment.yaml with full specs
+- [x] 4.7 Create kubernetes/base/services.yaml (api-gateway, payment-processor ClusterIP)
+- [x] 4.8 Create kubernetes/base/configmaps.yaml (app-config, fraud-rules-config)
+- [x] 4.9 Create kubernetes/base/secrets.yaml (provider-secrets)
+- [x] 4.10 Create kubernetes/base/hpa.yaml with CPU 70%, memory 80%, min 2, max 10
+- [x] 4.11 Create kubernetes/base/kustomization.yaml with all resources
 
 ### Step 3: Kustomization Overlays
-- [ ] 4.12 Create kubernetes/overlays/dev/kustomization.yaml
-- [ ] 4.13 Configure namespace: poc-camel in overlays
-- [ ] 4.14 Configure replicas (api-gateway: 1, payment-processor: 2)
-- [ ] 4.15 Create kubernetes/overlays/dev/patches/ directory structure
+- [x] 4.12 Create kubernetes/overlays/dev/kustomization.yaml
+- [x] 4.13 Configure namespace: poc-camel in overlays
+- [x] 4.14 Configure replicas (api-gateway: 1, payment-processor: 2)
+- [x] 4.15 Create kubernetes/overlays/dev/patches/ directory structure
 
 ### Step 4: Observability - Prometheus
-- [ ] 4.16 Add prometheus.io annotations to deployments (scrape, port, path)
-- [ ] 4.17 Create monitoring/prometheus-config.yaml with scrape configs
-- [ ] 4.18 Configure scrape for payment-processor (metrics_path=/q/metrics)
-- [ ] 4.19 Configure scrape for api-gateway (metrics_path=/q/metrics)
-- [ ] 4.20 Add Kafka scrape config (kafka:9092)
+- [x] 4.16 Add prometheus.io annotations to deployments (scrape, port, path)
+- [x] 4.17 Create monitoring/prometheus-config.yaml with scrape configs
+- [x] 4.18 Configure scrape for payment-processor (metrics_path=/q/metrics)
+- [x] 4.19 Configure scrape for api-gateway (metrics_path=/q/metrics)
+- [x] 4.20 Add Kafka scrape config (kafka:9092)
 
 ### Step 5: Observability - Grafana
-- [ ] 4.21 Create monitoring/grafana-dashboards/payment-dashboard.json
-- [ ] 4.22 Add Payment Request Rate panel (graph, rate)
-- [ ] 4.23 Add Payment Success Rate panel (gauge, percentage)
-- [ ] 4.24 Add Payment Latency panel (graph, p50/p95)
-- [ ] 4.25 Add Fraud Detection Rate panel (graph)
-- [ ] 4.26 Add Provider Fallback Rate panel (graph)
-- [ ] 4.27 Add Pod Memory Usage panel (graph)
-- [ ] 4.28 Create monitoring/grafana-provisioning/datasources/prometheus.yaml
+- [x] 4.21 Create monitoring/grafana-dashboards/payment-dashboard.json
+- [x] 4.22 Add Payment Request Rate panel (graph, rate)
+- [x] 4.23 Add Payment Success Rate panel (gauge, percentage)
+- [x] 4.24 Add Payment Latency panel (graph, p50/p95)
+- [x] 4.25 Add Fraud Detection Rate panel (graph)
+- [x] 4.26 Add Provider Fallback Rate panel (graph)
+- [x] 4.27 Add Pod Memory Usage panel (graph)
+- [x] 4.28 Create monitoring/grafana-provisioning/datasources/prometheus.yaml
 
 ### Step 6: Observability - Jaeger
-- [ ] 4.29 Configure jaeger.endpoint in configmaps.yaml
-- [ ] 4.30 Add OTEL_JAVA_AGENT configuration to deployments
-- [ ] 4.31 Configure jaeger.service.name per component
-- [ ] 4.32 Add traceId/spanId to log format
+- [x] 4.29 Configure jaeger.endpoint in configmaps.yaml
+- [x] 4.30 Add OTEL_JAVA_AGENT configuration to deployments
+- [x] 4.31 Configure jaeger.service.name per component
+- [x] 4.32 Add traceId/spanId to log format
 
 ### Step 7: Observability - Logging
-- [ ] 4.33 Configure quarkus.log.console.json=true in application.properties
-- [ ] 4.34 Configure log format with traceId=%X{traceId}
-- [ ] 4.35 Configure category levels (camel: INFO, kafka: WARN)
+- [x] 4.33 Configure quarkus.log.console.json=true in application.properties
+- [x] 4.34 Configure log format with traceId=%X{traceId}
+- [x] 4.35 Configure category levels (camel: INFO, kafka: WARN)
 
 ### Step 8: Rake Integration
-- [ ] 4.36 Update Rakefile with k8s:build task (podman build both images)
-- [ ] 4.37 Update Rakefile with k8s:load task (kind load docker-image)
-- [ ] 4.38 Add k8s:logs[pods] task
-- [ ] 4.39 Add k8s:port[service,port] task
-- [ ] 4.40 Add k8s:scale[deployment,replicas] task
-- [ ] 4.41 Add k8s:restart[deployment] task
-- [ ] 4.42 Add k8s:describe[resource] task
-- [ ] 4.43 Add k8s:all task (show all resources)
+- [x] 4.36 Update Rakefile with k8s:build task (podman build both images)
+- [x] 4.37 Update Rakefile with k8s:load task (kind load docker-image)
+- [x] 4.38 Add k8s:logs[pods] task
+- [x] 4.39 Add k8s:port[service,port] task
+- [x] 4.40 Add k8s:scale[deployment,replicas] task
+- [x] 4.41 Add k8s:restart[deployment] task
+- [x] 4.42 Add k8s:describe[resource] task
+- [x] 4.43 Add k8s:all task (show all resources)
 
 ### Step 9: Validation - Build & Deploy
 - [ ] 4.44 Verify podman build succeeds for api-gateway

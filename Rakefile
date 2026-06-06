@@ -296,6 +296,48 @@ namespace :k8s do
     port = args[:port] || 8080
     run_cmd("kubectl port-forward svc/#{service} #{port}:#{port}")
   end
+
+  desc "Scale deployment (usage: rake k8s:scale[deployment,replicas])"
+  task :scale, [:deployment, :replicas] do |_, args|
+    deployment = args[:deployment] || ENV["DEPLOYMENT"]
+    replicas = args[:replicas] || ENV["REPLICAS"]
+    raise "Missing DEPLOYMENT and REPLICAS" unless deployment && replicas
+    run_cmd("kubectl scale deployment #{deployment} --replicas=#{replicas} -n poc-camel")
+  end
+
+  desc "Restart deployment (usage: rake k8s:restart[deployment])"
+  task :restart, [:deployment] do |_, args|
+    deployment = args[:deployment] || ENV["DEPLOYMENT"]
+    raise "Missing DEPLOYMENT" unless deployment
+    run_cmd("kubectl rollout restart deployment/#{deployment} -n poc-camel")
+  end
+
+  desc "Describe resource (usage: rake k8s:describe[resource])"
+  task :describe, [:resource] do |_, args|
+    resource = args[:resource] || ENV["RESOURCE"]
+    raise "Missing RESOURCE" unless resource
+    run_cmd("kubectl describe #{resource} -n poc-camel")
+  end
+
+  desc "Show all resources in poc-camel namespace"
+  task :all do
+    run_cmd("kubectl get all -n poc-camel")
+  end
+
+  desc "Build container images using podman"
+  task :build do
+    puts "=== Building Container Images ==="
+    docker_dir = File.join(ROOT, "docker")
+    run_cmd("podman build -t poc-camel/api-gateway:dev -f #{File.join(docker_dir, 'Dockerfile.api-gateway')} .")
+    run_cmd("podman build -t poc-camel/payment-processor:dev -f #{File.join(docker_dir, 'Dockerfile.payment-processor')} .")
+  end
+
+  desc "Load images into Kind cluster"
+  task :load do
+    puts "=== Loading images into Kind ==="
+    run_cmd("kind load docker-image poc-camel/api-gateway:dev --name poc-camel")
+    run_cmd("kind load docker-image poc-camel/payment-processor:dev --name poc-camel")
+  end
 end
 
 # ============================================================================

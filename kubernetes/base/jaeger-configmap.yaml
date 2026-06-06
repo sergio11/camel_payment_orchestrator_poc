@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-config
+  namespace: poc-camel
+  labels:
+    app: poc-camel
+    component: tracing
+data:
+  jaeger.endpoint: "http://jaeger-collector:14268/api/traces"
+  jaeger.service.name.api-gateway: "api-gateway"
+  jaeger.service.name.payment-processor: "payment-processor"
+  jaeger.sampler.type: "const"
+  jaeger.sampler.param: "1"
+  jaeger.reporter.flush.interval.ms: "1000"
+  jaeger.reporter.max.queue.size: "1000"
