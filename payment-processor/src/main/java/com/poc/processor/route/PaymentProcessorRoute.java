@@ -19,7 +19,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .wireTap("direct:audit-pipeline")
             .process("paymentEnrichProcessor")
             .choice()
-                .when(method(ContentBasedRouterBean.class, "routeToFraudCheck(${body.amount}, ${body.paymentMethod})").isEqualTo("direct:fraud-review"))
+                .when(method(ContentBasedRouterBean.class, "routeToFraudCheck(${body.amount}, ${body.paymentMethod}, ${body.country})").isEqualTo("direct:fraud-review"))
                     .log("High amount or WALLET payment, routing to fraud review: ${body.paymentId}")
                     .to("direct:fraud-review")
                 .otherwise()

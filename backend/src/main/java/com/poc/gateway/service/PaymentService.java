@@ -11,16 +11,33 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.List;
 import java.util.UUID;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class PaymentService {
     
+    private static final Logger LOG = Logger.getLogger(PaymentService.class);
+    
     @Inject
     PaymentRepository repository;
+    
+    @Inject
+    KafkaEventPublisher kafkaEventPublisher;
     
     public PaymentResponse createPayment(PaymentRequest request) {
         Payment payment = PaymentMapper.toEntity(request);
         Payment saved = repository.save(payment);
+        
+        kafkaEventPublisher.publishPaymentReceived(
+            saved.id().toString(),
+            saved.amount(),
+            saved.currency(),
+            saved.customerId(),
+            saved.paymentMethod(),
+            saved.country(),
+            saved.metadata()
+        );
+        
         return PaymentMapper.toResponse(saved);
     }
     

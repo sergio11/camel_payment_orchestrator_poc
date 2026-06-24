@@ -17,84 +17,88 @@ class ContentBasedRouterTest {
     @Test
     @DisplayName("3.41: Verify high amount (>10000) routes to fraud-review")
     void testHighAmountRoutesToFraudReview() {
-        // Given: Amount > 10000
-        String route = routerBean.routeToFraudCheck(15000.0, "CREDIT_CARD");
-        
-        // Then: Should route to fraud-review
+        String route = routerBean.routeToFraudCheck(15000.0, "CREDIT_CARD", "US");
         assertEquals("direct:fraud-review", route, "Amount > 10000 should route to fraud-review");
     }
 
     @Test
     @DisplayName("3.41: Verify amount exactly 10000 routes to fraud-check")
     void testAmountExactly10000RoutesToFraudCheck() {
-        // Given: Amount == 10000 (not > 10000)
-        String route = routerBean.routeToFraudCheck(10000.0, "CREDIT_CARD");
-        
-        // Then: Should route to fraud-check (not > 10000)
+        String route = routerBean.routeToFraudCheck(10000.0, "CREDIT_CARD", "US");
         assertEquals("direct:fraud-check", route, "Amount == 10000 should route to fraud-check");
     }
 
     @Test
     @DisplayName("3.41: Verify amount 9999 routes to fraud-check")
     void testAmountUnder10000RoutesToFraudCheck() {
-        // Given: Amount < 10000
-        String route = routerBean.routeToFraudCheck(9999.0, "CREDIT_CARD");
-        
-        // Then: Should route to fraud-check
+        String route = routerBean.routeToFraudCheck(9999.0, "CREDIT_CARD", "US");
         assertEquals("direct:fraud-check", route, "Amount < 10000 should route to fraud-check");
     }
 
     @Test
     @DisplayName("3.42: Verify WALLET + amount > 5000 routes to fraud-review")
     void testWalletHighAmountRoutesToFraudReview() {
-        // Given: WALLET + amount > 5000
-        String route = routerBean.routeToFraudCheck(6000.0, "WALLET");
-        
-        // Then: Should route to fraud-review
+        String route = routerBean.routeToFraudCheck(6000.0, "WALLET", "US");
         assertEquals("direct:fraud-review", route, "WALLET + amount > 5000 should route to fraud-review");
     }
 
     @Test
     @DisplayName("3.42: Verify WALLET + amount 5000 routes to fraud-check")
     void testWalletAmount5000RoutesToFraudCheck() {
-        // Given: WALLET + amount == 5000 (not > 5000)
-        String route = routerBean.routeToFraudCheck(5000.0, "WALLET");
-        
-        // Then: Should route to fraud-check
+        String route = routerBean.routeToFraudCheck(5000.0, "WALLET", "US");
         assertEquals("direct:fraud-check", route, "WALLET + amount == 5000 should route to fraud-check");
     }
 
     @Test
     @DisplayName("3.42: Verify WALLET + amount 4999 routes to fraud-check")
     void testWalletAmountUnder5000RoutesToFraudCheck() {
-        // Given: WALLET + amount < 5000
-        String route = routerBean.routeToFraudCheck(4999.0, "WALLET");
-        
-        // Then: Should route to fraud-check
+        String route = routerBean.routeToFraudCheck(4999.0, "WALLET", "US");
         assertEquals("direct:fraud-check", route, "WALLET + amount < 5000 should route to fraud-check");
     }
 
     @Test
     @DisplayName("3.42: Verify CREDIT_CARD + amount > 5000 routes to fraud-check (not WALLET)")
     void testCreditCardHighAmountRoutesToFraudCheck() {
-        // Given: CREDIT_CARD + amount > 5000 (but not WALLET)
-        String route = routerBean.routeToFraudCheck(6000.0, "CREDIT_CARD");
-        
-        // Then: Should route to fraud-check (only WALLET triggers fraud-review at > 5000)
+        String route = routerBean.routeToFraudCheck(6000.0, "CREDIT_CARD", "US");
         assertEquals("direct:fraud-check", route, "CREDIT_CARD + amount > 5000 should route to fraud-check");
     }
 
     @Test
     @DisplayName("3.42: Verify other payment methods route to fraud-check")
     void testOtherPaymentMethodsRouteToFraudCheck() {
-        // Given: Other payment methods with high amount
-        String routeDebit = routerBean.routeToFraudCheck(6000.0, "DEBIT_CARD");
-        String routeTransfer = routerBean.routeToFraudCheck(6000.0, "BANK_TRANSFER");
-        String routeCrypto = routerBean.routeToFraudCheck(6000.0, "CRYPTO");
-        
-        // Then: All should route to fraud-check
+        String routeDebit = routerBean.routeToFraudCheck(6000.0, "DEBIT_CARD", "US");
+        String routeTransfer = routerBean.routeToFraudCheck(6000.0, "BANK_TRANSFER", "US");
+        String routeCrypto = routerBean.routeToFraudCheck(6000.0, "CRYPTO", "US");
         assertEquals("direct:fraud-check", routeDebit);
         assertEquals("direct:fraud-check", routeTransfer);
         assertEquals("direct:fraud-check", routeCrypto);
+    }
+
+    @Test
+    @DisplayName("Verify high-risk country XX routes to fraud-review")
+    void testHighRiskCountryXXRoutesToFraudReview() {
+        String route = routerBean.routeToFraudCheck(1000.0, "CREDIT_CARD", "XX");
+        assertEquals("direct:fraud-review", route, "High-risk country XX should route to fraud-review");
+    }
+
+    @Test
+    @DisplayName("Verify high-risk country YY routes to fraud-review")
+    void testHighRiskCountryYYRoutesToFraudReview() {
+        String route = routerBean.routeToFraudCheck(1000.0, "CREDIT_CARD", "YY");
+        assertEquals("direct:fraud-review", route, "High-risk country YY should route to fraud-review");
+    }
+
+    @Test
+    @DisplayName("Verify non-high-risk country routes to fraud-check")
+    void testNonHighRiskCountryRoutesToFraudCheck() {
+        String route = routerBean.routeToFraudCheck(1000.0, "CREDIT_CARD", "US");
+        assertEquals("direct:fraud-check", route, "Non-high-risk country should route to fraud-check");
+    }
+
+    @Test
+    @DisplayName("Verify high-risk country still routes to fraud-review even with low amount")
+    void testHighRiskCountryLowAmountRoutesToReview() {
+        String route = routerBean.routeToFraudCheck(100.0, "CREDIT_CARD", "XX");
+        assertEquals("direct:fraud-review", route, "High-risk country should override low amount");
     }
 }

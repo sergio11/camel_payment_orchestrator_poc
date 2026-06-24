@@ -5,6 +5,7 @@ import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.config.FraudRulesConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.time.LocalTime;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 
@@ -49,13 +50,14 @@ public class FraudEvaluationProcessor implements Processor {
             }
             
             // NEW_PAYMENT_METHOD rule: new method + age < 30 days → +20 score
+            Object isNewMethod = message.metadata().get("isNewPaymentMethod");
             Object methodAge = message.metadata().get("paymentMethodAgeDays");
-            if (methodAge instanceof Number && ((Number) methodAge).intValue() < config.newMethodDaysThreshold()) {
+            if (Boolean.TRUE.equals(isNewMethod) && methodAge instanceof Number && ((Number) methodAge).intValue() < config.newMethodDaysThreshold()) {
                 score += 20;
             }
             
             // UNUSUAL_HOUR rule: 2am-5am → +15 score
-            int hour = message.timestamp().getHour();
+            int hour = LocalTime.now().getHour();
             if (hour >= config.unusualHourStart() && hour <= config.unusualHourEnd()) {
                 score += 15;
             }
