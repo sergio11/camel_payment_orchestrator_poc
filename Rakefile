@@ -423,7 +423,7 @@ namespace :build do
     puts "=== Building Container Images ==="
     docker_dir = File.join(ROOT, "docker")
     run_cmd("podman build -t poc-camel/api-gateway:latest -f #{File.join(docker_dir, 'Dockerfile.api-gateway')} .") if File.exist?(File.join(docker_dir, "Dockerfile.api-gateway"))
-    run_cmd("podman build -t poc-camel/payment-processor:latest -f #{File.join(docker_dir, 'Dockerfile.processor')} .") if File.exist?(File.join(docker_dir, "Dockerfile.processor"))
+    run_cmd("podman build -t poc-camel/payment-processor:latest -f #{File.join(docker_dir, 'Dockerfile.payment-processor')} .") if File.exist?(File.join(docker_dir, "Dockerfile.payment-processor"))
   end
 end
 

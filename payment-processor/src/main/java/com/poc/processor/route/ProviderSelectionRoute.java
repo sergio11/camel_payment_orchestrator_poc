@@ -3,6 +3,7 @@ package com.poc.processor.route;
 import com.poc.processor.processor.ProviderRouterBean;
 import com.poc.shared.event.ProviderResponse;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.dataformat.JsonLibrary;
 
@@ -19,20 +20,22 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:provider-a")
             .routeId("provider-a")
-            .log("Routing to Provider A: ${header.CamelPaymentId}")
-            .circuitBreaker()
-                .resilience4jConfiguration("providerA")
-                .to("direct:call-provider-a")
-            .endCircuitBreaker()
-            .retry()
-                .exponentialBackoff(1000, 2, 5000)
-                .maximumRedeliveries(5)
-            .endRetry()
             .onException(Exception.class)
                 .handled(true)
+                .maximumRedeliveries(5)
+                .useExponentialBackOff()
+                .backOffMultiplier(2)
+                .maximumRedeliveryDelay(5000)
+                .retryAttemptedLogLevel(LoggingLevel.WARN)
                 .log("Provider A failed after retries, falling back to Provider B: ${exception.message}")
                 .to("direct:provider-b-fallback")
             .end()
+            .log("Routing to Provider A: ${header.CamelPaymentId}")
+            .circuitBreaker()
+                .inheritErrorHandler(true)
+                .resilience4jConfiguration("providerA")
+                .to("direct:call-provider-a")
+            .endCircuitBreaker()
             .log("Provider A completed for: ${header.CamelPaymentId}");
 
         from("direct:call-provider-a")
@@ -52,20 +55,22 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:provider-b-fallback")
             .routeId("provider-b-fallback")
-            .log("Fallback to Provider B: ${header.CamelPaymentId}")
-            .circuitBreaker()
-                .resilience4jConfiguration("providerB")
-                .to("direct:call-provider-b")
-            .endCircuitBreaker()
-            .retry()
-                .exponentialBackoff(1000, 2, 5000)
-                .maximumRedeliveries(5)
-            .endRetry()
             .onException(Exception.class)
                 .handled(true)
+                .maximumRedeliveries(5)
+                .useExponentialBackOff()
+                .backOffMultiplier(2)
+                .maximumRedeliveryDelay(5000)
+                .retryAttemptedLogLevel(LoggingLevel.WARN)
                 .log("Provider B also failed, sending to dead letter: ${exception.message}")
                 .to("direct:dead-letter")
             .end()
+            .log("Fallback to Provider B: ${header.CamelPaymentId}")
+            .circuitBreaker()
+                .inheritErrorHandler(true)
+                .resilience4jConfiguration("providerB")
+                .to("direct:call-provider-b")
+            .endCircuitBreaker()
             .log("Provider B completed for: ${header.CamelPaymentId}");
 
         from("direct:call-provider-b")

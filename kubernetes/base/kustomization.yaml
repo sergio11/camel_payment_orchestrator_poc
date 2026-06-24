@@ -6,6 +6,7 @@ namespace: poc-camel
 resources:
   - api-gateway-deployment.yaml
   - payment-processor-deployment.yaml
+  - service-account.yaml
   - services.yaml
   - configmaps.yaml
   - secrets.yaml
