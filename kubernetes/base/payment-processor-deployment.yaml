@@ -20,7 +20,7 @@ spec:
         version: "1.0.0"
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8081"
+        prometheus.io/port: "8080"
         prometheus.io/path: "/q/metrics"
     spec:
       serviceAccountName: poc-camel-sa
@@ -34,14 +34,14 @@ spec:
           image: poc-camel/payment-processor:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8081
+            - containerPort: 8080
               name: http
               protocol: TCP
           env:
             - name: QUARKUS_HTTP_HOST
               value: "0.0.0.0"
             - name: QUARKUS_HTTP_PORT
-              value: "8081"
+              value: "8080"
             - name: KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
                 configMapKeyRef:
@@ -92,7 +92,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health/live
-              port: 8081
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -100,7 +100,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /health/ready
-              port: 8081
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
@@ -108,7 +108,7 @@ spec:
           startupProbe:
             httpGet:
               path: /health/started
-              port: 8081
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
