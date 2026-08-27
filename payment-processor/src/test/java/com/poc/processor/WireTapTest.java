@@ -89,6 +89,10 @@ class WireTapTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
+            0,
+            false,
+            0,
+            "UTC",
             Map.of(),
             LocalDateTime.now()
         );

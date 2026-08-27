@@ -1,56 +1,50 @@
 package com.poc.processor;
 
-import com.poc.shared.event.ProviderResponse;
+import com.poc.shared.event.PaymentMessage;
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
+import org.apache.camel.CamelContext;
+import org.apache.camel.ProducerTemplate;
+import org.apache.camel.builder.AdviceWith;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.*;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.junit.jupiter.api.TestInstance.Lifecycle;
 
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-@Testcontainers
+@QuarkusTestResource(KafkaTestResource.class)
+@TestInstance(Lifecycle.PER_CLASS)
 class ProviderSelectionRouteTest {
 
-    @Container
-    static KafkaContainer kafka = new KafkaContainer("confluentinc/cp-kafka:7.5.0")
-        .withEnv("KAFKA_AUTO_CREATE_TOPICS_ENABLE", "true");
+    @Inject
+    @ConfigProperty(name = "kafka.bootstrap.servers")
+    String bootstrapServers;
 
-    static KafkaProducer<String, String> producer;
-    static KafkaConsumer<String, String> consumer;
+    KafkaProducer<String, String> producer;
+    KafkaConsumer<String, String> consumer;
 
     @BeforeAll
-    static void setup() {
-        kafka.start();
-        
-        String bootstrapServers = kafka.getBootstrapServers();
-        System.setProperty("kafka.bootstrap.servers", bootstrapServers);
-        System.setProperty("camel.component.kafka.brokers", bootstrapServers);
-
+    void setup() {
         Properties prodProps = new Properties();
         prodProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        prodProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, org.apache.kafka.common.serialization.StringSerializer.class);
-        prodProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, org.apache.kafka.common.serialization.StringSerializer.class);
+        prodProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        prodProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         producer = new KafkaProducer<>(prodProps);
 
         Properties consProps = new Properties();
@@ -61,7 +55,6 @@ class ProviderSelectionRouteTest {
         consProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         consProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
         consumer = new KafkaConsumer<>(consProps);
-        
         consumer.subscribe(Arrays.asList(
             "payments.events.dead-letter",
             "fraud.events.detected"
@@ -69,66 +62,186 @@ class ProviderSelectionRouteTest {
     }
 
     @AfterAll
-    static void teardown() {
+    void teardown() {
         consumer.close();
         producer.close();
-        kafka.stop();
     }
+
+    @Inject
+    CamelContext camelContext;
+
+    @Inject
+    ProducerTemplate producerTemplate;
 
     @BeforeEach
     void reset() {
-        consumer.poll(java.time.Duration.ofMillis(100));
+        consumer.poll(Duration.ofMillis(100));
+    }
+
+    private PaymentMessage createTestPayment(String paymentId) {
+        return new PaymentMessage(
+            UUID.randomUUID().toString(),
+            paymentId,
+            new BigDecimal("100.00"),
+            "USD",
+            "cust-test",
+            "CREDIT_CARD",
+            "US",
+            0,
+            false,
+            0,
+            "UTC",
+            Map.of(),
+            LocalDateTime.now()
+        );
+    }
+
+    private String providerAFailureResponse() {
+        return """
+            {
+                "providerId": "provider-a",
+                "transactionId": null,
+                "success": false,
+                "errorCode": "PROVIDER_A_DOWN",
+                "errorMessage": "Provider A is unavailable",
+                "processedAt": "2026-01-01T00:00:00"
+            }
+            """;
+    }
+
+    private String providerBFailureResponse() {
+        return """
+            {
+                "providerId": "provider-b",
+                "transactionId": null,
+                "success": false,
+                "errorCode": "PROVIDER_B_DOWN",
+                "errorMessage": "Provider B is unavailable",
+                "processedAt": "2026-01-01T00:00:00"
+            }
+            """;
+    }
+
+    private String providerBSuccessResponse() {
+        return """
+            {
+                "providerId": "provider-b",
+                "transactionId": "txn-123",
+                "success": true,
+                "errorCode": null,
+                "errorMessage": null,
+                "processedAt": "2026-01-01T00:00:00"
+            }
+            """;
+    }
+
+    private void mockProviderAFailure() throws Exception {
+        AdviceWith.adviceWith(camelContext, "call-provider-a", builder -> {
+            builder.interceptSendToEndpoint("netty-http:*")
+                .skipSendToOriginalEndpoint()
+                .process(exchange -> {
+                    String mockResponse = providerAFailureResponse();
+                    exchange.getMessage().setBody(mockResponse, String.class);
+                });
+        });
+    }
+
+    private void mockProviderB(boolean success) throws Exception {
+        AdviceWith.adviceWith(camelContext, "call-provider-b", builder -> {
+            builder.interceptSendToEndpoint("netty-http:*")
+                .skipSendToOriginalEndpoint()
+                .process(exchange -> {
+                    String mockResponse = success ? providerBSuccessResponse() : providerBFailureResponse();
+                    exchange.getMessage().setBody(mockResponse, String.class);
+                });
+        });
+    }
+
+    private boolean waitForDeadLetterMessage(String paymentId, long timeoutMs) throws InterruptedException {
+        long startTime = System.currentTimeMillis();
+
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
+            for (ConsumerRecord<String, String> record : records) {
+                if ("payments.events.dead-letter".equals(record.topic())) {
+                    if (record.value().contains(paymentId)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     @Test
     @DisplayName("3.43: Verify provider fallback when Provider A fails")
     void testProviderFallbackWhenProviderAFails() throws Exception {
-        // Given: A payment that will fail on Provider A (simulated 10% failure)
-        // We need to send enough payments to trigger fallback
-        // This test verifies the fallback mechanism exists
-        
-        // The route uses circuit breaker + retry with fallback
-        // We verify the route configuration exists by checking the route is deployed
-        // A full integration test would require mocking the HTTP endpoints
-        
-        // For now, verify the route configuration is correct
-        // In a real scenario, we'd mock the HTTP providers
-        assertTrue(true, "Route configuration verified - fallback logic implemented in ProviderSelectionRoute");
+        mockProviderAFailure();
+        mockProviderB(true);
+
+        String paymentId = UUID.randomUUID().toString();
+        PaymentMessage payment = createTestPayment(paymentId);
+
+        producerTemplate.sendBody("direct:provider-selection", payment);
+
+        boolean deadLetterReceived = waitForDeadLetterMessage(paymentId, 30000);
+
+        assertFalse(deadLetterReceived,
+            "Payment should NOT be in dead letter queue - Provider B succeeded as fallback");
     }
 
     @Test
     @DisplayName("3.44: Verify Circuit Breaker opens after 50% failure rate")
     void testCircuitBreakerOpensAfterFailureRate() throws Exception {
-        // Given: The circuit breaker is configured with 50% failure threshold
-        // When: 50% of calls fail
-        // Then: Circuit breaker should open
-        
-        // The circuit breaker configuration is in application.properties:
-        // resilience4j.circuitbreaker.instances.providerA.failureRateThreshold=50
-        // resilience4j.circuitbreaker.instances.providerA.slidingWindowSize=10
-        // resilience4j.circuitbreaker.instances.providerA.minimumNumberOfCalls=5
-        
-        // Verify configuration exists
-        assertTrue(true, "Circuit breaker configuration verified in application.properties: 50% threshold, 10 call window, min 5 calls");
+        assertNotNull(camelContext.getRoute("provider-a"),
+            "Provider A route with circuit breaker should exist");
+        assertNotNull(camelContext.getRoute("provider-b-fallback"),
+            "Provider B fallback route should exist");
+
+        AtomicInteger providerACallCount = new AtomicInteger(0);
+
+        AdviceWith.adviceWith(camelContext, "call-provider-a", builder -> {
+            builder.interceptSendToEndpoint("netty-http:*")
+                .skipSendToOriginalEndpoint()
+                .process(exchange -> {
+                    providerACallCount.incrementAndGet();
+                    exchange.getMessage().setBody(providerAFailureResponse(), String.class);
+                });
+        });
+
+        int paymentsToSend = 15;
+        for (int i = 0; i < paymentsToSend; i++) {
+            String paymentId = UUID.randomUUID().toString();
+            PaymentMessage payment = createTestPayment(paymentId);
+            producerTemplate.sendBody("direct:provider-selection", payment);
+            Thread.sleep(200);
+        }
+
+        Thread.sleep(5000);
+
+        int callsMade = providerACallCount.get();
+        assertTrue(callsMade >= 1,
+            "Provider A should have been called at least once, actual: " + callsMade);
+        assertTrue(callsMade < paymentsToSend,
+            "Circuit breaker should have opened after failures, reducing calls. " +
+            "Expected < " + paymentsToSend + " calls, actual: " + callsMade);
     }
 
     @Test
-    @DisplayName("3.45: Verify Dead Letter Channel receives failed payments after 3 retries")
+    @DisplayName("3.45: Verify Dead Letter Channel receives failed payments after retries")
     void testDeadLetterChannelReceivesFailedPayments() throws Exception {
-        // Given: Both providers fail
-        // When: Payment fails after max retries (5)
-        // Then: Should go to dead letter queue
-        
-        // The route is configured with:
-        // .maximumRedeliveries(5) - but wait, spec says 3 retries for DLQ
-        // Let me check the route config
-        
-        // Route config has: .maximumRedeliveries(5) for retry
-        // But the DLQ is after the fallback fails
-        // The onException for provider-b-fallback has .handled(true).to("direct:dead-letter")
-        // So after 5 retries on provider A -> fallback to B -> if B fails -> DLQ
-        
-        // Verify DLQ topic exists in config
-        assertTrue(true, "Dead letter channel verified: provider-a -> (5 retries) -> provider-b -> (1 try) -> dead-letter topic");
+        mockProviderAFailure();
+        mockProviderB(false);
+
+        String paymentId = UUID.randomUUID().toString();
+        PaymentMessage payment = createTestPayment(paymentId);
+
+        producerTemplate.sendBody("direct:provider-selection", payment);
+
+        boolean deadLetterReceived = waitForDeadLetterMessage(paymentId, 45000);
+
+        assertTrue(deadLetterReceived,
+            "Payment should be in dead letter queue - both providers failed");
     }
 }

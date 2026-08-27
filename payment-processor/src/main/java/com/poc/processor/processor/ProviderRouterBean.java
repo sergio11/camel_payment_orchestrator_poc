@@ -1,28 +1,24 @@
 package com.poc.processor.processor;
 
-import com.poc.shared.config.ProviderConfig;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
+import org.apache.camel.ExchangeProperties;
+import org.apache.camel.Handler;
 
 @ApplicationScoped
 public class ProviderRouterBean {
 
-    @Inject
-    ProviderConfig config;
+    private static final String ROUTED_KEY = "providerRouted";
+    private final AtomicInteger counter = new AtomicInteger(0);
 
-    public String routeToProvider(String exchange) {
-        return "direct:provider-a";
-    }
-
-    public String routeToFallback(String exchange) {
-        return "direct:provider-b";
-    }
-
-    public String providerAUrl() {
-        return config.providerAUrl();
-    }
-
-    public String providerBUrl() {
-        return config.providerBUrl();
+    @Handler
+    public String routeToProvider(@ExchangeProperties Map<String, Object> properties) {
+        if (properties.containsKey(ROUTED_KEY)) {
+            return null;
+        }
+        properties.put(ROUTED_KEY, Boolean.TRUE);
+        int idx = counter.getAndIncrement() % 2;
+        return idx == 0 ? "direct:provider-a" : "direct:provider-b-fallback";
     }
 }

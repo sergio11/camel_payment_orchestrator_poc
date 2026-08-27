@@ -2,9 +2,11 @@ package com.poc.processor.processor;
 
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Named;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 
+@Named("paymentEnrichProcessor")
 @ApplicationScoped
 public class PaymentEnrichProcessor implements Processor {
 
@@ -25,6 +27,10 @@ public class PaymentEnrichProcessor implements Processor {
             message.customerId(),
             message.paymentMethod(),
             message.country(),
+            message.attemptCount(),
+            message.isNewPaymentMethod(),
+            message.customerAgeDays(),
+            message.timeZone(),
             enrichedMetadata,
             message.timestamp()
         );
@@ -46,7 +52,7 @@ public class PaymentEnrichProcessor implements Processor {
 
     private String determineCustomerRiskTier(String customerId) {
         // Simulated: hash customerId to get consistent tier
-        int hash = Math.abs(customerId.hashCode()) % 3;
+        int hash = Math.floorMod(customerId.hashCode(), 3);
         return switch (hash) {
             case 0 -> "LOW";
             case 1 -> "MEDIUM";
@@ -56,7 +62,7 @@ public class PaymentEnrichProcessor implements Processor {
 
     private int calculateVelocityScore(String customerId) {
         // Simulated: consistent pseudo-random based on customerId
-        return Math.abs(customerId.hashCode()) % 100;
+        return Math.floorMod(customerId.hashCode(), 100);
     }
 
     private int calculateGeoRiskScore(String country) {

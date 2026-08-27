@@ -29,18 +29,31 @@ public class KafkaEventPublisher {
     @ConfigProperty(name = "kafka.topic.payments.received")
     String paymentsReceivedTopic;
 
-    private KafkaProducer<String, String> producer;
+    private volatile KafkaProducer<String, String> producer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @PostConstruct
+    @jakarta.annotation.PostConstruct
     void init() {
         objectMapper.registerModule(new JavaTimeModule());
-        producer = new KafkaProducer<>(Map.of(
-            ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
-            ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
-            ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
-            ProducerConfig.ACKS_CONFIG, "all"
-        ));
+    }
+
+    private KafkaProducer<String, String> getProducer() {
+        if (producer == null) {
+            synchronized (this) {
+                if (producer == null) {
+                    producer = new KafkaProducer<>(Map.of(
+                        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                        ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
+                        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
+                        ProducerConfig.ACKS_CONFIG, "all",
+                        ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000",
+                        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "10000",
+                        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000"
+                    ));
+                }
+            }
+        }
+        return producer;
     }
 
     @PreDestroy
@@ -62,11 +75,15 @@ public class KafkaEventPublisher {
                 customerId,
                 paymentMethod,
                 country,
+                0,
+                false,
+                0,
+                "UTC",
                 metadata,
                 LocalDateTime.now()
             );
             String json = objectMapper.writeValueAsString(message);
-            producer.send(new ProducerRecord<>(paymentsReceivedTopic, paymentId, json), (metadata2, exception) -> {
+            getProducer().send(new ProducerRecord<>(paymentsReceivedTopic, paymentId, json), (metadata2, exception) -> {
                 if (exception != null) {
                     LOG.errorf(exception, "Failed to publish payment %s to Kafka", paymentId);
                 } else {

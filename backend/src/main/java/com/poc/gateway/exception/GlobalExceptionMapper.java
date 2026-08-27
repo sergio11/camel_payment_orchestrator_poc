@@ -15,10 +15,19 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
         if (exception instanceof ConstraintViolationException cve) {
             return handleValidationException(cve);
         }
+        if (exception instanceof IllegalArgumentException iae) {
+            return handleIllegalArgument(iae);
+        }
         if (exception instanceof PaymentNotFoundException pnfe) {
             return handleNotFound(pnfe);
         }
         return handleGeneric(exception);
+    }
+
+    private Response handleIllegalArgument(IllegalArgumentException e) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity(ErrorResponse.from("INVALID_ARGUMENT", e.getMessage()))
+            .build();
     }
 
     private Response handleValidationException(ConstraintViolationException e) {

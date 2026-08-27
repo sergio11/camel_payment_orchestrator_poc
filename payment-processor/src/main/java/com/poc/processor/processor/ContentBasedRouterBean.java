@@ -1,8 +1,9 @@
 package com.poc.processor.processor;
 
-import com.poc.shared.config.FraudRulesConfig;
+import com.poc.processor.config.FraudRulesConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.math.BigDecimal;
 
 @ApplicationScoped
 public class ContentBasedRouterBean {
@@ -10,11 +11,11 @@ public class ContentBasedRouterBean {
     @Inject
     FraudRulesConfig config;
 
-    public String routeToFraudCheck(double amount, String paymentMethod, String country) {
-        if (amount > 10000) {
+    public String routeToFraudCheck(BigDecimal amount, String paymentMethod, String country) {
+        if (amount.compareTo(config.highAmountThreshold()) > 0) {
             return "direct:fraud-review";
         }
-        if ("WALLET".equals(paymentMethod) && amount > 5000) {
+        if ("WALLET".equals(paymentMethod) && amount.compareTo(new BigDecimal("5000")) > 0) {
             return "direct:fraud-review";
         }
         if (config.highRiskCountries().contains(country)) {

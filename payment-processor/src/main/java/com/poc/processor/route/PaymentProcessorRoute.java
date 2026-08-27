@@ -12,12 +12,17 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Override
     public void configure() {
-        from("kafka:{{kafka.topic.payments.received}}")
+        errorHandler(deadLetterChannel("kafka:{{kafka.topic.dead.letter}}")
+            .useOriginalMessage()
+            .logRetryAttempted(true)
+            .logExhausted(true));
+
+        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=false")
             .routeId("payment-processor")
-            .autoStartup(true)
+            .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
             .log("Received payment: ${body.paymentId}")
-            .wireTap("direct:audit-pipeline")
             .process("paymentEnrichProcessor")
+            .wireTap("direct:audit-pipeline")
             .choice()
                 .when(method(ContentBasedRouterBean.class, "routeToFraudCheck(${body.amount}, ${body.paymentMethod}, ${body.country})").isEqualTo("direct:fraud-review"))
                     .log("High amount or WALLET payment, routing to fraud review: ${body.paymentId}")

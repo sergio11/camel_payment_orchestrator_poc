@@ -2,13 +2,18 @@ package com.poc.processor.processor;
 
 import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
-import com.poc.shared.config.FraudRulesConfig;
+import com.poc.processor.config.FraudRulesConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 
+@Named("fraudEvaluationProcessor")
 @ApplicationScoped
 public class FraudEvaluationProcessor implements Processor {
 
@@ -19,60 +24,61 @@ public class FraudEvaluationProcessor implements Processor {
     public void process(Exchange exchange) {
         PaymentMessage message = exchange.getIn().getBody(PaymentMessage.class);
         
-        int riskScore = calculateRiskScore(message);
+        List<String> triggeredRules = new ArrayList<>();
+        int riskScore = calculateRiskScore(message, triggeredRules);
         riskScore = Math.min(riskScore, config.maxRiskScore());
         
-        FraudResult result = determineAction(message, riskScore);
+        FraudResult result = determineAction(message, riskScore, triggeredRules);
         
         exchange.getIn().setBody(result);
         exchange.getIn().setHeader("CamelRiskScore", riskScore);
         exchange.getIn().setHeader("CamelFraudAction", result.action());
     }
 
-    private int calculateRiskScore(PaymentMessage message) {
+    private int calculateRiskScore(PaymentMessage message, List<String> triggeredRules) {
         int score = 0;
         
-        // HIGH_AMOUNT rule: amount > 15000 → +50 score
         if (message.amount().compareTo(config.highAmountThreshold()) > 0) {
             score += 50;
+            triggeredRules.add("HIGH_AMOUNT");
         }
         
-        // HIGH_RISK_COUNTRY rule: configured countries → +30 score
         if (config.highRiskCountries().contains(message.country())) {
             score += 30;
+            triggeredRules.add("HIGH_RISK_COUNTRY");
         }
         
-        // RAPID_RETRY rule: attempts > 3 → +25 score
+        int hour = LocalTime.now(ZoneId.of("UTC")).getHour();
+        if (hour >= config.unusualHourStart() && hour <= config.unusualHourEnd()) {
+            score += 15;
+            triggeredRules.add("UNUSUAL_HOUR");
+        }
+        
         if (message.metadata() != null) {
             Object attempts = message.metadata().get("attempts");
             if (attempts instanceof Number && ((Number) attempts).intValue() > config.rapidRetryThreshold()) {
                 score += 25;
+                triggeredRules.add("RAPID_RETRY");
             }
             
-            // NEW_PAYMENT_METHOD rule: new method + age < 30 days → +20 score
             Object isNewMethod = message.metadata().get("isNewPaymentMethod");
             Object methodAge = message.metadata().get("paymentMethodAgeDays");
             if (Boolean.TRUE.equals(isNewMethod) && methodAge instanceof Number && ((Number) methodAge).intValue() < config.newMethodDaysThreshold()) {
                 score += 20;
-            }
-            
-            // UNUSUAL_HOUR rule: 2am-5am → +15 score
-            int hour = LocalTime.now().getHour();
-            if (hour >= config.unusualHourStart() && hour <= config.unusualHourEnd()) {
-                score += 15;
+                triggeredRules.add("NEW_PAYMENT_METHOD");
             }
         }
         
         return score;
     }
 
-    private FraudResult determineAction(PaymentMessage message, int riskScore) {
+    private FraudResult determineAction(PaymentMessage message, int riskScore, List<String> triggeredRules) {
         if (riskScore >= 80) {
-            return FraudResult.reject(message.paymentId(), riskScore, "High risk score: " + riskScore);
+            return FraudResult.reject(message.paymentId(), riskScore, "High risk score: " + riskScore, triggeredRules);
         }
         if (riskScore >= 50) {
-            return FraudResult.review(message.paymentId(), riskScore, "Medium risk score: " + riskScore);
+            return FraudResult.review(message.paymentId(), riskScore, "Medium risk score: " + riskScore, triggeredRules);
         }
-        return FraudResult.approve(message.paymentId(), riskScore);
+        return FraudResult.approve(message.paymentId(), riskScore, triggeredRules);
     }
 }

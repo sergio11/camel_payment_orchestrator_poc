@@ -1,18 +1,28 @@
-package com.poc.shared.config;
+package com.poc.processor.config;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperties;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.time.Duration;
 
 @ApplicationScoped
-@ConfigProperties(prefix = "provider")
 public class ProviderConfig {
 
+    @ConfigProperty(name = "provider.a-url")
     String aUrl;
+
+    @ConfigProperty(name = "provider.b-url")
     String bUrl;
+
+    @ConfigProperty(name = "provider.circuit-breaker.failure-threshold")
     int circuitBreakerFailureThreshold;
+
+    @ConfigProperty(name = "provider.circuit-breaker.wait-duration")
     Duration circuitBreakerWaitDuration;
+
+    @ConfigProperty(name = "provider.max-retries")
     int maxRetries;
+
+    @ConfigProperty(name = "provider.retry-backoff")
     Duration retryBackoff;
 
     public String providerAUrl() { return aUrl; }

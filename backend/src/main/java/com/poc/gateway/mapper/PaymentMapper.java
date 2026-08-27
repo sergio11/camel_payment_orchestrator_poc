@@ -7,6 +7,9 @@ import java.time.LocalDateTime;
 
 public class PaymentMapper {
     
+    private PaymentMapper() {
+    }
+    
     public static Payment toEntity(PaymentRequest request) {
         return Payment.create(
             request.amount(),

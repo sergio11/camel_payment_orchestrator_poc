@@ -13,8 +13,11 @@ public record PaymentMessage(
     String customerId,
     String paymentMethod,
     String country,
+    int attemptCount,
+    boolean isNewPaymentMethod,
+    int customerAgeDays,
+    String timeZone,
     Map<String, Object> metadata,
-
     @com.fasterxml.jackson.annotation.JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "UTC")
     LocalDateTime timestamp
 ) implements Serializable {}

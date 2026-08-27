@@ -10,33 +10,29 @@ public class FraudEngineRoute extends RouteBuilder {
 
     @Override
     public void configure() {
-        // Fraud reject - publish to fraud events topic
         from("direct:fraud-reject")
             .routeId("fraud-reject")
+            .onException(Exception.class)
+                .handled(true)
+                .log("Kafka publish failed for fraud-reject: ${exception.message}")
+                .to("kafka:{{kafka.topic.dead.letter}}")
+            .end()
             .log("Payment REJECTED by fraud engine: ${body.paymentId}, score: ${header.CamelRiskScore}")
             .marshal().json(JsonLibrary.Jackson)
             .to("kafka:{{kafka.topic.fraud.detected}}")
-            .log("Published fraud rejection event for: ${body.paymentId}");
+            .to("kafka:{{kafka.topic.payments.failed}}")
+            .log("Published fraud rejection and failed event for: ${body.paymentId}");
 
-        // Fraud review queue - for manual review
         from("direct:fraud-review-queue")
             .routeId("fraud-review-queue")
+            .onException(Exception.class)
+                .handled(true)
+                .log("Kafka publish failed for fraud-review-queue: ${exception.message}")
+                .to("kafka:{{kafka.topic.dead.letter}}")
+            .end()
             .log("Payment queued for manual review: ${body.paymentId}")
             .marshal().json(JsonLibrary.Jackson)
             .to("kafka:{{kafka.topic.fraud.detected}}")
             .log("Published fraud review event for: ${body.paymentId}");
-
-        // Route for direct fraud processing (if needed)
-        from("direct:fraud-engine")
-            .routeId("fraud-engine-direct")
-            .process("fraudEvaluationProcessor")
-            .choice()
-                .when(body().method("action").isEqualTo("REJECT"))
-                    .to("direct:fraud-reject")
-                .when(body().method("action").isEqualTo("REVIEW"))
-                    .to("direct:fraud-review-queue")
-                .otherwise()
-                    .to("direct:provider-selection")
-            .end();
     }
 }

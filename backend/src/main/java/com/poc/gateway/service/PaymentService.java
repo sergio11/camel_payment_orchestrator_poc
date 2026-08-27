@@ -55,4 +55,9 @@ public class PaymentService {
             .map(PaymentMapper::toResponse)
             .toList();
     }
+
+    public long countPayments(String customerId, String status) {
+        PaymentStatus paymentStatus = status != null ? PaymentStatus.valueOf(status) : null;
+        return repository.count(customerId, paymentStatus);
+    }
 }

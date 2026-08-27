@@ -91,7 +91,7 @@ class PaymentProcessorRouteTest {
     @Test
     @DisplayName("3.40: Verify payment triggers fraud check via Kafka")
     void testPaymentTriggersFraudCheckViaKafka() throws Exception {
-        // Given: A payment message sent to Kafka
+        // Given: Medium risk payment (should trigger REVIEW, published to fraud.events.detected)
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = new PaymentMessage(
             UUID.randomUUID().toString(),
@@ -101,6 +101,10 @@ class PaymentProcessorRouteTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
+            0,
+            false,
+            0,
+            "UTC",
             Map.of(),
             LocalDateTime.now()
         );
@@ -112,11 +116,10 @@ class PaymentProcessorRouteTest {
         // When: Wait for processing and check fraud.events.detected topic
         FraudResult result = consumeFraudResult(paymentId, 10);
         
-        // Then: Should have a fraud result (APPROVE/REVIEW/REJECT)
+        // Then: Should have a fraud result with REVIEW action (high amount +50 = 50 >= 50)
         assertNotNull(result, "Should receive fraud result");
         assertEquals(paymentId, result.paymentId());
-        assertTrue(result.riskScore() >= 0 && result.riskScore() <= 100);
-        assertTrue(Arrays.asList("APPROVE", "REVIEW", "REJECT").contains(result.action()));
+        assertEquals("REVIEW", result.action());
     }
 
     @Test
@@ -132,6 +135,10 @@ class PaymentProcessorRouteTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
+            0,
+            false,
+            0,
+            "UTC",
             Map.of(),
             LocalDateTime.now()
         );
@@ -150,7 +157,7 @@ class PaymentProcessorRouteTest {
     @Test
     @DisplayName("3.48: Verify events published to payments.events.failed on fraud reject")
     void testFraudRejectPublishesFailedEvent() throws Exception {
-        // Given: High risk payment (amount > 15000)
+        // Given: High risk payment (amount > 15000 + high risk country = score >= 80)
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = new PaymentMessage(
             UUID.randomUUID().toString(),
@@ -160,6 +167,10 @@ class PaymentProcessorRouteTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
+            1,
+            false,
+            0,
+            "UTC",
             Map.of("attempts", 1),
             LocalDateTime.now()
         );
@@ -171,7 +182,7 @@ class PaymentProcessorRouteTest {
         // When: Wait for processing
         FraudResult result = consumeFraudResult(paymentId, 10);
         
-        // Then: Should be REJECT (high amount = +50, high risk country +30 = 80 >= 80)
+        // Then: Should be REJECT (high amount +50, high risk country +30 = 80 >= 80)
         assertEquals("REJECT", result.action(), "High risk payment should be rejected");
     }
 

@@ -1,17 +1,31 @@
 package com.poc.processor.route;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.poc.processor.config.ProviderConfig;
 import com.poc.processor.processor.ProviderRouterBean;
+import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.model.dataformat.JsonLibrary;
+import org.apache.camel.component.jackson.JacksonDataFormat;
 
 @ApplicationScoped
 public class ProviderSelectionRoute extends RouteBuilder {
 
+    @Inject
+    ObjectMapper objectMapper;
+
+    @Inject
+    ProviderConfig providerConfig;
+
     @Override
     public void configure() {
+        JacksonDataFormat paymentJson = new JacksonDataFormat(objectMapper, PaymentMessage.class);
+        JacksonDataFormat responseJson = new JacksonDataFormat(objectMapper, ProviderResponse.class);
+        JacksonDataFormat stringJson = new JacksonDataFormat(objectMapper, Object.class);
+
         from("direct:provider-selection")
             .routeId("provider-selection")
             .log("Selecting provider for payment: ${header.CamelPaymentId}")
@@ -33,7 +47,11 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .log("Routing to Provider A: ${header.CamelPaymentId}")
             .circuitBreaker()
                 .inheritErrorHandler(true)
-                .resilience4jConfiguration("providerA")
+                .resilience4jConfiguration()
+                    .failureRateThreshold(providerConfig.circuitBreakerFailureThreshold())
+                    .waitDurationInOpenState((int) providerConfig.circuitBreakerWaitDuration().toMillis())
+                    .permittedNumberOfCallsInHalfOpenState(2)
+                .end()
                 .to("direct:call-provider-a")
             .endCircuitBreaker()
             .log("Provider A completed for: ${header.CamelPaymentId}");
@@ -42,15 +60,20 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .routeId("call-provider-a")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
-            .marshal().json(JsonLibrary.Jackson)
+            .marshal(paymentJson)
             .to("netty-http:{{provider.a-url}}")
-            .unmarshal().json(JsonLibrary.Jackson, ProviderResponse.class)
+            .unmarshal(responseJson)
             .choice()
                 .when(simple("${body.success} == true"))
                     .log("Provider A success: ${body.transactionId}")
+                    .marshal(responseJson)
+                    .to("kafka:{{kafka.topic.payments.processed}}")
                 .otherwise()
                     .log("Provider A returned error: ${body.errorCode}")
-                    .throwException(new RuntimeException("Provider A error: ${body.errorMessage}"))
+                    .process(exchange -> {
+                        ProviderResponse resp = exchange.getIn().getBody(ProviderResponse.class);
+                        throw new RuntimeException("Provider A error: " + (resp != null ? resp.errorMessage() : "unknown"));
+                    })
             .end();
 
         from("direct:provider-b-fallback")
@@ -68,7 +91,11 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .log("Fallback to Provider B: ${header.CamelPaymentId}")
             .circuitBreaker()
                 .inheritErrorHandler(true)
-                .resilience4jConfiguration("providerB")
+                .resilience4jConfiguration()
+                    .failureRateThreshold(providerConfig.circuitBreakerFailureThreshold())
+                    .waitDurationInOpenState((int) providerConfig.circuitBreakerWaitDuration().toMillis())
+                    .permittedNumberOfCallsInHalfOpenState(2)
+                .end()
                 .to("direct:call-provider-b")
             .endCircuitBreaker()
             .log("Provider B completed for: ${header.CamelPaymentId}");
@@ -77,21 +104,26 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .routeId("call-provider-b")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
-            .marshal().json(JsonLibrary.Jackson)
+            .marshal(paymentJson)
             .to("netty-http:{{provider.b-url}}")
-            .unmarshal().json(JsonLibrary.Jackson, ProviderResponse.class)
+            .unmarshal(responseJson)
             .choice()
                 .when(simple("${body.success} == true"))
                     .log("Provider B success: ${body.transactionId}")
+                    .marshal(responseJson)
+                    .to("kafka:{{kafka.topic.payments.processed}}")
                 .otherwise()
                     .log("Provider B returned error: ${body.errorCode}")
-                    .throwException(new RuntimeException("Provider B error: ${body.errorMessage}"))
+                    .process(exchange -> {
+                        ProviderResponse resp = exchange.getIn().getBody(ProviderResponse.class);
+                        throw new RuntimeException("Provider B error: " + (resp != null ? resp.errorMessage() : "unknown"));
+                    })
             .end();
 
         from("direct:dead-letter")
             .routeId("dead-letter")
             .log("Sending to dead letter queue: ${header.CamelPaymentId}")
-            .marshal().json(JsonLibrary.Jackson)
+            .marshal(stringJson)
             .to("kafka:{{kafka.topic.dead.letter}}")
             .log("Published to dead letter topic");
     }
