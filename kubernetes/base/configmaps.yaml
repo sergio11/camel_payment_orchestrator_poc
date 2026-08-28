@@ -53,7 +53,7 @@ metadata:
     component: config
 data:
   fraud.rules.high-amount-threshold: "15000"
-  fraud.rules.high-risk-countries: "XX,YY"
+  fraud.rules.high-risk-countries: "XX,YY,ZZ"
   fraud.rules.rapid-retry-threshold: "3"
   fraud.rules.new-method-days-threshold: "30"
   fraud.rules.unusual-hour-start: "2"

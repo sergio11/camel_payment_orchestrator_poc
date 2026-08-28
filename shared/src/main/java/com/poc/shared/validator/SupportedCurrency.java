@@ -1,15 +1,13 @@
-package com.poc.gateway.validator;
+package com.poc.shared.validator;
 
+import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 import java.lang.annotation.*;
 
-/**
- * @deprecated Use {@link com.poc.shared.validator.SupportedCurrency} instead.
- */
 @Target({ElementType.FIELD, ElementType.PARAMETER})
 @Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = SupportedCurrencyValidator.class)
 @Documented
-@Deprecated
 public @interface SupportedCurrency {
     String message() default "Unsupported currency";
     Class<?>[] groups() default {};

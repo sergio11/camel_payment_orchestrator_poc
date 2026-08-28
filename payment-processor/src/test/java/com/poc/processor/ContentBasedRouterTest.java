@@ -24,17 +24,17 @@ class ContentBasedRouterTest {
     }
 
     @Test
-    @DisplayName("3.41: Verify amount exactly 15000 routes to fraud-check")
-    void testAmountExactly15000RoutesToFraudCheck() {
-        String route = routerBean.routeToFraudCheck(new BigDecimal("15000"), "CREDIT_CARD", "US");
-        assertEquals("direct:fraud-check", route, "Amount == 15000 should route to fraud-check");
+    @DisplayName("3.41: Verify amount exactly 10000 routes to fraud-check")
+    void testAmountExactly10000RoutesToFraudCheck() {
+        String route = routerBean.routeToFraudCheck(new BigDecimal("10000"), "CREDIT_CARD", "US");
+        assertEquals("direct:fraud-check", route, "Amount == 10000 should route to fraud-check");
     }
 
     @Test
-    @DisplayName("3.41: Verify amount 14999 routes to fraud-check")
-    void testAmountUnder15000RoutesToFraudCheck() {
-        String route = routerBean.routeToFraudCheck(new BigDecimal("14999"), "CREDIT_CARD", "US");
-        assertEquals("direct:fraud-check", route, "Amount < 15000 should route to fraud-check");
+    @DisplayName("3.41: Verify amount 9999 routes to fraud-check")
+    void testAmountUnder10000RoutesToFraudCheck() {
+        String route = routerBean.routeToFraudCheck(new BigDecimal("9999"), "CREDIT_CARD", "US");
+        assertEquals("direct:fraud-check", route, "Amount < 10000 should route to fraud-check");
     }
 
     @Test

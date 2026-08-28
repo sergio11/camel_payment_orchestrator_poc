@@ -18,7 +18,7 @@ public class ProviderRouterBean {
             return null;
         }
         properties.put(ROUTED_KEY, Boolean.TRUE);
-        int idx = counter.getAndIncrement() % 2;
+        int idx = Math.floorMod(counter.getAndIncrement(), 2);
         return idx == 0 ? "direct:provider-a" : "direct:provider-b-fallback";
     }
 }

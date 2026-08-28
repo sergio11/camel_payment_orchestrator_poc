@@ -49,6 +49,13 @@
             <artifactId>microprofile-config-api</artifactId>
         </dependency>
 
+        <!-- Validation Implementation -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-validator</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>io.quarkus</groupId>

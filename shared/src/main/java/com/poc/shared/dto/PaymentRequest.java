@@ -1,6 +1,7 @@
 package com.poc.shared.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.poc.shared.validator.SupportedCurrency;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public record PaymentRequest(
 
     @NotNull(message = "Currency is required")
     @Size(min = 3, max = 3, message = "Currency must be 3 characters (ISO 4217)")
+    @SupportedCurrency
     String currency,
 
     @NotBlank(message = "Customer ID is required")

@@ -83,12 +83,12 @@ public class KafkaEventPublisher {
                 LocalDateTime.now()
             );
             String json = objectMapper.writeValueAsString(message);
-            getProducer().send(new ProducerRecord<>(paymentsReceivedTopic, paymentId, json), (metadata2, exception) -> {
+            getProducer().send(new ProducerRecord<>(paymentsReceivedTopic, paymentId, json), (recordMetadata, exception) -> {
                 if (exception != null) {
                     LOG.errorf(exception, "Failed to publish payment %s to Kafka", paymentId);
                 } else {
                     LOG.infof("Published payment %s to Kafka topic %s (partition=%d, offset=%d)",
-                        paymentId, paymentsReceivedTopic, metadata2.partition(), metadata2.offset());
+                        paymentId, paymentsReceivedTopic, recordMetadata.partition(), recordMetadata.offset());
                 }
             });
         } catch (Exception e) {
