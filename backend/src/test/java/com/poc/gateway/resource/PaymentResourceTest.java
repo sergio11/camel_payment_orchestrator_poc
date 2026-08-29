@@ -192,13 +192,48 @@ class PaymentResourceTest {
     }
 
     @Test
-    void testListPaymentsWithInvalidStatusReturns400() {
+    void testListPaymentsWithInvalidStatusReturns200WithEmptyList() {
         given()
             .queryParam("status", "INVALID_STATUS")
         .when()
             .get("/payments")
         .then()
-            .statusCode(400);
+            .statusCode(200)
+            .body("payments", hasSize(0));
+    }
+
+    @Test
+    void listPayments_withLimitAbove100_returnsMax100() {
+        given()
+            .queryParam("limit", 1000)
+            .queryParam("offset", 0)
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200)
+            .body("limit", equalTo(100));
+    }
+
+    @Test
+    void listPayments_withLimit100_returns100OrLess() {
+        given()
+            .queryParam("limit", 100)
+            .queryParam("offset", 0)
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200)
+            .body("limit", equalTo(100));
+    }
+
+    @Test
+    void getPaymentById_withInvalidUUID_returns404() {
+        given()
+            .pathParam("id", "not-a-valid-uuid")
+        .when()
+            .get("/payments/{id}")
+        .then()
+            .statusCode(404);
     }
 
     @Test

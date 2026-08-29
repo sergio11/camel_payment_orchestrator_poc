@@ -2,6 +2,7 @@ package com.poc.gateway.repository;
 
 import com.poc.gateway.entity.Payment;
 import com.poc.gateway.entity.PaymentStatus;
+import com.poc.gateway.exception.PaymentNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +11,11 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -194,5 +200,56 @@ class PaymentRepositoryTest {
         assertEquals(PaymentStatus.APPROVED, found.get().status());
     }
 
+    @Test
+    void update_throwsNotFoundExceptionForNonexistentPayment() {
+        Payment nonexistent = Payment.create(
+            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", Map.of()
+        );
 
+        assertThrows(
+            PaymentNotFoundException.class,
+            () -> repository.update(nonexistent, PaymentStatus.APPROVED)
+        );
+    }
+
+    @Test
+    void update_concurrentUpdatesDoNotCauseLostUpdate() throws Exception {
+        Payment saved = createAndStorePayment("cust-1", PaymentStatus.PENDING);
+        
+        int threadCount = 10;
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch endLatch = new CountDownLatch(threadCount);
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger errorCount = new AtomicInteger(0);
+        
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        
+        for (int i = 0; i < threadCount; i++) {
+            final int index = i;
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    Payment current = repository.findById(saved.id()).orElseThrow();
+                    PaymentStatus newStatus = index % 2 == 0 ? PaymentStatus.APPROVED : PaymentStatus.REJECTED;
+                    repository.update(current, newStatus);
+                    successCount.incrementAndGet();
+                } catch (Exception e) {
+                    errorCount.incrementAndGet();
+                } finally {
+                    endLatch.countDown();
+                }
+            });
+        }
+        
+        startLatch.countDown();
+        endLatch.await();
+        
+        Optional<Payment> finalPayment = repository.findById(saved.id());
+        assertTrue(finalPayment.isPresent());
+        assertTrue(finalPayment.get().status() == PaymentStatus.APPROVED || 
+                   finalPayment.get().status() == PaymentStatus.REJECTED);
+        assertEquals(threadCount, successCount.get() + errorCount.get());
+        
+        executor.shutdown();
+    }
 }

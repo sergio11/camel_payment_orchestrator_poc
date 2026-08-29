@@ -9,37 +9,37 @@ import java.util.List;
 public class FraudRulesConfig {
 
     @ConfigProperty(name = "fraud.rules.high-amount-threshold")
-    BigDecimal highAmountThreshold;
+    private BigDecimal highAmountThreshold;
 
     @ConfigProperty(name = "fraud.rules.high-risk-countries")
-    List<String> highRiskCountries;
+    private List<String> highRiskCountries;
 
     @ConfigProperty(name = "fraud.rules.rapid-retry-threshold")
-    int rapidRetryThreshold;
+    private int rapidRetryThreshold;
 
     @ConfigProperty(name = "fraud.rules.new-method-days-threshold")
-    int newMethodDaysThreshold;
+    private int newMethodDaysThreshold;
 
     @ConfigProperty(name = "fraud.rules.unusual-hour-start")
-    int unusualHourStart;
+    private int unusualHourStart;
 
     @ConfigProperty(name = "fraud.rules.unusual-hour-end")
-    int unusualHourEnd;
+    private int unusualHourEnd;
 
     @ConfigProperty(name = "fraud.rules.max-risk-score")
-    int maxRiskScore;
+    private int maxRiskScore;
 
     @ConfigProperty(name = "fraud.rules.risk-score-threshold-high")
-    int riskScoreThresholdHigh;
+    private int riskScoreThresholdHigh;
 
     @ConfigProperty(name = "fraud.rules.risk-score-threshold-medium")
-    int riskScoreThresholdMedium;
+    private int riskScoreThresholdMedium;
 
     @ConfigProperty(name = "fraud.rules.cbr-high-amount-threshold")
-    BigDecimal cbrHighAmountThreshold;
+    private BigDecimal cbrHighAmountThreshold;
 
     @ConfigProperty(name = "fraud.rules.cbr-wallet-amount-threshold")
-    BigDecimal cbrWalletAmountThreshold;
+    private BigDecimal cbrWalletAmountThreshold;
 
     public BigDecimal highAmountThreshold() { return highAmountThreshold; }
     public List<String> highRiskCountries() { return highRiskCountries; }

@@ -42,14 +42,26 @@ public class PaymentService {
     }
     
     public PaymentResponse getPayment(String id) {
-        UUID uuid = UUID.fromString(id);
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            throw new PaymentNotFoundException(id);
+        }
         Payment payment = repository.findById(uuid)
             .orElseThrow(() -> new PaymentNotFoundException(id));
         return PaymentMapper.toResponse(payment);
     }
     
     public List<PaymentResponse> listPayments(String customerId, String status, int limit, int offset) {
-        PaymentStatus paymentStatus = status != null ? PaymentStatus.valueOf(status) : null;
+        PaymentStatus paymentStatus = null;
+        if (status != null) {
+            try {
+                paymentStatus = PaymentStatus.valueOf(status);
+            } catch (IllegalArgumentException e) {
+                LOG.warnf("Invalid payment status: %s, returning all payments", status);
+            }
+        }
         return repository.findAll(customerId, paymentStatus, limit, offset)
             .stream()
             .map(PaymentMapper::toResponse)
@@ -57,7 +69,14 @@ public class PaymentService {
     }
 
     public long countPayments(String customerId, String status) {
-        PaymentStatus paymentStatus = status != null ? PaymentStatus.valueOf(status) : null;
+        PaymentStatus paymentStatus = null;
+        if (status != null) {
+            try {
+                paymentStatus = PaymentStatus.valueOf(status);
+            } catch (IllegalArgumentException e) {
+                LOG.warnf("Invalid payment status: %s, counting all payments", status);
+            }
+        }
         return repository.count(customerId, paymentStatus);
     }
 }

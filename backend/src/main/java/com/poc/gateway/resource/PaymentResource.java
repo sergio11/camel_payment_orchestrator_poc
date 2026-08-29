@@ -7,16 +7,11 @@ import com.poc.shared.dto.PaymentResponse;
 import com.poc.shared.dto.PaymentStatusResponse;
 import com.poc.gateway.service.PaymentService;
 import jakarta.inject.Inject;
-import jakarta.validation.Validation;
-import jakarta.validation.Validator;
-import jakarta.validation.ValidatorFactory;
 import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import io.smallrye.common.annotation.Blocking;
 import org.jboss.logging.Logger;
 
@@ -26,13 +21,6 @@ import org.jboss.logging.Logger;
 public class PaymentResource {
 
     private static final Logger LOG = Logger.getLogger(PaymentResource.class);
-    private static final Validator VALIDATOR;
-
-    static {
-        try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
-            VALIDATOR = factory.getValidator();
-        }
-    }
 
     @Inject
     PaymentService paymentService;
@@ -40,16 +28,6 @@ public class PaymentResource {
     @POST
     @Blocking
     public Response createPayment(PaymentRequest request) {
-        Set<jakarta.validation.ConstraintViolation<PaymentRequest>> violations = VALIDATOR.validate(request);
-        if (!violations.isEmpty()) {
-            List<ErrorResponse.ErrorDetail> details = violations.stream()
-                .map(v -> new ErrorResponse.ErrorDetail(v.getPropertyPath().toString(), v.getMessage()))
-                .collect(Collectors.toList());
-            return Response.status(Response.Status.BAD_REQUEST)
-                .entity(ErrorResponse.from("VALIDATION_ERROR", "Request validation failed", details))
-                .build();
-        }
-
         LOG.infof("Creating payment for customer: %s, amount: %s %s", request.customerId(), request.amount(), request.currency());
         PaymentResponse response = paymentService.createPayment(request);
         LOG.infof("Payment created: %s", response.id());
@@ -66,6 +44,7 @@ public class PaymentResource {
             @QueryParam("offset") @DefaultValue("0") @Min(0) int offset) {
 
         if (limit < 0) limit = 20;
+        if (limit > 100) limit = 100;
         if (offset < 0) offset = 0;
 
         List<PaymentResponse> payments = paymentService.listPayments(customerId, status, limit, offset);

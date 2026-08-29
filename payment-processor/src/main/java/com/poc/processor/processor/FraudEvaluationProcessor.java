@@ -48,7 +48,16 @@ public class FraudEvaluationProcessor implements Processor {
             triggeredRules.add("HIGH_RISK_COUNTRY");
         }
         
-        int hour = LocalTime.now(ZoneId.of("UTC")).getHour();
+        int hour;
+        if (message.timeZone() != null) {
+            try {
+                hour = LocalTime.now(message.timeZone()).getHour();
+            } catch (Exception e) {
+                hour = LocalTime.now(ZoneId.of("UTC")).getHour();
+            }
+        } else {
+            hour = LocalTime.now(ZoneId.of("UTC")).getHour();
+        }
         if (hour >= config.unusualHourStart() && hour <= config.unusualHourEnd()) {
             score += 15;
             triggeredRules.add("UNUSUAL_HOUR");
@@ -74,11 +83,11 @@ public class FraudEvaluationProcessor implements Processor {
 
     private FraudResult determineAction(PaymentMessage message, int riskScore, List<String> triggeredRules) {
         if (riskScore >= config.riskScoreThresholdHigh()) {
-            return FraudResult.reject(message.paymentId(), riskScore, "High risk score: " + riskScore, triggeredRules);
+            return FraudResult.reject(message.paymentId(), message.amount(), message.customerId(), riskScore, "High risk score: " + riskScore, triggeredRules);
         }
         if (riskScore >= config.riskScoreThresholdMedium()) {
-            return FraudResult.review(message.paymentId(), riskScore, "Medium risk score: " + riskScore, triggeredRules);
+            return FraudResult.review(message.paymentId(), message.amount(), message.customerId(), riskScore, "Medium risk score: " + riskScore, triggeredRules);
         }
-        return FraudResult.approve(message.paymentId(), riskScore, triggeredRules);
+        return FraudResult.approve(message.paymentId(), message.amount(), message.customerId(), riskScore, triggeredRules);
     }
 }

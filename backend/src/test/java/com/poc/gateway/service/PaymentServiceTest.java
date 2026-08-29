@@ -174,4 +174,35 @@ class PaymentServiceTest {
 
         assertTrue(results.isEmpty());
     }
+
+    @Test
+    void getPayment_withInvalidUUID_throwsNotFoundException() {
+        PaymentNotFoundException ex = assertThrows(
+            PaymentNotFoundException.class,
+            () -> service.getPayment("not-a-valid-uuid")
+        );
+        assertEquals("not-a-valid-uuid", ex.getPaymentId());
+    }
+
+    @Test
+    void getPayment_withNull_throwsNotFoundException() {
+        PaymentNotFoundException ex = assertThrows(
+            PaymentNotFoundException.class,
+            () -> service.getPayment(null)
+        );
+        assertNull(ex.getPaymentId());
+    }
+
+    @Test
+    void listPayments_withInvalidStatus_returnsAllPayments() {
+        List<Payment> entities = List.of(
+            createEntity(UUID.randomUUID().toString(), "cust-1", PaymentStatus.PENDING)
+        );
+        when(repository.findAll(null, null, 20, 0)).thenReturn(entities);
+
+        List<PaymentResponse> results = service.listPayments(null, "TYPO_INVALID", 20, 0);
+
+        assertEquals(1, results.size());
+        verify(repository).findAll(null, null, 20, 0);
+    }
 }

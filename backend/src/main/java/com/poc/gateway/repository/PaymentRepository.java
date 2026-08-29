@@ -58,7 +58,11 @@ public class PaymentRepository {
     }
 
     public Payment update(Payment payment, PaymentStatus newStatus) {
-        Payment updated = payment.withStatus(newStatus);
+        Payment existing = store.get(payment.id());
+        if (existing == null) {
+            throw new com.poc.gateway.exception.PaymentNotFoundException(payment.id().toString());
+        }
+        Payment updated = payment.withStatus(newStatus).withUpdatedAt(LocalDateTime.now());
         store.put(updated.id(), updated);
         return updated;
     }

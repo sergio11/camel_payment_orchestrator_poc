@@ -115,4 +115,60 @@ class FraudEvaluationProcessorTest {
         assertEquals("APPROVE", approveResult.action());
         assertTrue(approveResult.riskScore() < 50);
     }
+
+    @Test
+    void processPayment_withUtcTimezone_usesUtc() {
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), Map.of());
+        PaymentMessage utcMsg = new PaymentMessage(
+            msg.eventId(), msg.paymentId(), msg.amount(), msg.currency(), msg.customerId(),
+            msg.paymentMethod(), msg.country(), msg.attemptCount(), msg.isNewPaymentMethod(),
+            msg.paymentMethodAgeDays(), "UTC", msg.metadata(), msg.createdAt()
+        );
+        Exchange exchange = createExchange(utcMsg);
+        processor.process(exchange);
+        FraudResult result = exchange.getIn().getBody(FraudResult.class);
+        assertNotNull(result);
+        assertEquals("APPROVE", result.action());
+    }
+
+    @Test
+    void processPayment_withMexicoTimezone_usesLocalTime() {
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), Map.of());
+        PaymentMessage mexicoMsg = new PaymentMessage(
+            msg.eventId(), msg.paymentId(), msg.amount(), msg.currency(), msg.customerId(),
+            msg.paymentMethod(), msg.country(), msg.attemptCount(), msg.isNewPaymentMethod(),
+            msg.paymentMethodAgeDays(), "America/Mexico_City", msg.metadata(), msg.createdAt()
+        );
+        Exchange exchange = createExchange(mexicoMsg);
+        processor.process(exchange);
+        FraudResult result = exchange.getIn().getBody(FraudResult.class);
+        assertNotNull(result);
+        assertEquals("APPROVE", result.action());
+    }
+
+    @Test
+    void processPayment_withNullTimezone_fallsBackToUtc() {
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), Map.of());
+        PaymentMessage nullTzMsg = new PaymentMessage(
+            msg.eventId(), msg.paymentId(), msg.amount(), msg.currency(), msg.customerId(),
+            msg.paymentMethod(), msg.country(), msg.attemptCount(), msg.isNewPaymentMethod(),
+            msg.paymentMethodAgeDays(), null, msg.metadata(), msg.createdAt()
+        );
+        Exchange exchange = createExchange(nullTzMsg);
+        processor.process(exchange);
+        FraudResult result = exchange.getIn().getBody(FraudResult.class);
+        assertNotNull(result);
+        assertEquals("APPROVE", result.action());
+    }
+
+    @Test
+    void processPayment_returnsAmountAndCustomerId() {
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("15000.50"), Map.of());
+        Exchange exchange = createExchange(msg);
+        processor.process(exchange);
+        FraudResult result = exchange.getIn().getBody(FraudResult.class);
+        assertNotNull(result.amount());
+        assertEquals(new BigDecimal("15000.50"), result.amount());
+        assertEquals("customer-1", result.customerId());
+    }
 }
