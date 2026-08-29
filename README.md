@@ -14,13 +14,13 @@ A proof-of-concept **Payment Orchestration Layer** built with Apache Camel, Quar
 
 ---
 
-[Disclaimer](#-disclaimer) · [Why This Stack?](#-why-this-stack) · [Architecture](#%EF%B8%8F-architecture) · [Features](#-features) · [API Reference](#-api-reference) · [Configuration](#%EF%B8%8F-configuration) · [Quick Start](#-quick-start) · [Testing](#-testing) · [Project Structure](#-project-structure)
+[📋 Disclaimer](#-disclaimer) · [🚀 Why This Stack?](#-why-this-stack) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Features](#-features) · [📡 API Reference](#-api-reference) · [⚙️ Configuration](#%EF%B8%8F-configuration) · [🏁 Quick Start](#-quick-start) · [🧪 Testing](#-testing) · [📁 Project Structure](#-project-structure)
 
 </div>
 
 ---
 
-## Disclaimer
+## 📋 Disclaimer
 
 This project is developed for **educational and research purposes** only. It is intended to provide hands-on experience and deepen knowledge in **event-driven architecture**, **enterprise integration patterns**, and **payment processing orchestration**. It is **not designed** for deployment in production environments or real-world payment systems.
 
@@ -28,9 +28,9 @@ The fraud detection engine uses simulated risk data. In production, this would b
 
 ---
 
-## Why This Stack?
+## 🚀 Why This Stack?
 
-### Why Java 17?
+### ☕ Why Java 17?
 
 Java 17 LTS provides modern language features that significantly improve code quality and reduce boilerplate:
 
@@ -42,7 +42,7 @@ Java 17 LTS provides modern language features that significantly improve code qu
 | **Switch Expressions** | `PaymentEnrichProcessor` risk tier selection | Expression-based switching with arrow syntax |
 | **Text Blocks** | Test JSON payloads | Multi-line strings without concatenation |
 
-### Why Quarkus?
+### ⚡ Why Quarkus?
 
 Quarkus is a cloud-native Java framework designed for container-first deployment:
 
@@ -52,7 +52,7 @@ Quarkus is a cloud-native Java framework designed for container-first deployment
 - **Camel Integration**: First-class Apache Camel support via Camel Quarkus
 - **GraalVM Ready**: Native compilation for instant startup (not used in this POC)
 
-### Why Apache Camel?
+### 🐪 Why Apache Camel?
 
 Apache Camel provides Enterprise Integration Patterns (EIP) out of the box:
 
@@ -63,7 +63,7 @@ Apache Camel provides Enterprise Integration Patterns (EIP) out of the box:
 - **Dynamic Router**: Round-robin provider selection with failover capability
 - **Kafka Component**: Native consumer/producer integration with Apache Kafka
 
-### Why Apache Kafka?
+### 📨 Why Apache Kafka?
 
 Kafka provides the backbone for event-driven architecture:
 
@@ -72,7 +72,7 @@ Kafka provides the backbone for event-driven architecture:
 - **Multi-Consumer**: Same events can be consumed by multiple services (audit, fraud, monitoring)
 - **Scalability**: Partition-based parallelism for high-throughput payment processing
 
-### Why Kubernetes?
+### ☸️ Why Kubernetes?
 
 Kubernetes provides production-grade orchestration:
 
@@ -83,7 +83,7 @@ Kubernetes provides production-grade orchestration:
 
 ---
 
-## Strengths and Weaknesses
+## 💪 Strengths and Weaknesses
 
 ### Strengths
 
@@ -112,7 +112,7 @@ Kubernetes provides production-grade orchestration:
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ### Component Diagram
 
@@ -192,7 +192,7 @@ flowchart TD
     B --> C["PaymentRepository.save()<br/>status: PENDING"]
     B --> D["Kafka: payments.events.received"]
     D --> E["PaymentProcessorRoute"]
-    E --> F["WireTap → payments.events.audit"]
+    E --> F["WireTap to payments.events.audit"]
     E --> G["PaymentEnrichProcessor<br/>(risk data enrichment)"]
     G --> H{"Content-Based Router"}
     H -->|"amount > 10,000"| I["direct:fraud-review"]
@@ -202,9 +202,9 @@ flowchart TD
     I --> K["FraudEvaluationProcessor"]
     J --> K
     K --> L{"Risk Score"}
-    L -->|"≥ 80 REJECT"| M["fraud.events.detected<br/>payments.events.failed"]
+    L -->|"80+ REJECT"| M["fraud.events.detected<br/>payments.events.failed"]
     L -->|"50-79 REVIEW"| N["fraud.events.detected"]
-    L →|"< 50 APPROVE"| O["ProviderSelectionRoute"]
+    L -->|"under 50 APPROVE"| O["ProviderSelectionRoute"]
     O --> P{"dynamicRouter<br/>(round-robin)"}
     P --> Q["Provider A<br/>(Circuit Breaker)"]
     Q -->|"success"| R["Kafka: payments.events.processed"]
@@ -228,7 +228,7 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> CLOSED: Start
-    CLOSED --> OPEN: Failure rate ≥ 50%\n(min 5 calls, window 10s)
+    CLOSED --> OPEN: Failure rate 50% or higher
     OPEN --> HALF_OPEN: Wait 5s
     HALF_OPEN --> CLOSED: 3 successful calls
     HALF_OPEN --> OPEN: Any failure
@@ -238,7 +238,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    A["Payment Message"] --> B{"HIGH_AMOUNT\n> 15,000?"}
+    A["Payment Message"] --> B{"HIGH_AMOUNT\nabove 15,000?"}
     B -->|Yes| C["+50 points"]
     B -->|No| D{"HIGH_RISK_COUNTRY\nXX, YY, ZZ?"}
     C --> D
@@ -246,10 +246,10 @@ flowchart LR
     D -->|No| F{"UNUSUAL_HOUR\n2am-5am?"}
     E --> F
     F -->|Yes| G["+15 points"]
-    F -->|No| H{"RAPID_RETRY\n> 3 attempts?"}
+    F -->|No| H{"RAPID_RETRY\nabove 3 attempts?"}
     G --> H
     H -->|Yes| I["+25 points"]
-    H -->|No| J{"NEW_PAYMENT_METHOD\n< 30 days?"}
+    H -->|No| J{"NEW_PAYMENT_METHOD\nunder 30 days?"}
     I --> J
     J -->|Yes| K["+20 points"]
     J -->|No| L{"HIGH_RISK_TIER\n== HIGH?"}
@@ -257,9 +257,9 @@ flowchart LR
     L -->|Yes| M["+10 points"]
     L -->|No| N{"TOTAL SCORE"}
     M --> N
-    N -->|"≥ 80"| O["🔴 REJECT"]
-    N -->|"50-79"| P["🟡 REVIEW"]
-    N -->|"< 50"| Q["🟢 APPROVE"]
+    N -->|"80+ high risk"| O["🔴 REJECT"]
+    N -->|"50-79 medium risk"| P["🟡 REVIEW"]
+    N -->|"under 50 low risk"| Q["🟢 APPROVE"]
 
     style O fill:#f44336,color:#fff
     style P fill:#ff9800,color:#fff
@@ -268,9 +268,9 @@ flowchart LR
 
 ---
 
-## Features
+## ✨ Features
 
-### Enterprise Integration Patterns (EIP)
+### 🔗 Enterprise Integration Patterns (EIP)
 
 | Pattern | Implementation | Description |
 |---------|---------------|-------------|
@@ -283,7 +283,7 @@ flowchart LR
 | **Message Enricher** | `PaymentEnrichProcessor` | Enriches payment with simulated risk data (velocity, geo-risk, customer tier) |
 | **Message Translator** | `PaymentMapper` | Converts between entity and DTO representations |
 
-### Fraud Detection Engine
+### 🛡️ Fraud Detection Engine
 
 | Rule | Condition | Score | Description |
 |------|-----------|-------|-------------|
@@ -301,7 +301,7 @@ flowchart LR
 
 **Score Cap:** Maximum risk score capped at 100 (theoretical max without cap: 150)
 
-### Kafka Topics
+### 📬 Kafka Topics
 
 | Topic | Producer | Consumer | Purpose |
 |-------|----------|----------|---------|
@@ -315,9 +315,9 @@ flowchart LR
 
 ---
 
-## API Reference
+## 📡 API Reference
 
-### REST Endpoints
+### 🌐 REST Endpoints
 
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
@@ -331,7 +331,7 @@ flowchart LR
 | `GET` | `/swagger-ui` | Swagger UI | `200 OK` |
 | `GET` | `/metrics` | Prometheus metrics | `200 OK` |
 
-### Create Payment
+### 📨 Create Payment
 
 ```bash
 curl -X POST http://localhost:8080/payments \
@@ -362,7 +362,7 @@ curl -X POST http://localhost:8080/payments \
 }
 ```
 
-### Validation Rules
+### ✅ Validation Rules
 
 | Field | Rules |
 |-------|-------|
@@ -375,9 +375,9 @@ curl -X POST http://localhost:8080/payments \
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
-### Backend (api-gateway) — `backend/src/main/resources/application.properties`
+### 🖥️ Backend (api-gateway) — `backend/src/main/resources/application.properties`
 
 ```properties
 # HTTP Server
@@ -399,7 +399,7 @@ quarkus.opentelemetry.service.name=payment-gateway
 quarkus.log.console.json=true
 ```
 
-### Payment Processor — `payment-processor/src/main/resources/application.properties`
+### 🔄 Payment Processor — `payment-processor/src/main/resources/application.properties`
 
 ```properties
 # HTTP Server
@@ -429,9 +429,9 @@ provider.retry-backoff=2s
 
 ---
 
-## Quick Start
+## 🏁 Quick Start
 
-### Prerequisites
+### 📋 Prerequisites
 
 | Tool | Version | Purpose |
 |------|---------|---------|
@@ -493,15 +493,15 @@ curl http://localhost:8080/payments/{id}/status
 
 ---
 
-## Testing
+## 🧪 Testing
 
-### Run All Tests
+### 🏃 Run All Tests
 
 ```bash
 ./mvnw test
 ```
 
-### Run Module Tests
+### 📦 Run Module Tests
 
 ```bash
 # Shared module (DTOs, validators)
@@ -514,7 +514,7 @@ curl http://localhost:8080/payments/{id}/status
 ./mvnw test -pl payment-processor
 ```
 
-### Test Categories
+### 📊 Test Categories
 
 | Category | Framework | Description |
 |----------|-----------|-------------|
@@ -527,7 +527,7 @@ curl http://localhost:8080/payments/{id}/status
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 poc_camel/
@@ -562,7 +562,7 @@ poc_camel/
 
 ---
 
-## Technology Stack
+## 🛠️ Technology Stack
 
 | Component | Technology | Why |
 |-----------|-----------|-----|
@@ -582,7 +582,7 @@ poc_camel/
 
 ---
 
-## SDD Workflow
+## 📐 SDD Workflow
 
 This project follows **Spec-Driven Development (SDD)** with 4 phases:
 
@@ -609,7 +609,7 @@ rake sdd:ship[phase-1-foundation]
 
 ---
 
-## License
+## 📄 License
 
 This is a Proof of Concept. Not intended for production use.
 
