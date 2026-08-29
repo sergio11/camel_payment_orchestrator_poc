@@ -12,8 +12,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Override
     public void configure() {
-        errorHandler(deadLetterChannel("kafka:{{kafka.topic.dead.letter}}")
-            .useOriginalMessage()
+        errorHandler(deadLetterChannel("direct:dlq-handler")
             .logRetryAttempted(true)
             .logExhausted(true));
 
@@ -61,5 +60,12 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .log("Fraud APPROVE: ${body.paymentId}")
                     .to("direct:provider-selection")
             .end();
+
+        from("direct:dlq-handler")
+            .routeId("error-dlq-handler")
+            .log("Error processing payment: ${exception.message}")
+            .marshal().json(JsonLibrary.Jackson)
+            .to("kafka:{{kafka.topic.dead.letter}}")
+            .log("Published to dead letter queue");
     }
 }

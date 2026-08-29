@@ -29,6 +29,9 @@ public class KafkaEventPublisher {
     @ConfigProperty(name = "kafka.topic.payments.received")
     String paymentsReceivedTopic;
 
+    @ConfigProperty(name = "kafka.topic.payments.status.changed")
+    String statusChangedTopic;
+
     private volatile KafkaProducer<String, String> producer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -46,9 +49,11 @@ public class KafkaEventPublisher {
                         ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
                         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
                         ProducerConfig.ACKS_CONFIG, "all",
-                        ProducerConfig.MAX_BLOCK_MS_CONFIG, "5000",
-                        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "10000",
-                        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "5000"
+                        ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true,
+                        ProducerConfig.RETRIES_CONFIG, 3,
+                        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 15000,
+                        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000,
+                        ProducerConfig.MAX_BLOCK_MS_CONFIG, 5000
                     ));
                 }
             }
@@ -93,6 +98,27 @@ public class KafkaEventPublisher {
             });
         } catch (Exception e) {
             LOG.errorf(e, "Error serializing payment message for %s", paymentId);
+        }
+    }
+
+    public void publishStatusChanged(String paymentId, String previousStatus, String newStatus) {
+        try {
+            String payload = objectMapper.writeValueAsString(Map.of(
+                "paymentId", paymentId,
+                "previousStatus", previousStatus,
+                "newStatus", newStatus,
+                "timestamp", LocalDateTime.now().toString()
+            ));
+            getProducer().send(new ProducerRecord<>(statusChangedTopic, paymentId, payload),
+                (metadata, exception) -> {
+                    if (exception != null) {
+                        LOG.errorf(exception, "Failed to publish status changed for %s", paymentId);
+                    } else {
+                        LOG.infof("Published status changed for %s: %s -> %s", paymentId, previousStatus, newStatus);
+                    }
+                });
+        } catch (Exception e) {
+            LOG.errorf(e, "Error serializing status changed for %s", paymentId);
         }
     }
 }

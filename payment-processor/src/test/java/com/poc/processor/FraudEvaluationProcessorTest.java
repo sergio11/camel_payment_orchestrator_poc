@@ -85,4 +85,34 @@ class FraudEvaluationProcessorTest {
         FraudResult result = exchange.getIn().getBody(FraudResult.class);
         assertEquals("APPROVE", result.action());
     }
+
+    @Test
+    void determineAction_respectsConfiguredThresholds() {
+        // Config defaults: riskScoreThresholdHigh=80, riskScoreThresholdMedium=50
+
+        // riskScore >= 80 → REJECT: HIGH_AMOUNT(+50) + HIGH_RISK_COUNTRY(+30) = 80
+        PaymentMessage rejectMsg = createPaymentMessage("XX", new BigDecimal("20000"), Map.of());
+        Exchange rejectExchange = createExchange(rejectMsg);
+        processor.process(rejectExchange);
+        FraudResult rejectResult = rejectExchange.getIn().getBody(FraudResult.class);
+        assertEquals("REJECT", rejectResult.action());
+        assertTrue(rejectResult.riskScore() >= 80);
+
+        // riskScore >= 50 but < 80 → REVIEW: HIGH_AMOUNT(+50) = 50
+        PaymentMessage reviewMsg = createPaymentMessage("US", new BigDecimal("20000"), Map.of());
+        Exchange reviewExchange = createExchange(reviewMsg);
+        processor.process(reviewExchange);
+        FraudResult reviewResult = reviewExchange.getIn().getBody(FraudResult.class);
+        assertEquals("REVIEW", reviewResult.action());
+        assertTrue(reviewResult.riskScore() >= 50);
+        assertTrue(reviewResult.riskScore() < 80);
+
+        // riskScore < 50 → APPROVE: HIGH_RISK_COUNTRY(+30) = 30
+        PaymentMessage approveMsg = createPaymentMessage("XX", new BigDecimal("100"), Map.of());
+        Exchange approveExchange = createExchange(approveMsg);
+        processor.process(approveExchange);
+        FraudResult approveResult = approveExchange.getIn().getBody(FraudResult.class);
+        assertEquals("APPROVE", approveResult.action());
+        assertTrue(approveResult.riskScore() < 50);
+    }
 }

@@ -29,6 +29,18 @@ public class FraudRulesConfig {
     @ConfigProperty(name = "fraud.rules.max-risk-score")
     int maxRiskScore;
 
+    @ConfigProperty(name = "fraud.rules.risk-score-threshold-high")
+    int riskScoreThresholdHigh;
+
+    @ConfigProperty(name = "fraud.rules.risk-score-threshold-medium")
+    int riskScoreThresholdMedium;
+
+    @ConfigProperty(name = "fraud.rules.cbr-high-amount-threshold")
+    BigDecimal cbrHighAmountThreshold;
+
+    @ConfigProperty(name = "fraud.rules.cbr-wallet-amount-threshold")
+    BigDecimal cbrWalletAmountThreshold;
+
     public BigDecimal highAmountThreshold() { return highAmountThreshold; }
     public List<String> highRiskCountries() { return highRiskCountries; }
     public int rapidRetryThreshold() { return rapidRetryThreshold; }
@@ -36,4 +48,8 @@ public class FraudRulesConfig {
     public int unusualHourStart() { return unusualHourStart; }
     public int unusualHourEnd() { return unusualHourEnd; }
     public int maxRiskScore() { return maxRiskScore; }
+    public int riskScoreThresholdHigh() { return riskScoreThresholdHigh; }
+    public int riskScoreThresholdMedium() { return riskScoreThresholdMedium; }
+    public BigDecimal cbrHighAmountThreshold() { return cbrHighAmountThreshold; }
+    public BigDecimal cbrWalletAmountThreshold() { return cbrWalletAmountThreshold; }
 }

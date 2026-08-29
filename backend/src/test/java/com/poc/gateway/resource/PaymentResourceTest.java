@@ -91,7 +91,7 @@ class PaymentResourceTest {
             .statusCode(200)
             .body("id", equalTo(createdPaymentId))
             .body("status", equalTo("PENDING"))
-            .body("updatedAt", notNullValue());
+            .body("lastUpdated", notNullValue());
     }
 
     @Test

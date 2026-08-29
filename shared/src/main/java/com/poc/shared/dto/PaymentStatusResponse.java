@@ -8,5 +8,5 @@ public record PaymentStatusResponse(
     String status,
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "UTC")
-    LocalDateTime updatedAt
+    LocalDateTime lastUpdated
 ) {}

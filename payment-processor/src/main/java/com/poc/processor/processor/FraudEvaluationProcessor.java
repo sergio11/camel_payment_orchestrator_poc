@@ -73,10 +73,10 @@ public class FraudEvaluationProcessor implements Processor {
     }
 
     private FraudResult determineAction(PaymentMessage message, int riskScore, List<String> triggeredRules) {
-        if (riskScore >= 80) {
+        if (riskScore >= config.riskScoreThresholdHigh()) {
             return FraudResult.reject(message.paymentId(), riskScore, "High risk score: " + riskScore, triggeredRules);
         }
-        if (riskScore >= 50) {
+        if (riskScore >= config.riskScoreThresholdMedium()) {
             return FraudResult.review(message.paymentId(), riskScore, "Medium risk score: " + riskScore, triggeredRules);
         }
         return FraudResult.approve(message.paymentId(), riskScore, triggeredRules);

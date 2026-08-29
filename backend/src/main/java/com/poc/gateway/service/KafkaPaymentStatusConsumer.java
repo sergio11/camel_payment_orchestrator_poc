@@ -34,6 +34,9 @@ public class KafkaPaymentStatusConsumer {
     @Inject
     PaymentRepository repository;
 
+    @Inject
+    KafkaEventPublisher kafkaEventPublisher;
+
     private volatile KafkaConsumer<String, String> consumer;
     private final AtomicBoolean running = new AtomicBoolean(true);
     private Thread consumerThread;
@@ -122,7 +125,9 @@ public class KafkaPaymentStatusConsumer {
             LOG.infof("Payment %s FAILED", paymentId);
         }
 
+        String previousStatus = payment.status().name();
         com.poc.gateway.entity.Payment updated = payment.withStatus(newStatus);
         repository.save(updated);
+        kafkaEventPublisher.publishStatusChanged(paymentId, previousStatus, newStatus.name());
     }
 }
