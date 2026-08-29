@@ -1,9 +1,9 @@
 package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -32,13 +32,10 @@ public class KafkaEventPublisher {
     @ConfigProperty(name = "kafka.topic.payments.status.changed")
     String statusChangedTopic;
 
-    private volatile KafkaProducer<String, String> producer;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Inject
+    ObjectMapper objectMapper;
 
-    @jakarta.annotation.PostConstruct
-    void init() {
-        objectMapper.registerModule(new JavaTimeModule());
-    }
+    private volatile KafkaProducer<String, String> producer;
 
     private KafkaProducer<String, String> getProducer() {
         if (producer == null) {

@@ -144,13 +144,14 @@ See [openspec/tech/java-modern.md](openspec/tech/java-modern.md) for mandatory m
 | RAPID_RETRY | attempts > 3 | +25 | Multiple retry attempts |
 | NEW_PAYMENT_METHOD | method age < 30 days | +20 | New payment method for customer |
 | UNUSUAL_HOUR | hour between 2-5 AM | +15 | Transaction at unusual time |
+| HIGH_RISK_TIER | customerRiskTier == HIGH | +10 | High-risk customer tier (enriched) |
 
 **Risk Score Actions:**
 - **>= 80**: REJECT - Automatic rejection
 - **50-79**: REVIEW - Manual review required
 - **< 50**: APPROVE - Automatic approval
 
-**Score Cap:** Maximum risk score capped at 100
+**Score Cap:** Maximum risk score capped at 100 (theoretical max without cap: 150)
 
 ## Phase 3: Camel Integration - Flow Diagrams
 
@@ -165,6 +166,7 @@ flowchart TD
     E --> F{Content-Based Router}
     F -->|amount > 10000| G[direct:fraud-review]
     F -->|WALLET + amount > 5000| G
+    F -->|high-risk country| G
     F -->|default| H[direct:fraud-check]
     G --> I[FraudEvaluationProcessor]
     H --> I

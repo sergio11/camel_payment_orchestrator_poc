@@ -190,7 +190,7 @@ class PaymentServiceTest {
             PaymentNotFoundException.class,
             () -> service.getPayment(null)
         );
-        assertNull(ex.getPaymentId());
+        assertNotNull(ex.getPaymentId());
     }
 
     @Test

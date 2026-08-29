@@ -51,7 +51,7 @@ public class FraudEvaluationProcessor implements Processor {
         int hour;
         if (message.timeZone() != null) {
             try {
-                hour = LocalTime.now(message.timeZone()).getHour();
+                hour = LocalTime.now(ZoneId.of(message.timeZone())).getHour();
             } catch (Exception e) {
                 hour = LocalTime.now(ZoneId.of("UTC")).getHour();
             }
@@ -75,6 +75,15 @@ public class FraudEvaluationProcessor implements Processor {
             if (Boolean.TRUE.equals(isNewMethod) && methodAge instanceof Number && ((Number) methodAge).intValue() < config.newMethodDaysThreshold()) {
                 score += 20;
                 triggeredRules.add("NEW_PAYMENT_METHOD");
+            }
+        }
+        
+        // Use enriched risk tier from PaymentEnrichProcessor
+        if (message.metadata() != null) {
+            Object riskTier = message.metadata().get("customerRiskTier");
+            if ("HIGH".equals(riskTier)) {
+                score += 10;
+                triggeredRules.add("HIGH_RISK_TIER");
             }
         }
         

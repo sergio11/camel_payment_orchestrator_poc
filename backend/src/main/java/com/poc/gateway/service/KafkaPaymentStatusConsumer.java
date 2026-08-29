@@ -1,7 +1,6 @@
 package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import jakarta.annotation.PostConstruct;
@@ -37,15 +36,15 @@ public class KafkaPaymentStatusConsumer {
     @Inject
     KafkaEventPublisher kafkaEventPublisher;
 
+    @Inject
+    ObjectMapper objectMapper;
+
     private volatile KafkaConsumer<String, String> consumer;
     private final AtomicBoolean running = new AtomicBoolean(true);
     private Thread consumerThread;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
     @PostConstruct
     void init() {
-        objectMapper.registerModule(new JavaTimeModule());
         consumerThread = new Thread(this::consume, "payment-status-consumer");
         consumerThread.setDaemon(true);
         consumerThread.start();
@@ -75,17 +74,30 @@ public class KafkaPaymentStatusConsumer {
             LOG.info("Payment status consumer started, listening to: " + paymentsProcessedTopic + ", " + paymentsFailedTopic);
 
             while (running.get()) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-                for (ConsumerRecord<String, String> record : records) {
-                    try {
-                        processRecord(record);
-                    } catch (Exception e) {
-                        LOG.errorf(e, "Error processing record from topic %s", record.topic());
+                try {
+                    ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+                    for (ConsumerRecord<String, String> record : records) {
+                        try {
+                            processRecord(record);
+                        } catch (Exception e) {
+                            LOG.errorf(e, "Error processing record from topic %s", record.topic());
+                        }
+                    }
+                } catch (org.apache.kafka.common.errors.WakeupException e) {
+                    if (running.get()) {
+                        LOG.warn("Consumer wakeup received");
+                    }
+                    break;
+                } catch (Exception e) {
+                    LOG.errorf(e, "Consumer loop error, retrying in 5s");
+                    try { Thread.sleep(5000); } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
                     }
                 }
             }
         } catch (Exception e) {
-            LOG.errorf(e, "Payment status consumer error");
+            LOG.errorf(e, "Payment status consumer fatal error");
         } finally {
             if (consumer != null) {
                 consumer.close();
@@ -120,9 +132,12 @@ public class KafkaPaymentStatusConsumer {
         if (paymentsProcessedTopic.equals(record.topic())) {
             newStatus = PaymentStatus.APPROVED;
             LOG.infof("Payment %s APPROVED", paymentId);
-        } else {
+        } else if (paymentsFailedTopic.equals(record.topic())) {
             newStatus = PaymentStatus.FAILED;
             LOG.infof("Payment %s FAILED", paymentId);
+        } else {
+            LOG.warnf("Unexpected topic: %s, skipping record for payment %s", record.topic(), paymentId);
+            return;
         }
 
         String previousStatus = payment.status().name();

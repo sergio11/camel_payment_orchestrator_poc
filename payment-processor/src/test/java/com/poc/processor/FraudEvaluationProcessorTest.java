@@ -122,7 +122,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage utcMsg = new PaymentMessage(
             msg.eventId(), msg.paymentId(), msg.amount(), msg.currency(), msg.customerId(),
             msg.paymentMethod(), msg.country(), msg.attemptCount(), msg.isNewPaymentMethod(),
-            msg.paymentMethodAgeDays(), "UTC", msg.metadata(), msg.createdAt()
+            msg.customerAgeDays(), "UTC", msg.metadata(), msg.timestamp()
         );
         Exchange exchange = createExchange(utcMsg);
         processor.process(exchange);
@@ -137,7 +137,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage mexicoMsg = new PaymentMessage(
             msg.eventId(), msg.paymentId(), msg.amount(), msg.currency(), msg.customerId(),
             msg.paymentMethod(), msg.country(), msg.attemptCount(), msg.isNewPaymentMethod(),
-            msg.paymentMethodAgeDays(), "America/Mexico_City", msg.metadata(), msg.createdAt()
+            msg.customerAgeDays(), "America/Mexico_City", msg.metadata(), msg.timestamp()
         );
         Exchange exchange = createExchange(mexicoMsg);
         processor.process(exchange);
@@ -152,7 +152,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage nullTzMsg = new PaymentMessage(
             msg.eventId(), msg.paymentId(), msg.amount(), msg.currency(), msg.customerId(),
             msg.paymentMethod(), msg.country(), msg.attemptCount(), msg.isNewPaymentMethod(),
-            msg.paymentMethodAgeDays(), null, msg.metadata(), msg.createdAt()
+            msg.customerAgeDays(), null, msg.metadata(), msg.timestamp()
         );
         Exchange exchange = createExchange(nullTzMsg);
         processor.process(exchange);
