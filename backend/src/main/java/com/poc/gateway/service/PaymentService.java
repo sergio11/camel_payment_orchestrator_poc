@@ -42,6 +42,9 @@ public class PaymentService {
     }
     
     public PaymentResponse getPayment(String id) {
+        if (id == null) {
+            throw new PaymentNotFoundException("null");
+        }
         UUID uuid;
         try {
             uuid = UUID.fromString(id);

@@ -57,12 +57,12 @@ public class PaymentRepository {
             .count();
     }
 
-    public Payment update(Payment payment, PaymentStatus newStatus) {
-        Payment existing = store.get(payment.id());
+    public Payment update(UUID id, PaymentStatus newStatus) {
+        Payment existing = store.get(id);
         if (existing == null) {
-            throw new com.poc.gateway.exception.PaymentNotFoundException(payment.id().toString());
+            throw new com.poc.gateway.exception.PaymentNotFoundException(id.toString());
         }
-        Payment updated = payment.withStatus(newStatus).withUpdatedAt(LocalDateTime.now());
+        Payment updated = existing.withStatus(newStatus);
         store.put(updated.id(), updated);
         return updated;
     }

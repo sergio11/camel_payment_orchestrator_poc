@@ -4,13 +4,8 @@ import com.poc.processor.processor.ContentBasedRouterBean;
 import com.poc.processor.processor.FraudEvaluationProcessor;
 import com.poc.processor.processor.PaymentEnrichProcessor;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.apache.camel.Exchange;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.dataformat.JsonLibrary;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.common.TopicPartition;
-import java.util.HashMap;
-import java.util.Map;
 
 @ApplicationScoped
 public class PaymentProcessorRoute extends RouteBuilder {
@@ -21,7 +16,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .logRetryAttempted(true)
             .logExhausted(true));
 
-        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=false&autoOffsetReset=earliest")
+        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=true&autoOffsetReset=earliest")
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
             .log("Received payment: ${body.paymentId}")
@@ -35,8 +30,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
                     .to("direct:fraud-check")
             .end()
-            .process(PaymentProcessorRoute::commitOffset)
-            .log("Payment processed successfully, offset committed: ${body.paymentId}");
+            .log("Payment processed successfully: ${body.paymentId}");
 
         from("direct:fraud-review")
             .routeId("fraud-review-high-value")
@@ -74,16 +68,5 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .marshal().json(JsonLibrary.Jackson)
             .to("kafka:{{kafka.topic.dead.letter}}")
             .log("Published to dead letter queue");
-    }
-
-    private static void commitOffset(Exchange exchange) {
-        TopicPartition topicPartition = exchange.getProperty(Exchange.KAFKA_TOPIC_PARTITION, TopicPartition.class);
-        Long offset = exchange.getProperty(Exchange.KAFKA_PARTITION_OFFSET, Long.class);
-        
-        if (topicPartition != null && offset != null) {
-            Map<TopicPartition, OffsetAndMetadata> offsets = new HashMap<>();
-            offsets.put(topicPartition, new OffsetAndMetadata(offset + 1));
-            exchange.getContext().getRegistry().lookupByNameAndType("kafkaProducer", org.apache.kafka.clients.producer.KafkaProducer.class);
-        }
     }
 }

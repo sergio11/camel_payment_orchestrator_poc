@@ -39,7 +39,7 @@ class PaymentRepositoryTest {
         );
         Payment saved = repository.save(payment);
         if (status != PaymentStatus.PENDING) {
-            return repository.update(saved, status);
+            return repository.update(saved.id(), status);
         }
         return saved;
     }
@@ -188,12 +188,10 @@ class PaymentRepositoryTest {
     @Test
     void update_persistsChanges() {
         Payment saved = createAndStorePayment("cust-1", PaymentStatus.PENDING);
-        Payment updated = saved.withStatus(PaymentStatus.APPROVED).withProvider("provider-a");
 
-        Payment result = repository.update(updated, PaymentStatus.APPROVED);
+        Payment result = repository.update(saved.id(), PaymentStatus.APPROVED);
 
         assertEquals(PaymentStatus.APPROVED, result.status());
-        assertEquals("provider-a", result.provider());
 
         Optional<Payment> found = repository.findById(saved.id());
         assertTrue(found.isPresent());
@@ -208,7 +206,7 @@ class PaymentRepositoryTest {
 
         assertThrows(
             PaymentNotFoundException.class,
-            () -> repository.update(nonexistent, PaymentStatus.APPROVED)
+            () -> repository.update(nonexistent.id(), PaymentStatus.APPROVED)
         );
     }
 
@@ -231,7 +229,7 @@ class PaymentRepositoryTest {
                     startLatch.await();
                     Payment current = repository.findById(saved.id()).orElseThrow();
                     PaymentStatus newStatus = index % 2 == 0 ? PaymentStatus.APPROVED : PaymentStatus.REJECTED;
-                    repository.update(current, newStatus);
+                    repository.update(current.id(), newStatus);
                     successCount.incrementAndGet();
                 } catch (Exception e) {
                     errorCount.incrementAndGet();

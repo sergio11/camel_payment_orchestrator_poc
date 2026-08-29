@@ -66,4 +66,12 @@ public record Payment(
             metadata, createdAt, LocalDateTime.now()
         );
     }
+
+    public Payment withUpdatedAt(LocalDateTime newUpdatedAt) {
+        return new Payment(
+            id, amount, currency, customerId, paymentMethod,
+            country, status, provider, failureReason,
+            metadata, createdAt, newUpdatedAt
+        );
+    }
 }
