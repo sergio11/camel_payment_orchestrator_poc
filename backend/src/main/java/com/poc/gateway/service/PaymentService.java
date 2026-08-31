@@ -28,7 +28,7 @@ public class PaymentService {
         Payment payment = PaymentMapper.toEntity(request);
         Payment saved = repository.save(payment);
         
-        kafkaEventPublisher.publishPaymentReceived(
+        boolean published = kafkaEventPublisher.publishPaymentReceived(
             saved.id().toString(),
             saved.amount(),
             saved.currency(),
@@ -37,6 +37,12 @@ public class PaymentService {
             saved.country(),
             saved.metadata()
         );
+        
+        if (!published) {
+            LOG.warnf("Kafka publish failed for payment %s, compensating by removing from repository", saved.id());
+            repository.deleteById(saved.id());
+            throw new RuntimeException("Failed to publish payment event to Kafka. Payment was not created.");
+        }
         
         return PaymentMapper.toResponse(saved);
     }

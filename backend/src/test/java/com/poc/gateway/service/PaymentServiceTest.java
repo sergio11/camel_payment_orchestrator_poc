@@ -68,6 +68,9 @@ class PaymentServiceTest {
             Payment p = invocation.getArgument(0);
             return p.withStatus(PaymentStatus.PENDING);
         });
+        when(kafkaEventPublisher.publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+        )).thenReturn(true);
 
         PaymentResponse response = service.createPayment(request);
 

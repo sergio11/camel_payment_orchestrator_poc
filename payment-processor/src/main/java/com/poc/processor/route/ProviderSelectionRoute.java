@@ -3,6 +3,7 @@ package com.poc.processor.route;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.config.ProviderConfig;
 import com.poc.processor.processor.ProviderRouterBean;
+import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,6 +25,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
     public void configure() {
         JacksonDataFormat paymentJson = new JacksonDataFormat(objectMapper, PaymentMessage.class);
         JacksonDataFormat responseJson = new JacksonDataFormat(objectMapper, ProviderResponse.class);
+        JacksonDataFormat fraudResultJson = new JacksonDataFormat(objectMapper, FraudResult.class);
         JacksonDataFormat stringJson = new JacksonDataFormat(objectMapper, Object.class);
 
         from("direct:provider-selection")
@@ -60,13 +62,20 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .routeId("call-provider-a")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
+            .process(exchange -> {
+                exchange.getIn().setHeader("CamelFraudResult", exchange.getIn().getBody());
+                exchange.getIn().setBody(exchange.getIn().getHeader("OriginalPaymentMessage"));
+            })
             .marshal(paymentJson)
             .to("netty-http:{{provider.a-url}}")
             .unmarshal(responseJson)
             .choice()
                 .when(simple("${body.success} == true"))
                     .log("Provider A success: ${body.transactionId}")
-                    .marshal(responseJson)
+                    .process(exchange -> {
+                        exchange.getIn().setBody(exchange.getIn().getHeader("CamelFraudResult"));
+                    })
+                    .marshal(fraudResultJson)
                     .to("kafka:{{kafka.topic.payments.processed}}")
                 .otherwise()
                     .log("Provider A returned error: ${body.errorCode}")
@@ -104,13 +113,20 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .routeId("call-provider-b")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
+            .process(exchange -> {
+                exchange.getIn().setHeader("CamelFraudResult", exchange.getIn().getBody());
+                exchange.getIn().setBody(exchange.getIn().getHeader("OriginalPaymentMessage"));
+            })
             .marshal(paymentJson)
             .to("netty-http:{{provider.b-url}}")
             .unmarshal(responseJson)
             .choice()
                 .when(simple("${body.success} == true"))
                     .log("Provider B success: ${body.transactionId}")
-                    .marshal(responseJson)
+                    .process(exchange -> {
+                        exchange.getIn().setBody(exchange.getIn().getHeader("CamelFraudResult"));
+                    })
+                    .marshal(fraudResultJson)
                     .to("kafka:{{kafka.topic.payments.processed}}")
                 .otherwise()
                     .log("Provider B returned error: ${body.errorCode}")
@@ -123,6 +139,12 @@ public class ProviderSelectionRoute extends RouteBuilder {
         from("direct:dead-letter")
             .routeId("dead-letter")
             .log("Sending to dead letter queue: ${header.CamelPaymentId}")
+            .process(exchange -> {
+                PaymentMessage orig = exchange.getIn().getHeader("OriginalPaymentMessage", PaymentMessage.class);
+                if (orig != null) {
+                    exchange.getIn().setBody(orig);
+                }
+            })
             .marshal(stringJson)
             .to("kafka:{{kafka.topic.dead.letter}}")
             .log("Published to dead letter topic");

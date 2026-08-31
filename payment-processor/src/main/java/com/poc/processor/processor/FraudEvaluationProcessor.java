@@ -24,6 +24,9 @@ public class FraudEvaluationProcessor implements Processor {
     public void process(Exchange exchange) {
         PaymentMessage message = exchange.getIn().getBody(PaymentMessage.class);
         
+        // Store original PaymentMessage in header for use by downstream routes
+        exchange.getIn().setHeader("OriginalPaymentMessage", message);
+        
         List<String> triggeredRules = new ArrayList<>();
         int riskScore = calculateRiskScore(message, triggeredRules);
         riskScore = Math.min(riskScore, config.maxRiskScore());

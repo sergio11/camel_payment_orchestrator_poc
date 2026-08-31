@@ -66,7 +66,7 @@ public class KafkaPaymentStatusConsumer {
             props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-            props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+            props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 
             consumer = new KafkaConsumer<>(props);
             consumer.subscribe(Arrays.asList(paymentsProcessedTopic, paymentsFailedTopic));
@@ -82,6 +82,9 @@ public class KafkaPaymentStatusConsumer {
                         } catch (Exception e) {
                             LOG.errorf(e, "Error processing record from topic %s", record.topic());
                         }
+                    }
+                    if (!records.isEmpty()) {
+                        consumer.commitSync();
                     }
                 } catch (org.apache.kafka.common.errors.WakeupException e) {
                     if (running.get()) {
@@ -141,8 +144,7 @@ public class KafkaPaymentStatusConsumer {
         }
 
         String previousStatus = payment.status().name();
-        com.poc.gateway.entity.Payment updated = payment.withStatus(newStatus);
-        repository.save(updated);
+        com.poc.gateway.entity.Payment updated = repository.update(uuid, newStatus);
         kafkaEventPublisher.publishStatusChanged(paymentId, previousStatus, newStatus.name());
     }
 }

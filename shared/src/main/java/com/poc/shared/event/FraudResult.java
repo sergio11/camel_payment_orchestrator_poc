@@ -1,8 +1,16 @@
 package com.poc.shared.event;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.math.BigDecimal;
 import java.util.List;
 
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = FraudResult.Approve.class, name = "APPROVE"),
+    @JsonSubTypes.Type(value = FraudResult.Review.class, name = "REVIEW"),
+    @JsonSubTypes.Type(value = FraudResult.Reject.class, name = "REJECT")
+})
 public sealed interface FraudResult 
     permits FraudResult.Approve, FraudResult.Review, FraudResult.Reject {
     

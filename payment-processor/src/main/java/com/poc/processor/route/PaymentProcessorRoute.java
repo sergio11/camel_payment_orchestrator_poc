@@ -1,14 +1,20 @@
 package com.poc.processor.route;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.processor.ContentBasedRouterBean;
 import com.poc.processor.processor.FraudEvaluationProcessor;
 import com.poc.processor.processor.PaymentEnrichProcessor;
+import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.dataformat.JsonLibrary;
 
 @ApplicationScoped
 public class PaymentProcessorRoute extends RouteBuilder {
+
+    @Inject
+    ObjectMapper objectMapper;
 
     @Override
     public void configure() {
@@ -16,9 +22,12 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .logRetryAttempted(true)
             .logExhausted(true));
 
+        var paymentJson = new org.apache.camel.component.jackson.JacksonDataFormat(objectMapper, PaymentMessage.class);
+
         from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=true&autoOffsetReset=earliest")
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
+            .unmarshal(paymentJson)
             .log("Received payment: ${body.paymentId}")
             .wireTap("direct:audit-pipeline")
             .process("paymentEnrichProcessor")
@@ -30,7 +39,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
                     .to("direct:fraud-check")
             .end()
-            .log("Payment processed successfully: ${body.paymentId}");
+            .log("Payment processed: ${header.OriginalPaymentMessage.paymentId} -> ${header.CamelFraudAction}");
 
         from("direct:fraud-review")
             .routeId("fraud-review-high-value")

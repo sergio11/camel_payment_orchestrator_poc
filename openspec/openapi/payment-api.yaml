@@ -110,6 +110,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaymentStatusResponse'
+        404:
+          $ref: '#/components/responses/NotFound'
 
   /health:
     get:
@@ -183,6 +185,7 @@ components:
           type: number
           format: decimal
           minimum: 0.01
+          maximum: 999999.99
           example: 99.99
         currency:
           type: string

@@ -15,6 +15,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 
@@ -65,24 +66,16 @@ public class KafkaEventPublisher {
         }
     }
 
-    public void publishPaymentReceived(String paymentId, BigDecimal amount, String currency,
-                                        String customerId, String paymentMethod, String country,
-                                        Map<String, Object> metadata) {
+    public boolean publishPaymentReceived(String paymentId, BigDecimal amount, String currency,
+                                    String customerId, String paymentMethod, String country,
+                                    Map<String, Object> metadata) {
         try {
             PaymentMessage message = new PaymentMessage(
                 UUID.randomUUID().toString(),
-                paymentId,
-                amount,
-                currency,
-                customerId,
-                paymentMethod,
-                country,
-                0,
-                false,
-                0,
-                "UTC",
+                paymentId, amount, currency, customerId, paymentMethod, country,
+                0, false, 0, "UTC",
                 metadata,
-                LocalDateTime.now()
+                LocalDateTime.now(ZoneOffset.UTC)
             );
             String json = objectMapper.writeValueAsString(message);
             getProducer().send(new ProducerRecord<>(paymentsReceivedTopic, paymentId, json), (recordMetadata, exception) -> {
@@ -93,8 +86,10 @@ public class KafkaEventPublisher {
                         paymentId, paymentsReceivedTopic, recordMetadata.partition(), recordMetadata.offset());
                 }
             });
+            return true;
         } catch (Exception e) {
             LOG.errorf(e, "Error serializing payment message for %s", paymentId);
+            return false;
         }
     }
 
@@ -104,7 +99,7 @@ public class KafkaEventPublisher {
                 "paymentId", paymentId,
                 "previousStatus", previousStatus,
                 "newStatus", newStatus,
-                "timestamp", LocalDateTime.now().toString()
+                "timestamp", LocalDateTime.now(ZoneOffset.UTC).toString()
             ));
             getProducer().send(new ProducerRecord<>(statusChangedTopic, paymentId, payload),
                 (metadata, exception) -> {

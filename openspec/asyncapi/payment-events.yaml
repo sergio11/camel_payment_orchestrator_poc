@@ -58,6 +58,24 @@ channels:
       summary: Payment status changed
       description: Published when payment status transitions
 
+  payment.audit:
+    address: payments.events.audit
+    description: Event published for payment audit trail
+    messages:
+      $ref: '#/components/messages/PaymentAudit'
+    publish:
+      summary: Payment audit event
+      description: Published for payment audit logging and compliance
+
+  payment.dead-letter:
+    address: payments.events.dead-letter
+    description: Event published when payment processing exhausts all retries
+    messages:
+      $ref: '#/components/messages/PaymentDeadLetter'
+    publish:
+      summary: Payment dead letter event
+      description: Published when payment cannot be processed after all retry attempts
+
 components:
   messages:
     PaymentReceived:
@@ -90,28 +108,49 @@ components:
 
     PaymentStatusChanged:
       name: PaymentStatusChanged
-      title: Payment Status Changed Event
+      title: Payment Status Changed
       summary: Event triggered when payment status changes
       payload:
         $ref: '#/components/schemas/PaymentStatusChangedPayload'
+
+    PaymentAudit:
+      name: PaymentAudit
+      title: Payment Audit Event
+      summary: Event triggered for payment audit trail
+      payload:
+        $ref: '#/components/schemas/PaymentAuditPayload'
+
+    PaymentDeadLetter:
+      name: PaymentDeadLetter
+      title: Payment Dead Letter Event
+      summary: Event triggered when payment processing exhausts all retries
+      payload:
+        $ref: '#/components/schemas/PaymentDeadLetterPayload'
 
   schemas:
     PaymentReceivedPayload:
       type: object
       required:
+        - eventId
         - paymentId
         - amount
         - currency
         - customerId
         - paymentMethod
+        - country
+        - attemptCount
+        - isNewPaymentMethod
+        - customerAgeDays
+        - timeZone
         - timestamp
       properties:
+        eventId:
+          type: string
         paymentId:
           type: string
           format: uuid
         amount:
           type: number
-          format: decimal
         currency:
           type: string
           enum: [USD, EUR, GBP, MXN, JPY]
@@ -121,6 +160,16 @@ components:
           type: string
         country:
           type: string
+        attemptCount:
+          type: integer
+        isNewPaymentMethod:
+          type: boolean
+        customerAgeDays:
+          type: integer
+        timeZone:
+          type: string
+        metadata:
+          type: object
         timestamp:
           type: string
           format: date-time
@@ -229,6 +278,45 @@ components:
           type: string
           enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
         reason:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    PaymentAuditPayload:
+      type: object
+      required:
+        - paymentId
+        - action
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        action:
+          type: string
+        details:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+
+    PaymentDeadLetterPayload:
+      type: object
+      required:
+        - paymentId
+        - failureReason
+        - attempts
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        failureReason:
+          type: string
+        attempts:
+          type: integer
+        lastError:
           type: string
         timestamp:
           type: string

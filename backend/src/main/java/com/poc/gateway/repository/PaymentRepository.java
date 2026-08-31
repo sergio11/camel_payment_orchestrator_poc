@@ -58,12 +58,19 @@ public class PaymentRepository {
     }
 
     public Payment update(UUID id, PaymentStatus newStatus) {
-        Payment existing = store.get(id);
-        if (existing == null) {
+        Payment updated = store.compute(id, (key, existing) -> {
+            if (existing == null) {
+                return null;
+            }
+            return existing.withStatus(newStatus);
+        });
+        if (updated == null) {
             throw new com.poc.gateway.exception.PaymentNotFoundException(id.toString());
         }
-        Payment updated = existing.withStatus(newStatus);
-        store.put(updated.id(), updated);
         return updated;
+    }
+
+    public void deleteById(UUID id) {
+        store.remove(id);
     }
 }

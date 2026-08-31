@@ -1,6 +1,7 @@
 package com.poc.processor;
 
 import com.poc.shared.event.PaymentMessage;
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -11,122 +12,96 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.*;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
+import jakarta.inject.Inject;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-@Testcontainers
+@QuarkusTestResource(KafkaTestResource.class)
 class WireTapTest {
 
-    @Container
-    static KafkaContainer kafka = new KafkaContainer("confluentinc/cp-kafka:7.5.0")
-        .withEnv("KAFKA_AUTO_CREATE_TOPICS_ENABLE", "true");
+    @Inject
+    @ConfigProperty(name = "kafka.bootstrap.servers")
+    String bootstrapServers;
 
     static KafkaProducer<String, String> producer;
-    static KafkaConsumer<String, String> consumer;
+    private String resolvedBootstrapServers;
 
-    @BeforeAll
-    static void setup() {
-        kafka.start();
-        
-        String bootstrapServers = kafka.getBootstrapServers();
-        System.setProperty("kafka.bootstrap.servers", bootstrapServers);
-        System.setProperty("camel.component.kafka.brokers", bootstrapServers);
-
-        Properties prodProps = new Properties();
-        prodProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        prodProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        prodProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        producer = new KafkaProducer<>(prodProps);
-
-        Properties consProps = new Properties();
-        consProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        consProps.put(ConsumerConfig.GROUP_ID_CONFIG, "test-audit-group-" + UUID.randomUUID());
-        consProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        consProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        consProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        consProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-        consumer = new KafkaConsumer<>(consProps);
-        
-        consumer.subscribe(Collections.singletonList("payments.events.audit"));
+    void resolveOnce() {
+        if (resolvedBootstrapServers == null) {
+            resolvedBootstrapServers = bootstrapServers;
+            Properties prodProps = new Properties();
+            prodProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
+            prodProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+            prodProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+            producer = new KafkaProducer<>(prodProps);
+        }
     }
 
     @AfterAll
     static void teardown() {
-        consumer.close();
-        producer.close();
-        kafka.stop();
+        if (producer != null) {
+            producer.close();
+        }
     }
 
-    @BeforeEach
-    void reset() {
-        consumer.poll(java.time.Duration.ofMillis(100));
+    private KafkaConsumer<String, String> createConsumer(String groupId) {
+        Properties consProps = new Properties();
+        consProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
+        consProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
+        consProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        consProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        consProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        consProps.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+        KafkaConsumer<String, String> c = new KafkaConsumer<>(consProps);
+        c.subscribe(Collections.singletonList("payments.events.audit"));
+        return c;
     }
 
     @Test
     @DisplayName("3.46: Verify Wire Tap logs to audit topic")
     void testWireTapLogsToAuditTopic() throws Exception {
-        // Given: A payment sent to the main topic
-        String paymentId = UUID.randomUUID().toString();
-        PaymentMessage payment = new PaymentMessage(
-            UUID.randomUUID().toString(),
-            paymentId,
-            new BigDecimal("100.00"),
-            "USD",
-            "customer-123",
-            "CREDIT_CARD",
-            "US",
-            0,
-            false,
-            0,
-            "UTC",
-            Map.of(),
-            LocalDateTime.now()
-        );
+        resolveOnce();
+        KafkaConsumer<String, String> consumer = createConsumer("test-audit-" + UUID.randomUUID());
+        try {
+            String paymentId = UUID.randomUUID().toString();
+            PaymentMessage payment = new PaymentMessage(
+                UUID.randomUUID().toString(), paymentId,
+                new BigDecimal("100.00"), "USD", "customer-123",
+                "CREDIT_CARD", "US", 0, false, 0, "UTC",
+                Map.of(), LocalDateTime.now()
+            );
 
-        String json = toJson(payment);
-        ProducerRecord<String, String> record = new ProducerRecord<>("payments.events.received", paymentId, json);
-        producer.send(record).get(5, TimeUnit.SECONDS);
+            producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
-        // When: Wait for wiretap to publish to audit topic
-        String auditEvent = consumeAuditEvent(paymentId, 10);
-        
-        // Then: Should have audit event with same payment data
-        assertNotNull(auditEvent, "Should receive audit event on payments.events.audit topic");
-        assertTrue(auditEvent.contains(paymentId), "Audit event should contain paymentId");
+            String auditEvent = consumeAuditEvent(consumer, paymentId, 30);
+
+            assertNotNull(auditEvent, "Should receive audit event on payments.events.audit topic");
+            assertTrue(auditEvent.contains(paymentId), "Audit event should contain paymentId");
+        } finally {
+            consumer.close();
+        }
     }
 
-    private String consumeAuditEvent(String paymentId, int timeoutSeconds) throws InterruptedException, ExecutionException, TimeoutException {
-        return CompletableFuture.supplyAsync(() -> {
-            long startTime = System.currentTimeMillis();
-            long timeoutMs = timeoutSeconds * 1000L;
-            
-            while (System.currentTimeMillis() - startTime < timeoutMs) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
-                for (ConsumerRecord<String, String> record : records) {
-                    if ("payments.events.audit".equals(record.topic())) {
-                        String json = record.value();
-                        if (json.contains(paymentId)) {
-                            return json;
-                        }
-                    }
+    private String consumeAuditEvent(KafkaConsumer<String, String> consumer, String paymentId, int timeoutSeconds) throws Exception {
+        long deadline = System.currentTimeMillis() + (timeoutSeconds * 1000L);
+        while (System.currentTimeMillis() < deadline) {
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+            for (ConsumerRecord<String, String> record : records) {
+                if ("payments.events.audit".equals(record.topic()) && record.value().contains(paymentId)) {
+                    return record.value();
                 }
             }
-            return null;
-        }).get(timeoutSeconds, TimeUnit.SECONDS);
+        }
+        return null;
     }
 
     private String toJson(Object obj) {

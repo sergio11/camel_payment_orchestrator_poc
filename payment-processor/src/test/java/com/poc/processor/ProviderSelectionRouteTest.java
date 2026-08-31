@@ -5,7 +5,6 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import org.apache.camel.CamelContext;
 import org.apache.camel.ProducerTemplate;
-import org.apache.camel.builder.AdviceWith;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -35,6 +34,15 @@ class ProviderSelectionRouteTest {
     @Inject
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
+
+    @Inject
+    CamelContext camelContext;
+
+    @Inject
+    ProducerTemplate producerTemplate;
+
+    @Inject
+    ProviderMockConfig mockConfig;
 
     KafkaProducer<String, String> producer;
     KafkaConsumer<String, String> consumer;
@@ -67,14 +75,9 @@ class ProviderSelectionRouteTest {
         producer.close();
     }
 
-    @Inject
-    CamelContext camelContext;
-
-    @Inject
-    ProducerTemplate producerTemplate;
-
     @BeforeEach
     void reset() {
+        mockConfig.resetCallCount();
         consumer.poll(Duration.ofMillis(100));
     }
 
@@ -94,67 +97,6 @@ class ProviderSelectionRouteTest {
             Map.of(),
             LocalDateTime.now()
         );
-    }
-
-    private String providerAFailureResponse() {
-        return """
-            {
-                "providerId": "provider-a",
-                "transactionId": null,
-                "success": false,
-                "errorCode": "PROVIDER_A_DOWN",
-                "errorMessage": "Provider A is unavailable",
-                "processedAt": "2026-01-01T00:00:00"
-            }
-            """;
-    }
-
-    private String providerBFailureResponse() {
-        return """
-            {
-                "providerId": "provider-b",
-                "transactionId": null,
-                "success": false,
-                "errorCode": "PROVIDER_B_DOWN",
-                "errorMessage": "Provider B is unavailable",
-                "processedAt": "2026-01-01T00:00:00"
-            }
-            """;
-    }
-
-    private String providerBSuccessResponse() {
-        return """
-            {
-                "providerId": "provider-b",
-                "transactionId": "txn-123",
-                "success": true,
-                "errorCode": null,
-                "errorMessage": null,
-                "processedAt": "2026-01-01T00:00:00"
-            }
-            """;
-    }
-
-    private void mockProviderAFailure() throws Exception {
-        AdviceWith.adviceWith(camelContext, "call-provider-a", builder -> {
-            builder.interceptSendToEndpoint("netty-http:*")
-                .skipSendToOriginalEndpoint()
-                .process(exchange -> {
-                    String mockResponse = providerAFailureResponse();
-                    exchange.getMessage().setBody(mockResponse, String.class);
-                });
-        });
-    }
-
-    private void mockProviderB(boolean success) throws Exception {
-        AdviceWith.adviceWith(camelContext, "call-provider-b", builder -> {
-            builder.interceptSendToEndpoint("netty-http:*")
-                .skipSendToOriginalEndpoint()
-                .process(exchange -> {
-                    String mockResponse = success ? providerBSuccessResponse() : providerBFailureResponse();
-                    exchange.getMessage().setBody(mockResponse, String.class);
-                });
-        });
     }
 
     private boolean waitForDeadLetterMessage(String paymentId, long timeoutMs) throws InterruptedException {
@@ -177,13 +119,13 @@ class ProviderSelectionRouteTest {
     @Test
     @DisplayName("3.43: Verify provider fallback when Provider A fails")
     void testProviderFallbackWhenProviderAFails() throws Exception {
-        mockProviderAFailure();
-        mockProviderB(true);
+        mockConfig.setProviderASucceeds(false);
+        mockConfig.setProviderBSucceeds(true);
 
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = createTestPayment(paymentId);
 
-        producerTemplate.sendBody("direct:provider-selection", payment);
+        producerTemplate.sendBodyAndHeader("direct:provider-selection", payment, "OriginalPaymentMessage", payment);
 
         boolean deadLetterReceived = waitForDeadLetterMessage(paymentId, 30000);
 
@@ -199,28 +141,20 @@ class ProviderSelectionRouteTest {
         assertNotNull(camelContext.getRoute("provider-b-fallback"),
             "Provider B fallback route should exist");
 
-        AtomicInteger providerACallCount = new AtomicInteger(0);
-
-        AdviceWith.adviceWith(camelContext, "call-provider-a", builder -> {
-            builder.interceptSendToEndpoint("netty-http:*")
-                .skipSendToOriginalEndpoint()
-                .process(exchange -> {
-                    providerACallCount.incrementAndGet();
-                    exchange.getMessage().setBody(providerAFailureResponse(), String.class);
-                });
-        });
+        mockConfig.setProviderASucceeds(false);
+        mockConfig.setProviderBSucceeds(false);
 
         int paymentsToSend = 15;
         for (int i = 0; i < paymentsToSend; i++) {
             String paymentId = UUID.randomUUID().toString();
             PaymentMessage payment = createTestPayment(paymentId);
-            producerTemplate.sendBody("direct:provider-selection", payment);
+            producerTemplate.sendBodyAndHeader("direct:provider-selection", payment, "OriginalPaymentMessage", payment);
             Thread.sleep(200);
         }
 
         Thread.sleep(5000);
 
-        int callsMade = providerACallCount.get();
+        int callsMade = mockConfig.getProviderACallCount();
         assertTrue(callsMade >= 1,
             "Provider A should have been called at least once, actual: " + callsMade);
         assertTrue(callsMade < paymentsToSend,
@@ -231,13 +165,13 @@ class ProviderSelectionRouteTest {
     @Test
     @DisplayName("3.45: Verify Dead Letter Channel receives failed payments after retries")
     void testDeadLetterChannelReceivesFailedPayments() throws Exception {
-        mockProviderAFailure();
-        mockProviderB(false);
+        mockConfig.setProviderASucceeds(false);
+        mockConfig.setProviderBSucceeds(false);
 
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = createTestPayment(paymentId);
 
-        producerTemplate.sendBody("direct:provider-selection", payment);
+        producerTemplate.sendBodyAndHeader("direct:provider-selection", payment, "OriginalPaymentMessage", payment);
 
         boolean deadLetterReceived = waitForDeadLetterMessage(paymentId, 45000);
 
