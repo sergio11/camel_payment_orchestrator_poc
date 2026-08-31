@@ -42,6 +42,10 @@ data:
   provider.circuit-breaker.wait-duration: "5s"
   provider.max-retries: "5"
   provider.retry-backoff: "2s"
+  fraud.rules.risk-score-threshold-high: "80"
+  fraud.rules.risk-score-threshold-medium: "50"
+  fraud.rules.cbr-high-amount-threshold: "10000"
+  fraud.rules.cbr-wallet-amount-threshold: "5000"
 ---
 apiVersion: v1
 kind: ConfigMap

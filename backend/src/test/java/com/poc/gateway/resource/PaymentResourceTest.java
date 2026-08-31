@@ -1,21 +1,28 @@
 package com.poc.gateway.resource;
 
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.mockito.Mockito;
 
 import java.util.Map;
 import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.when;
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PaymentResourceTest {
+
+    @InjectMock
+    com.poc.gateway.service.KafkaEventPublisher kafkaEventPublisher;
 
     private static final String VALID_BODY = """
         {
@@ -33,6 +40,10 @@ class PaymentResourceTest {
     @Test
     @Order(1)
     void createPayment_returns201WithPaymentResponse() {
+        when(kafkaEventPublisher.publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+        )).thenReturn(true);
+
         createdPaymentId = given()
             .contentType(ContentType.JSON)
             .body(VALID_BODY)

@@ -45,9 +45,7 @@ public class KafkaPaymentStatusConsumer {
 
     @PostConstruct
     void init() {
-        consumerThread = new Thread(this::consume, "payment-status-consumer");
-        consumerThread.setDaemon(true);
-        consumerThread.start();
+        startConsumerThread();
     }
 
     @PreDestroy
@@ -58,21 +56,42 @@ public class KafkaPaymentStatusConsumer {
         }
     }
 
-    private void consume() {
+    private void startConsumerThread() {
+        consumerThread = new Thread(() -> {
+            while (running.get()) {
+                try {
+                    consumeLoop();
+                } catch (Exception e) {
+                    LOG.errorf(e, "Consumer thread died unexpectedly");
+                    if (running.get()) {
+                        LOG.info("Restarting consumer thread in 5 seconds...");
+                        try { Thread.sleep(5000); } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+            }
+        }, "payment-status-consumer");
+        consumerThread.setDaemon(true);
+        consumerThread.start();
+    }
+
+    private void consumeLoop() {
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "payment-gateway-status-group");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+
+        consumer = new KafkaConsumer<>(props);
+        consumer.subscribe(Arrays.asList(paymentsProcessedTopic, paymentsFailedTopic));
+
+        LOG.info("Payment status consumer started, listening to: " + paymentsProcessedTopic + ", " + paymentsFailedTopic);
+
         try {
-            Properties props = new Properties();
-            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-            props.put(ConsumerConfig.GROUP_ID_CONFIG, "payment-gateway-status-group");
-            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-            props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-            props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-
-            consumer = new KafkaConsumer<>(props);
-            consumer.subscribe(Arrays.asList(paymentsProcessedTopic, paymentsFailedTopic));
-
-            LOG.info("Payment status consumer started, listening to: " + paymentsProcessedTopic + ", " + paymentsFailedTopic);
-
             while (running.get()) {
                 try {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
@@ -99,8 +118,6 @@ public class KafkaPaymentStatusConsumer {
                     }
                 }
             }
-        } catch (Exception e) {
-            LOG.errorf(e, "Payment status consumer fatal error");
         } finally {
             if (consumer != null) {
                 consumer.close();

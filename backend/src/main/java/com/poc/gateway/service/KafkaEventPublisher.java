@@ -18,6 +18,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @ApplicationScoped
 public class KafkaEventPublisher {
@@ -78,17 +81,21 @@ public class KafkaEventPublisher {
                 LocalDateTime.now(ZoneOffset.UTC)
             );
             String json = objectMapper.writeValueAsString(message);
-            getProducer().send(new ProducerRecord<>(paymentsReceivedTopic, paymentId, json), (recordMetadata, exception) -> {
+            ProducerRecord<String, String> record = new ProducerRecord<>(paymentsReceivedTopic, paymentId, json);
+            getProducer().send(record, (recordMetadata, exception) -> {
                 if (exception != null) {
-                    LOG.errorf(exception, "Failed to publish payment %s to Kafka", paymentId);
+                    LOG.errorf(exception, "Async callback: Failed to publish payment %s to Kafka", paymentId);
                 } else {
                     LOG.infof("Published payment %s to Kafka topic %s (partition=%d, offset=%d)",
                         paymentId, paymentsReceivedTopic, recordMetadata.partition(), recordMetadata.offset());
                 }
-            });
+            }).get(10, TimeUnit.SECONDS);
             return true;
+        } catch (TimeoutException e) {
+            LOG.errorf(e, "Timeout publishing payment %s to Kafka", paymentId);
+            return false;
         } catch (Exception e) {
-            LOG.errorf(e, "Error serializing payment message for %s", paymentId);
+            LOG.errorf(e, "Error publishing payment %s to Kafka", paymentId);
             return false;
         }
     }

@@ -7,7 +7,6 @@ import com.poc.shared.dto.PaymentResponse;
 import com.poc.shared.dto.PaymentStatusResponse;
 import com.poc.gateway.service.PaymentService;
 import jakarta.inject.Inject;
-import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -88,8 +87,8 @@ public class PaymentResource {
     public Response listPayments(
             @QueryParam("customerId") String customerId,
             @QueryParam("status") String status,
-            @QueryParam("limit") @DefaultValue("20") @Min(0) int limit,
-            @QueryParam("offset") @DefaultValue("0") @Min(0) int offset) {
+            @QueryParam("limit") @DefaultValue("20") int limit,
+            @QueryParam("offset") @DefaultValue("0") int offset) {
 
         if (limit < 0) limit = 20;
         if (limit > 100) limit = 100;
