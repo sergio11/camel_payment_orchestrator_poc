@@ -172,6 +172,24 @@ namespace :test do
     end
   end
 
+  desc 'Verify coverage meets minimum threshold (98%)'
+  task :verify do
+    setup_podman_env
+    cmd = File.exist?('mvnw') ? './mvnw' : 'mvn'
+    sh "#{cmd} clean verify -Dsurefire.useFile=false"
+  end
+
+  desc 'Run all module tests sequentially with coverage'
+  task :all do
+    setup_podman_env
+    cmd = File.exist?('mvnw') ? './mvnw' : 'mvn'
+    begin
+      sh "#{cmd} clean test -Dsurefire.useFile=false -pl shared,backend,payment-processor -am"
+    ensure
+      print_coverage_table
+    end
+  end
+
   desc 'Show coverage report'
   task :coverage do
     print_coverage_table
@@ -273,6 +291,8 @@ task :default do
       rake test:run          Run all tests + JaCoCo coverage
       rake test:quick        Run tests without coverage (faster)
       rake test:payment      Run payment-processor tests only
+      rake test:all          Run all module tests sequentially
+      rake test:verify       Verify coverage meets 98% threshold
       rake test:coverage     Show coverage table from last run
 
       rake build:compile     Build without tests
