@@ -24,7 +24,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
         var paymentJson = new org.apache.camel.component.jackson.JacksonDataFormat(objectMapper, PaymentMessage.class);
 
-        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=true&autoOffsetReset=earliest")
+        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=false&autoOffsetReset=earliest&allowManualCommit=true")
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
             .unmarshal(paymentJson)
@@ -39,7 +39,10 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
                     .to("direct:fraud-check")
             .end()
-            .log("Payment processed: ${header.OriginalPaymentMessage.paymentId} -> ${header.CamelFraudAction}");
+            .log("Payment processed: ${header.OriginalPaymentMessage.paymentId} -> ${header.CamelFraudAction}")
+            .process(exchange -> {
+                exchange.getMessage().setHeader("CamelKafkaManualCommit", true);
+            });
 
         from("direct:fraud-review")
             .routeId("fraud-review-high-value")

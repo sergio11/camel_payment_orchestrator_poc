@@ -21,10 +21,6 @@ commonAnnotations:
   version: "1.0.0"
 
 configMapGenerator:
-  - name: app-config
-    behavior: replace
-    files:
-      - application.properties
   - name: fraud-rules-config
     behavior: replace
 

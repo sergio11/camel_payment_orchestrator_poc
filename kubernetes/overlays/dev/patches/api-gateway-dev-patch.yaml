@@ -19,5 +19,5 @@ spec:
           env:
             - name: QUARKUS_LOG_CONSOLE_JSON
               value: "false"
-            - name: QUARKUS_LOG_CATEGORY_"COM_POC"_LEVEL
+            - name: QUARKUS_LOG_CATEGORY_COM_POC_LEVEL
               value: "DEBUG"

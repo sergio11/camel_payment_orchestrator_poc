@@ -38,10 +38,13 @@ logs/
 # Environment
 .env.local
 .env.*.local
+.env
 
 # Kubernetes
 kubeconfig*
 *.kubeconfig
+secrets.yaml
+*.secret
 
 # Container
 *.tar
