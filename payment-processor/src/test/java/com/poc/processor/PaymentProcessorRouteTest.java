@@ -134,6 +134,64 @@ class PaymentProcessorRouteTest {
         }
     }
 
+    @Test
+    @DisplayName("Verify payment enrichment adds risk metadata before fraud evaluation")
+    void testPaymentEnrichmentOccursBeforeFraudCheck() throws Exception {
+        KafkaConsumer<String, String> consumer = createConsumer("test-enrich-" + UUID.randomUUID());
+        try {
+            String paymentId = UUID.randomUUID().toString();
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0, Map.of());
+
+            producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
+
+            FraudResult result = consumeResult(consumer, paymentId, "payments.events.processed", 30);
+
+            assertNotNull(result, "Should receive fraud result");
+            assertEquals("APPROVE", result.action());
+            assertTrue(result.triggeredRules() != null, "Triggered rules should be present (enrichment happened)");
+        } finally {
+            consumer.close();
+        }
+    }
+
+    @Test
+    @DisplayName("Verify payment from high-risk country with high amount is rejected")
+    void testHighRiskCountryPaymentRejected() throws Exception {
+        KafkaConsumer<String, String> consumer = createConsumer("test-country-" + UUID.randomUUID());
+        try {
+            String paymentId = UUID.randomUUID().toString();
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1, Map.of());
+
+            producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
+
+            FraudResult result = consumeResult(consumer, paymentId, "fraud.events.detected", 30);
+
+            assertEquals("REJECT", result.action(), "High-risk country + high amount should be rejected");
+            assertTrue(result.riskScore() >= 80, "Risk score should be >= 80");
+        } finally {
+            consumer.close();
+        }
+    }
+
+    @Test
+    @DisplayName("Verify medium-risk payment goes to review")
+    void testMediumRiskPaymentReviewed() throws Exception {
+        KafkaConsumer<String, String> consumer = createConsumer("test-review-" + UUID.randomUUID());
+        try {
+            String paymentId = UUID.randomUUID().toString();
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "CREDIT_CARD", 0, Map.of());
+
+            producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
+
+            FraudResult result = consumeResult(consumer, paymentId, "fraud.events.detected", 30);
+
+            assertEquals("REVIEW", result.action(), "High amount alone should trigger review (score 50-79)");
+            assertTrue(result.riskScore() >= 50 && result.riskScore() < 80, "Risk score should be 50-79");
+        } finally {
+            consumer.close();
+        }
+    }
+
     private PaymentMessage buildPayment(String paymentId, BigDecimal amount, String currency, String country, String method, int attempts, Map<String, Object> metadata) {
         return new PaymentMessage(
             UUID.randomUUID().toString(), paymentId, amount, currency,

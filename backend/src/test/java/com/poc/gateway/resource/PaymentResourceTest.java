@@ -266,4 +266,150 @@ class PaymentResourceTest {
         .then()
             .statusCode(400);
     }
+
+    @Test
+    void createPayment_kafkaFails_returns500() {
+        when(kafkaEventPublisher.publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+        )).thenReturn(false);
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(VALID_BODY)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(500);
+    }
+
+    @Test
+    void createPayment_nullBody_returns400() {
+        given()
+            .contentType(ContentType.JSON)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_emptyCurrency_returns400() {
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "",
+                "customerId": "cust-1",
+                "paymentMethod": "CREDIT_CARD"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_unsupportedCurrency_returns400() {
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "BTC",
+                "customerId": "cust-1",
+                "paymentMethod": "CREDIT_CARD"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_amountTooHigh_returns400() {
+        String body = """
+            {
+                "amount": 1000000.00,
+                "currency": "USD",
+                "customerId": "cust-1",
+                "paymentMethod": "CREDIT_CARD"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_amountTooLow_returns400() {
+        String body = """
+            {
+                "amount": 0.00,
+                "currency": "USD",
+                "customerId": "cust-1",
+                "paymentMethod": "CREDIT_CARD"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_emptyCustomerId_returns400() {
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "USD",
+                "customerId": "",
+                "paymentMethod": "CREDIT_CARD"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_countryTooLong_returns400() {
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "USD",
+                "customerId": "cust-1",
+                "paymentMethod": "CREDIT_CARD",
+                "country": "USA"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
 }
