@@ -10,6 +10,9 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,14 +22,26 @@ class ProviderAServiceTest {
     @Inject
     ProviderAService providerAService;
 
-    @Test
-    @DisplayName("processPayment with valid PaymentMessage returns success")
-    void processPayment_returnsSuccess() {
-        PaymentMessage paymentMessage = new PaymentMessage(
+    private PaymentMessage createDefaultPaymentMessage() {
+        return new PaymentMessage(
                 "event-1", "payment-1", new BigDecimal("100.00"), "USD",
                 "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
                 Map.of(), LocalDateTime.now()
         );
+    }
+
+    private PaymentMessage createPaymentMessage(String paymentId, String currency, String country) {
+        return new PaymentMessage(
+                "event-1", paymentId, new BigDecimal("250.50"), currency,
+                "customer-2", "DEBIT_CARD", country, 1, false, 60, "UTC",
+                Map.of(), LocalDateTime.now()
+        );
+    }
+
+    @Test
+    @DisplayName("processPayment returns success with correct response fields")
+    void processPayment_returnsSuccess_verifiesFields() {
+        PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
         jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
 
@@ -39,19 +54,17 @@ class ProviderAServiceTest {
             assertTrue(providerResponse.success());
             assertEquals("provider-a", providerResponse.providerId());
             assertNotNull(providerResponse.transactionId());
+            assertFalse(providerResponse.transactionId().isEmpty());
             assertNull(providerResponse.errorCode());
             assertNull(providerResponse.errorMessage());
+            assertNotNull(providerResponse.processedAt());
         }
     }
 
     @Test
-    @DisplayName("processPayment returns ProviderResponse with provider name provider-a")
-    void processPayment_returnsProviderNameProviderA() {
-        PaymentMessage paymentMessage = new PaymentMessage(
-                "event-2", "payment-2", new BigDecimal("250.50"), "EUR",
-                "customer-2", "DEBIT_CARD", "DE", 1, false, 60, "UTC",
-                Map.of(), LocalDateTime.now()
-        );
+    @DisplayName("processPayment returns provider-a for any payment message")
+    void processPayment_returnsProviderA() {
+        PaymentMessage paymentMessage = createPaymentMessage("payment-2", "EUR", "DE");
 
         jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
         assertNotNull(response);
@@ -59,6 +72,108 @@ class ProviderAServiceTest {
         if (response.getStatus() == 200) {
             ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
             assertEquals("provider-a", providerResponse.providerId());
+        }
+    }
+
+    @Test
+    @DisplayName("processPayment returns error path when random < 0.1 (calls many times)")
+    void processPayment_returnsError_whenRandomBelowThreshold() {
+        int errorCount = 0;
+        int totalCalls = 200;
+        int minExpectedErrors = 5; // With 200 calls and 10% rate, expect ~20 errors
+
+        for (int i = 0; i < totalCalls; i++) {
+            PaymentMessage msg = new PaymentMessage(
+                    "event-" + i, "payment-" + i, new BigDecimal("100.00"), "USD",
+                    "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
+                    Map.of(), LocalDateTime.now()
+            );
+            jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
+            if (response.getStatus() == 500) {
+                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
+                assertFalse(providerResponse.success());
+                assertEquals("PROVIDER_ERROR", providerResponse.errorCode());
+                assertNotNull(providerResponse.errorMessage());
+                errorCount++;
+            }
+        }
+
+        assertTrue(errorCount >= minExpectedErrors,
+            "Expected at least " + minExpectedErrors + " errors out of " + totalCalls + " calls, got " + errorCount);
+    }
+
+    @Test
+    @DisplayName("processPayment handles InterruptedException with INTERRUPTED error code")
+    void processPayment_handlesInterruptedException() throws Exception {
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicBoolean interruptedResult = new AtomicBoolean(false);
+
+        Thread testThread = new Thread(() -> {
+            PaymentMessage msg = createDefaultPaymentMessage();
+            Thread.currentThread().interrupt();
+            jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
+
+            if (response.getStatus() == 500) {
+                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
+                if ("INTERRUPTED".equals(providerResponse.errorCode())) {
+                    interruptedResult.set(true);
+                }
+            }
+            latch.countDown();
+        });
+
+        testThread.start();
+        latch.await();
+
+        assertTrue(interruptedResult.get(), "Expected INTERRUPTED error code when thread is interrupted");
+    }
+
+    @Test
+    @DisplayName("processPayment latency is between 100ms and 200ms")
+    void processPayment_latency_withinRange() {
+        PaymentMessage paymentMessage = createDefaultPaymentMessage();
+
+        long start = System.currentTimeMillis();
+        jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
+        long elapsed = System.currentTimeMillis() - start;
+
+        assertTrue(elapsed >= 90, "Expected latency >= 90ms (allowing some tolerance), got " + elapsed + "ms");
+        assertTrue(elapsed <= 250, "Expected latency <= 250ms (allowing some tolerance), got " + elapsed + "ms");
+    }
+
+    @Test
+    @DisplayName("processPayment providerId is always provider-a")
+    void processPayment_providerId_isProviderA() {
+        for (int i = 0; i < 10; i++) {
+            PaymentMessage msg = new PaymentMessage(
+                    "event-" + i, "payment-" + i, new BigDecimal("50.00"), "USD",
+                    "customer-" + i, "CREDIT_CARD", "US", 1, false, 30, "UTC",
+                    Map.of(), LocalDateTime.now()
+            );
+            jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
+            assertNotNull(response);
+
+            if (response.getStatus() == 200) {
+                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
+                assertEquals("provider-a", providerResponse.providerId());
+            } else if (response.getStatus() == 500) {
+                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
+                assertEquals("provider-a", providerResponse.providerId());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("processPayment success response has transactionId and processedAt")
+    void processPayment_success_hasTransactionIdAndTimestamp() {
+        PaymentMessage paymentMessage = createDefaultPaymentMessage();
+
+        jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
+        if (response.getStatus() == 200) {
+            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
+            assertNotNull(providerResponse.transactionId());
+            assertNotNull(providerResponse.processedAt());
+            assertTrue(providerResponse.processedAt().isBefore(LocalDateTime.now().plusSeconds(1)));
         }
     }
 }

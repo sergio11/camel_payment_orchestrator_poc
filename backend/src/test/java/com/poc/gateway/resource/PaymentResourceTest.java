@@ -412,4 +412,92 @@ class PaymentResourceTest {
         .then()
             .statusCode(400);
     }
+
+    @Test
+    void createPayment_customerIdTooLong_returns400() {
+        String longCustomerId = "a".repeat(51);
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "USD",
+                "customerId": "%s",
+                "paymentMethod": "CREDIT_CARD",
+                "country": "US"
+            }
+            """.formatted(longCustomerId);
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void listPayments_withNegativeLimit_returnsDefault() {
+        given()
+            .queryParam("limit", -1)
+            .queryParam("offset", 0)
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200)
+            .body("limit", equalTo(20));
+    }
+
+    @Test
+    void listPayments_withNegativeOffset_returnsZero() {
+        given()
+            .queryParam("limit", 10)
+            .queryParam("offset", -5)
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200)
+            .body("offset", equalTo(0));
+    }
+
+    @Test
+    void createPayment_nullCustomerId_returns400() {
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "USD",
+                "customerId": null,
+                "paymentMethod": "CREDIT_CARD",
+                "country": "US"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
+
+    @Test
+    void createPayment_nullPaymentMethod_returns400() {
+        String body = """
+            {
+                "amount": 100.00,
+                "currency": "USD",
+                "customerId": "cust-1",
+                "paymentMethod": null,
+                "country": "US"
+            }
+            """;
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(body)
+        .when()
+            .post("/payments")
+        .then()
+            .statusCode(400);
+    }
 }
