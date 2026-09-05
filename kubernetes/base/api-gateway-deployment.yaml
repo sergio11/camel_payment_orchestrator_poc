@@ -46,38 +46,23 @@ spec:
               valueFrom:
                 configMapKeyRef:
                   name: app-config
-                  key: kafka.bootstrap.servers
-            - name: QUARKUS_LOG_CONSOLE_JSON
-              value: "true"
-            - name: QUARKUS_LOG_CONSOLE_FORMAT
-              value: "%d{yyyy-MM-dd HH:mm:ss} %-5p traceId=%X{traceId} spanId=%X{spanId} [%c{1.}] %s%e%n"
-            - name: JAEGER_ENDPOINT
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: CAMEL_COMPONENT_KAFKA_BROKERS
               valueFrom:
                 configMapKeyRef:
-                  name: jaeger-config
-                  key: jaeger.endpoint
-            - name: JAEGER_SERVICE_NAME
-              value: "api-gateway"
-            - name: JAEGER_SAMPLER_TYPE
-              value: "const"
-            - name: JAEGER_SAMPLER_PARAM
-              value: "1"
-            - name: OTEL_JAVA_AGENT_ENABLED
-              value: "true"
-            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+                  name: app-config
+                  key: CAMEL_COMPONENT_KAFKA_BROKERS
+            - name: PROVIDER_A_URL
               valueFrom:
                 configMapKeyRef:
-                  name: jaeger-config
-                  key: jaeger.endpoint
-            - name: OTEL_SERVICE_NAME
-              value: "api-gateway"
-            - name: OTEL_RESOURCE_ATTRIBUTES
-              value: "service.name=api-gateway,deployment.environment=dev"
+                  name: app-config
+                  key: PROVIDER_A_URL
+            - name: PROVIDER_B_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: PROVIDER_B_URL
           envFrom:
-            - configMapRef:
-                name: app-config
-            - configMapRef:
-                name: fraud-rules-config
             - configMapRef:
                 name: jaeger-config
             - secretRef:
@@ -94,25 +79,25 @@ spec:
               path: /health/live
               port: 8080
             initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /health/ready
               port: 8080
             initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 5
           startupProbe:
             httpGet:
               path: /health/started
               port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 30
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 36
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

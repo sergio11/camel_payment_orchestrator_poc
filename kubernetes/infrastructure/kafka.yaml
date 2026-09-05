@@ -1,47 +1,110 @@
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-data
+  namespace: poc-camel
+  labels:
+    app: kafka
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zookeeper-data
+  namespace: poc-camel
+  labels:
+    app: kafka
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
 kind: Pod
 metadata:
   name: kafka-stack
+  namespace: poc-camel
   labels:
     app: kafka
 spec:
   containers:
   - name: zookeeper
     image: confluentinc/cp-zookeeper:7.5.0
+    command:
+    - /bin/bash
+    - -c
+    - |
+      cat > /tmp/zookeeper.properties <<PROPS
+      tickTime=2000
+      initLimit=5
+      syncLimit=2
+      dataDir=/var/lib/zookeeper/zk-data
+      dataLogDir=/var/lib/zookeeper/zk-log
+      clientPort=2181
+      PROPS
+      /usr/bin/zookeeper-server-start /tmp/zookeeper.properties
     ports:
     - containerPort: 2181
-    env:
-    - name: ZOOKEEPER_CLIENT_PORT
-      value: "2181"
-    - name: ZOOKEEPER_TICK_TIME
-      value: "2000"
+    volumeMounts:
+    - name: zookeeper-data
+      mountPath: /var/lib/zookeeper
+    readinessProbe:
+      tcpSocket:
+        port: 2181
+      initialDelaySeconds: 10
+      periodSeconds: 10
   - name: kafka
     image: confluentinc/cp-kafka:7.5.0
+    command:
+    - /bin/bash
+    - -c
+    - |
+      cat > /tmp/kafka.properties <<PROPS
+      broker.id=1
+      listeners=PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      advertised.listeners=PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092
+      listener.security.protocol.map=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      num.partitions=1
+      offsets.topic.replication.factor=1
+      transaction.state.log.min.isr=1
+      transaction.state.log.replication.factor=1
+      auto.create.topics.enable=true
+      log.dirs=/var/lib/kafka/kafka-logs
+      zookeeper.connect=localhost:2181
+      PROPS
+      /usr/bin/kafka-server-start /tmp/kafka.properties
     ports:
     - containerPort: 9092
     - containerPort: 29092
-    env:
-    - name: KAFKA_BROKER_ID
-      value: "1"
-    - name: KAFKA_ZOOKEEPER_CONNECT
-      value: "localhost:2181"
-    - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
-      value: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT"
-    - name: KAFKA_ADVERTISED_LISTENERS
-      value: "PLAINTEXT://localhost:29092,PLAINTEXT_HOST://localhost:9092"
-    - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-      value: "1"
-    - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
-      value: "1"
-    - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
-      value: "1"
-    - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
-      value: "true"
+    volumeMounts:
+    - name: kafka-data
+      mountPath: /var/lib/kafka
+    readinessProbe:
+      tcpSocket:
+        port: 9092
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+  volumes:
+  - name: kafka-data
+    persistentVolumeClaim:
+      claimName: kafka-data
+  - name: zookeeper-data
+    persistentVolumeClaim:
+      claimName: zookeeper-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kafka
+  namespace: poc-camel
 spec:
   selector:
     app: kafka

@@ -22,9 +22,11 @@ public class FraudEngineRoute extends RouteBuilder {
         from("direct:fraud-reject")
             .routeId("fraud-reject")
             .log("Rejecting payment ${header.OriginalPaymentMessage.paymentId}: high risk")
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
             .marshal(fraudResultJson)
             .to("kafka:{{kafka.topic.fraud.detected}}")
             .setBody(header("OriginalPaymentMessage"))
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
             .marshal(paymentJson)
             .to("kafka:{{kafka.topic.payments.failed}}")
             .log("Published fraud rejection and failed event for: ${header.OriginalPaymentMessage.paymentId}");
@@ -32,6 +34,7 @@ public class FraudEngineRoute extends RouteBuilder {
         from("direct:fraud-review-queue")
             .routeId("fraud-review-queue")
             .log("Sending payment ${header.OriginalPaymentMessage.paymentId} to fraud review queue")
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
             .marshal(fraudResultJson)
             .to("kafka:{{kafka.topic.fraud.detected}}")
             .log("Published fraud review event for: ${header.OriginalPaymentMessage.paymentId}");

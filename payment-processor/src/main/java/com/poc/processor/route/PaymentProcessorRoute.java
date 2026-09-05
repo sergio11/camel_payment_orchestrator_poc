@@ -8,13 +8,15 @@ import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.model.dataformat.JsonLibrary;
 
 @ApplicationScoped
 public class PaymentProcessorRoute extends RouteBuilder {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    ContentBasedRouterBean contentBasedRouterBean;
 
     @Override
     public void configure() {
@@ -31,8 +33,14 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .log("Received payment: ${body.paymentId}")
             .wireTap("direct:audit-pipeline")
             .process("paymentEnrichProcessor")
+            .process(exchange -> {
+                PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+                String target = contentBasedRouterBean.routeToFraudCheck(msg.amount(), msg.paymentMethod(), msg.country());
+                exchange.getIn().setHeader("FraudRouteTarget", target);
+            })
+            .log("Fraud route target: ${header.FraudRouteTarget} for ${body.paymentId}")
             .choice()
-                .when(method(ContentBasedRouterBean.class, "routeToFraudCheck(${body.amount}, ${body.paymentMethod}, ${body.country})").isEqualTo("direct:fraud-review"))
+                .when(header("FraudRouteTarget").isEqualTo("direct:fraud-review"))
                     .log("High amount or WALLET payment, routing to fraud review: ${body.paymentId}")
                     .to("direct:fraud-review")
                 .otherwise()
@@ -77,7 +85,8 @@ public class PaymentProcessorRoute extends RouteBuilder {
         from("direct:dlq-handler")
             .routeId("error-dlq-handler")
             .log("Error processing payment: ${exception.message}")
-            .marshal().json(JsonLibrary.Jackson)
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
+            .marshal(paymentJson)
             .to("kafka:{{kafka.topic.dead.letter}}")
             .log("Published to dead letter queue");
     }

@@ -64,8 +64,8 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
             .process(exchange -> {
-                exchange.getIn().setHeader("CamelFraudResult", exchange.getIn().getBody());
-                exchange.getIn().setBody(exchange.getIn().getHeader("OriginalPaymentMessage"));
+                exchange.setProperty("CamelFraudResult", exchange.getMessage().getBody());
+                exchange.getMessage().setBody(exchange.getMessage().getHeader("OriginalPaymentMessage"));
             })
             .marshal(paymentJson)
             .to("netty-http:{{provider.a-url}}")
@@ -74,14 +74,16 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .when(simple("${body.success} == true"))
                     .log("Provider A success: ${body.transactionId}")
                     .process(exchange -> {
-                        exchange.getIn().setBody(exchange.getIn().getHeader("CamelFraudResult"));
+                        exchange.getMessage().setBody(exchange.getProperty("CamelFraudResult"));
                     })
+                    .setHeader("kafka.KEY", simple("${body.paymentId}"))
+                    .log("Publishing processed event for payment: ${header.kafka.KEY}")
                     .marshal(fraudResultJson)
                     .to("kafka:{{kafka.topic.payments.processed}}")
                 .otherwise()
                     .log("Provider A returned error: ${body.errorCode}")
                     .process(exchange -> {
-                        ProviderResponse resp = exchange.getIn().getBody(ProviderResponse.class);
+                        ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
                         throw new RuntimeException("Provider A error: " + (resp != null ? resp.errorMessage() : "unknown"));
                     })
             .end();
@@ -116,8 +118,8 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
             .process(exchange -> {
-                exchange.getIn().setHeader("CamelFraudResult", exchange.getIn().getBody());
-                exchange.getIn().setBody(exchange.getIn().getHeader("OriginalPaymentMessage"));
+                exchange.setProperty("CamelFraudResult", exchange.getMessage().getBody());
+                exchange.getMessage().setBody(exchange.getMessage().getHeader("OriginalPaymentMessage"));
             })
             .marshal(paymentJson)
             .to("netty-http:{{provider.b-url}}")
@@ -126,14 +128,16 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .when(simple("${body.success} == true"))
                     .log("Provider B success: ${body.transactionId}")
                     .process(exchange -> {
-                        exchange.getIn().setBody(exchange.getIn().getHeader("CamelFraudResult"));
+                        exchange.getMessage().setBody(exchange.getProperty("CamelFraudResult"));
                     })
+                    .setHeader("kafka.KEY", simple("${body.paymentId}"))
+                    .log("Publishing processed event for payment: ${header.kafka.KEY}")
                     .marshal(fraudResultJson)
                     .to("kafka:{{kafka.topic.payments.processed}}")
                 .otherwise()
                     .log("Provider B returned error: ${body.errorCode}")
                     .process(exchange -> {
-                        ProviderResponse resp = exchange.getIn().getBody(ProviderResponse.class);
+                        ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
                         throw new RuntimeException("Provider B error: " + (resp != null ? resp.errorMessage() : "unknown"));
                     })
             .end();
@@ -147,6 +151,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                     exchange.getIn().setBody(orig);
                 }
             })
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
             .marshal(stringJson)
             .to("kafka:{{kafka.topic.dead.letter}}")
             .log("Published to dead letter topic");

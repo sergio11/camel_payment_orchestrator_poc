@@ -226,12 +226,51 @@ namespace :infra do
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Kubernetes Tasks
+# Kubernetes Tasks (Podman Desktop / Kind)
 # ──────────────────────────────────────────────────────────────────────────────
 namespace :k8s do
-  desc 'Deploy to Kind cluster'
+  desc 'Full deployment: namespace + infra + build + apps'
+  task :up do
+    Rake::Task['k8s:namespace'].invoke
+    Rake::Task['k8s:infra'].invoke
+    Rake::Task['k8s:build'].invoke
+    Rake::Task['k8s:deploy'].invoke
+    puts "\n\e[32m=== Deployment complete ===\e[0m"
+    Rake::Task['k8s:pods'].invoke
+  end
+
+  desc 'Create namespace poc-camel'
+  task :namespace do
+    run_cmd("kubectl create namespace poc-camel --dry-run=client -o yaml | kubectl apply -f -", fail: false)
+  end
+
+  desc 'Deploy infrastructure (Kafka, Jaeger, Monitoring)'
+  task :infra do
+    infra_dir = File.join(ROOT, "kubernetes", "infrastructure")
+    Dir.glob("#{infra_dir}/*.yaml").sort.each do |manifest|
+      run_cmd("kubectl apply -f #{manifest}", fail: false)
+    end
+    puts "\nWaiting for infrastructure pods to be ready..."
+    run_cmd("kubectl wait --for=condition=ready pod/kafka-stack -n poc-camel --timeout=120s", fail: false)
+    run_cmd("kubectl wait --for=condition=ready pod/jaeger -n poc-camel --timeout=60s", fail: false)
+    run_cmd("kubectl wait --for=condition=ready pod/monitoring-stack -n poc-camel --timeout=60s", fail: false)
+  end
+
+  desc 'Deploy applications via Kustomize'
   task :deploy do
     run_cmd("kubectl apply -k #{File.join(ROOT, 'kubernetes', 'overlays', 'dev')}")
+    puts "\nWaiting for application pods to be ready..."
+    run_cmd("kubectl wait --for=condition=ready pod -l app=api-gateway -n poc-camel --timeout=120s", fail: false)
+    run_cmd("kubectl wait --for=condition=ready pod -l app=payment-processor -n poc-camel --timeout=120s", fail: false)
+  end
+
+  desc 'Undeploy everything'
+  task :down do
+    run_cmd("kubectl delete -k #{File.join(ROOT, 'kubernetes', 'overlays', 'dev')}", fail: false)
+    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'kafka.yaml')}", fail: false)
+    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'jaeger.yaml')}", fail: false)
+    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'monitoring.yaml')}", fail: false)
+    run_cmd("kubectl delete namespace poc-camel", fail: false)
   end
 
   desc 'Undeploy from Kind cluster'
@@ -241,12 +280,22 @@ namespace :k8s do
 
   desc 'Show all pods'
   task :pods do
-    run_cmd("kubectl get pods -A")
+    run_cmd("kubectl get pods -n poc-camel -o wide")
   end
 
   desc 'Show all services'
   task :svc do
-    run_cmd("kubectl get svc -A")
+    run_cmd("kubectl get svc -n poc-camel")
+  end
+
+  desc 'Show pod logs (api-gateway)'
+  task :logs_api do
+    run_cmd("kubectl logs -f -l app=api-gateway -n poc-camel --tail=100", fail: false)
+  end
+
+  desc 'Show pod logs (payment-processor)'
+  task :logs_processor do
+    run_cmd("kubectl logs -f -l app=payment-processor -n poc-camel --tail=100", fail: false)
   end
 
   desc 'Build container images'
@@ -260,6 +309,13 @@ namespace :k8s do
   task :load do
     run_cmd("kind load docker-image poc-camel/api-gateway:dev --name poc-camel", fail: false)
     run_cmd("kind load docker-image poc-camel/payment-processor:dev --name poc-camel", fail: false)
+  end
+
+  desc 'Forward api-gateway to localhost:8080'
+  task :portforward do
+    puts "Forwarding api-gateway:8080 -> localhost:8080"
+    puts "Press Ctrl+C to stop"
+    run_cmd("kubectl port-forward svc/api-gateway-external 8080:8080 -n poc-camel", fail: false)
   end
 end
 
@@ -298,14 +354,21 @@ task :default do
       rake build:compile     Build without tests
       rake build:full        Build + test + verify
 
-      rake infra:up          Start infrastructure
-      rake infra:down        Stop infrastructure
+      rake infra:up          Start infrastructure (podman-compose)
+      rake infra:down        Stop infrastructure (podman-compose)
       rake infra:ps          Show pod status
 
-      rake k8s:deploy        Deploy to Kind cluster
-      rake k8s:undeploy      Undeploy from Kind
-      rake k8s:pods          Show pods
+      rake k8s:up            Full K8s deploy (namespace+infra+build+apps)
+      rake k8s:down          Undeploy everything from K8s
+      rake k8s:namespace     Create poc-camel namespace
+      rake k8s:infra         Deploy infrastructure to K8s
       rake k8s:build         Build container images
+      rake k8s:deploy        Deploy apps via Kustomize
       rake k8s:load          Load images into Kind
+      rake k8s:pods          Show pods in poc-camel namespace
+      rake k8s:svc           Show services in poc-camel namespace
+      rake k8s:logs_api      Stream api-gateway logs
+      rake k8s:logs_processor Stream payment-processor logs
+      rake k8s:portforward   Forward api-gateway to localhost:8080
   HELP
 end

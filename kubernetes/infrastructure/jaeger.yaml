@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: jaeger
+  namespace: poc-camel
   labels:
     app: jaeger
 spec:
@@ -12,16 +13,24 @@ spec:
     - containerPort: 16686
     - containerPort: 4317
     - containerPort: 4318
+    - containerPort: 14268
     env:
     - name: COLLECTOR_OTLP_ENABLED
       value: "true"
     - name: SPAN_STORAGE_TYPE
       value: "badger"
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 16686
+      initialDelaySeconds: 10
+      periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: jaeger
+  namespace: poc-camel
 spec:
   selector:
     app: jaeger
@@ -35,3 +44,6 @@ spec:
   - name: otlp-http
     port: 4318
     targetPort: 4318
+  - name: collector
+    port: 14268
+    targetPort: 14268
