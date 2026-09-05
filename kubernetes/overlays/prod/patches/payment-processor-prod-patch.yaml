@@ -4,21 +4,20 @@ metadata:
   name: payment-processor
   namespace: poc-camel
 spec:
-  replicas: 2
   template:
     spec:
       containers:
         - name: payment-processor
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
+              cpu: "250m"
               memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
           env:
-            - name: QUARKUS_LOG_CONSOLE_JSON
+            - name: QUARKUS_SWAGGER_UI_ALWAYS_INCLUDE
               value: "false"
-            - name: QUARKUS_LOG_CATEGORY_COM_POC_LEVEL
-              value: "DEBUG"
+            - name: CORS_ORIGINS
+              value: "https://localhost:3000"

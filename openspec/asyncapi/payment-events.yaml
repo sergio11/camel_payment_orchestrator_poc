@@ -40,6 +40,15 @@ channels:
       summary: Payment failed
       description: Published when payment processing fails
 
+  payment.review:
+    address: payments.events.review
+    description: Event published when payment requires manual fraud review
+    messages:
+      $ref: '#/components/messages/PaymentReview'
+    publish:
+      summary: Payment review
+      description: Published when fraud engine marks payment for REVIEW
+
   fraud.detected:
     address: fraud.events.detected
     description: Event published when fraud is detected
@@ -98,6 +107,13 @@ components:
       summary: Event triggered when payment processing fails
       payload:
         $ref: '#/components/schemas/PaymentFailedPayload'
+
+    PaymentReview:
+      name: PaymentReview
+      title: Payment Review Event
+      summary: Event triggered when payment requires manual review
+      payload:
+        $ref: '#/components/schemas/PaymentReviewPayload'
 
     FraudDetected:
       name: FraudDetected
@@ -228,6 +244,29 @@ components:
           type: string
           format: date-time
 
+    PaymentReviewPayload:
+      type: object
+      required:
+        - paymentId
+        - status
+        - timestamp
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        amount:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [REVIEW]
+        reason:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
     FraudDetectedPayload:
       type: object
       required:
@@ -273,10 +312,10 @@ components:
           format: uuid
         previousStatus:
           type: string
-          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
         newStatus:
           type: string
-          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
         reason:
           type: string
         timestamp:

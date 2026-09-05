@@ -154,7 +154,7 @@ components:
       in: query
       schema:
         type: string
-        enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+        enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
       description: Filter by payment status
     limit:
       name: limit
@@ -201,12 +201,13 @@ components:
           example: CREDIT_CARD
         country:
           type: string
-          maxLength: 2
+          pattern: ^[A-Z]{2}$
           description: Country code (ISO 3166-1 alpha-2)
           example: US
         metadata:
           type: object
           additionalProperties: true
+          maxProperties: 20
           description: Additional payment metadata
           example:
             orderId: order-67890
@@ -232,7 +233,7 @@ components:
           type: string
         status:
           type: string
-          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
           example: PENDING
         provider:
           type: string
@@ -261,7 +262,7 @@ components:
           format: uuid
         status:
           type: string
-          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED]
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
         lastUpdated:
           type: string
           format: date-time

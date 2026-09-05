@@ -52,12 +52,8 @@ public class FraudEvaluationProcessor implements Processor {
         }
         
         int hour;
-        if (message.timeZone() != null) {
-            try {
-                hour = LocalTime.now(ZoneId.of(message.timeZone())).getHour();
-            } catch (Exception e) {
-                hour = LocalTime.now(ZoneId.of("UTC")).getHour();
-            }
+        if (message.timeZone() != null && ZoneId.getAvailableZoneIds().contains(message.timeZone())) {
+            hour = LocalTime.now(ZoneId.of(message.timeZone())).getHour();
         } else {
             hour = LocalTime.now(ZoneId.of("UTC")).getHour();
         }

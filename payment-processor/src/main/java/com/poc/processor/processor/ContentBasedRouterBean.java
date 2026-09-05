@@ -12,6 +12,9 @@ public class ContentBasedRouterBean {
     FraudRulesConfig config;
 
     public String routeToFraudCheck(BigDecimal amount, String paymentMethod, String country) {
+        if (amount == null) {
+            return "direct:fraud-check";
+        }
         if (amount.compareTo(config.cbrHighAmountThreshold()) > 0) {
             return "direct:fraud-review";
         }

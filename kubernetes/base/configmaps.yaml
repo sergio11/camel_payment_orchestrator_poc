@@ -11,6 +11,9 @@ data:
   CAMEL_COMPONENT_KAFKA_BROKERS: "kafka:29092"
   PROVIDER_A_URL: "http://payment-processor:8080/provider-a/process"
   PROVIDER_B_URL: "http://payment-processor:8080/provider-b/process"
+  DATABASE_URL: "jdbc:postgresql://postgres:5432/payments"
+  POSTGRES_DB: "payments"
+  DB_USER: "payments"
 ---
 apiVersion: v1
 kind: ConfigMap

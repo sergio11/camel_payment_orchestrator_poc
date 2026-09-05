@@ -36,6 +36,9 @@ public class KafkaEventPublisher {
     @ConfigProperty(name = "kafka.topic.payments.status.changed")
     String statusChangedTopic;
 
+    @ConfigProperty(name = "kafka.topic.dead.letter", defaultValue = "payments.events.dead-letter")
+    String deadLetterTopic;
+
     @Inject
     ObjectMapper objectMapper;
 
@@ -123,6 +126,31 @@ public class KafkaEventPublisher {
             return false;
         } catch (Exception e) {
             LOG.errorf(e, "Error publishing status changed for %s: %s -> %s", paymentId, previousStatus, newStatus);
+            return false;
+        }
+    }
+
+    public boolean publishDeadLetter(String paymentId, String sourceTopic, String reason, String rawValue) {
+        try {
+            String key = paymentId != null ? paymentId : "unknown";
+            String payload = objectMapper.writeValueAsString(Map.of(
+                "paymentId", key,
+                "sourceTopic", String.valueOf(sourceTopic),
+                "reason", String.valueOf(reason),
+                "rawValue", String.valueOf(rawValue),
+                "timestamp", LocalDateTime.now(ZoneOffset.UTC).toString()
+            ));
+            getProducer().send(new ProducerRecord<>(deadLetterTopic, key, payload),
+                (metadata, exception) -> {
+                    if (exception != null) {
+                        LOG.errorf(exception, "Failed to publish poison record to DLQ (key=%s)", key);
+                    } else {
+                        LOG.warnf("Published poison record to DLQ %s (key=%s, reason=%s)", deadLetterTopic, key, reason);
+                    }
+                }).get(16, TimeUnit.SECONDS);
+            return true;
+        } catch (Exception e) {
+            LOG.errorf(e, "Error publishing poison record to DLQ (key=%s)", paymentId);
             return false;
         }
     }

@@ -32,7 +32,20 @@ spec:
       containers:
         - name: payment-processor
           image: poc-camel/payment-processor:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           ports:
             - containerPort: 8080
               name: http
@@ -100,6 +113,9 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 10
             failureThreshold: 36
+      volumes:
+        - name: tmp
+          emptyDir: {}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

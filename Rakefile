@@ -204,8 +204,8 @@ namespace :infra do
   task :up do
     infra_dir = File.join(ROOT, "kubernetes", "infrastructure")
     if Dir.exist?(infra_dir)
-      Dir.glob("#{infra_dir}/*.yaml").each do |manifest|
-        run_cmd("podman kube play #{manifest}", fail: false)
+      Dir.glob("#{infra_dir}/*.yaml").sort.each do |manifest|
+        run_cmd("podman kube play --replace #{manifest}", fail: false)
       end
     else
       run_cmd("podman-compose up -d", fail: false)
@@ -214,9 +214,18 @@ namespace :infra do
 
   desc 'Stop infrastructure services'
   task :down do
+    infra_dir = File.join(ROOT, "kubernetes", "infrastructure")
+    if Dir.exist?(infra_dir)
+      Dir.glob("#{infra_dir}/*.yaml").sort.reverse.each do |manifest|
+        run_cmd("podman kube down -f #{manifest}", fail: false)
+      end
+    end
+    run_cmd("podman-compose down -v", fail: false)
     run_cmd("podman pod rm -f kafka-stack", fail: false)
     run_cmd("podman pod rm -f monitoring-stack", fail: false)
     run_cmd("podman pod rm -f jaeger", fail: false)
+    run_cmd("podman pod rm -f postgres", fail: false)
+    run_cmd("podman volume rm -f poc-camel-postgres-data", fail: false)
   end
 
   desc 'Show infrastructure status'
@@ -229,11 +238,17 @@ end
 # Kubernetes Tasks (Podman Desktop / Kind)
 # ──────────────────────────────────────────────────────────────────────────────
 namespace :k8s do
-  desc 'Full deployment: namespace + infra + build + apps'
+  desc 'Full deployment: namespace + infra + build + load (Kind only) + apps'
   task :up do
     Rake::Task['k8s:namespace'].invoke
     Rake::Task['k8s:infra'].invoke
     Rake::Task['k8s:build'].invoke
+    clusters = `kind get clusters 2>&1` rescue ''
+    if clusters.include?('poc-camel')
+      Rake::Task['k8s:load'].invoke
+    else
+      puts "Skipping k8s:load (no Kind cluster poc-camel found)"
+    end
     Rake::Task['k8s:deploy'].invoke
     puts "\n\e[32m=== Deployment complete ===\e[0m"
     Rake::Task['k8s:pods'].invoke
@@ -254,6 +269,7 @@ namespace :k8s do
     run_cmd("kubectl wait --for=condition=ready pod/kafka-stack -n poc-camel --timeout=120s", fail: false)
     run_cmd("kubectl wait --for=condition=ready pod/jaeger -n poc-camel --timeout=60s", fail: false)
     run_cmd("kubectl wait --for=condition=ready pod/monitoring-stack -n poc-camel --timeout=60s", fail: false)
+    run_cmd("kubectl wait --for=condition=ready pod -l app=postgres -n poc-camel --timeout=120s", fail: false)
   end
 
   desc 'Deploy applications via Kustomize'
@@ -264,12 +280,19 @@ namespace :k8s do
     run_cmd("kubectl wait --for=condition=ready pod -l app=payment-processor -n poc-camel --timeout=120s", fail: false)
   end
 
+  desc 'Create Kind cluster poc-camel'
+  task :cluster do
+    run_cmd("kind create cluster --name poc-camel")
+  end
+
   desc 'Undeploy everything'
   task :down do
     run_cmd("kubectl delete -k #{File.join(ROOT, 'kubernetes', 'overlays', 'dev')}", fail: false)
+    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure')} --recursive", fail: false)
     run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'kafka.yaml')}", fail: false)
     run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'jaeger.yaml')}", fail: false)
     run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'monitoring.yaml')}", fail: false)
+    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'postgres.yaml')}", fail: false)
     run_cmd("kubectl delete namespace poc-camel", fail: false)
   end
 
@@ -298,17 +321,30 @@ namespace :k8s do
     run_cmd("kubectl logs -f -l app=payment-processor -n poc-camel --tail=100", fail: false)
   end
 
-  desc 'Build container images'
+  desc 'Build container images (dual-tag for Kind/dev overlay)'
   task :build do
     docker_dir = File.join(ROOT, "docker")
-    run_cmd("podman build -t poc-camel/api-gateway:dev -f #{File.join(docker_dir, 'Dockerfile.api-gateway')} .") if File.exist?(File.join(docker_dir, "Dockerfile.api-gateway"))
-    run_cmd("podman build -t poc-camel/payment-processor:dev -f #{File.join(docker_dir, 'Dockerfile.payment-processor')} .") if File.exist?(File.join(docker_dir, "Dockerfile.payment-processor"))
+    if File.exist?(File.join(docker_dir, "Dockerfile.api-gateway"))
+      run_cmd("podman build -t poc-camel/api-gateway:dev -t localhost/poc-camel/api-gateway:dev -f #{File.join(docker_dir, 'Dockerfile.api-gateway')} .")
+    end
+    if File.exist?(File.join(docker_dir, "Dockerfile.payment-processor"))
+      run_cmd("podman build -t poc-camel/payment-processor:dev -t localhost/poc-camel/payment-processor:dev -f #{File.join(docker_dir, 'Dockerfile.payment-processor')} .")
+    end
   end
 
-  desc 'Load images into Kind cluster'
+  desc 'Load images into Kind cluster (podman-friendly)'
   task :load do
-    run_cmd("kind load docker-image poc-camel/api-gateway:dev --name poc-camel", fail: false)
-    run_cmd("kind load docker-image poc-camel/payment-processor:dev --name poc-camel", fail: false)
+    docker_ok = system("docker info >NUL 2>&1") || system("docker info >/dev/null 2>&1")
+    images = ['poc-camel/api-gateway:dev', 'poc-camel/payment-processor:dev']
+    images.each do |img|
+      if docker_ok
+        ok = run_cmd("kind load docker-image #{img} --name poc-camel", fail: false)
+        next if ok
+      end
+      ok = run_cmd("podman save #{img} localhost/#{img} 2>NUL | kind load image-archive /dev/stdin --name poc-camel", fail: false)
+      ok ||= run_cmd("podman save #{img} | kind load image-archive /dev/stdin --name poc-camel", fail: false)
+      run_cmd("kind load docker-image #{img} --name poc-camel", fail: false) unless ok
+    end
   end
 
   desc 'Forward api-gateway to localhost:8080'
@@ -354,17 +390,19 @@ task :default do
       rake build:compile     Build without tests
       rake build:full        Build + test + verify
 
-      rake infra:up          Start infrastructure (podman-compose)
-      rake infra:down        Stop infrastructure (podman-compose)
+      rake infra:up          Start infrastructure (podman kube play kubernetes/infrastructure/*.yaml)
+      rake infra:down        Stop infrastructure (podman pod rm)
       rake infra:ps          Show pod status
 
-      rake k8s:up            Full K8s deploy (namespace+infra+build+apps)
+      rake k8s:up            Full K8s deploy (namespace+infra+build+load if Kind+apps)
+      rake k8s:cluster       Create Kind cluster poc-camel
       rake k8s:down          Undeploy everything from K8s
+      rake k8s:undeploy      Undeploy apps only (kustomize dev overlay)
       rake k8s:namespace     Create poc-camel namespace
       rake k8s:infra         Deploy infrastructure to K8s
-      rake k8s:build         Build container images
+      rake k8s:build         Build container images (dual-tag)
+      rake k8s:load          Load images into Kind (podman-friendly)
       rake k8s:deploy        Deploy apps via Kustomize
-      rake k8s:load          Load images into Kind
       rake k8s:pods          Show pods in poc-camel namespace
       rake k8s:svc           Show services in poc-camel namespace
       rake k8s:logs_api      Stream api-gateway logs

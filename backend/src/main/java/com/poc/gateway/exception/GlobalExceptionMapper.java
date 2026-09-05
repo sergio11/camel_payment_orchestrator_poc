@@ -7,9 +7,14 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import java.util.List;
+import java.util.UUID;
+import org.jboss.logging.Logger;
 
 @Provider
 public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
+
+    private static final Logger LOG = Logger.getLogger(GlobalExceptionMapper.class);
+
     @Override
     public Response toResponse(Exception exception) {
         if (exception instanceof ConstraintViolationException cve) {
@@ -20,6 +25,9 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
         }
         if (exception instanceof PaymentNotFoundException pnfe) {
             return handleNotFound(pnfe);
+        }
+        if (isConstraintViolation(exception)) {
+            return handleConflict(exception);
         }
         return handleGeneric(exception);
     }
@@ -45,9 +53,44 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
             .build();
     }
 
-    private Response handleGeneric(Exception e) {
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-            .entity(ErrorResponse.from("INTERNAL_ERROR", "An unexpected error occurred"))
+    private Response handleConflict(Exception e) {
+        String errorId = UUID.randomUUID().toString().substring(0, 8);
+        LOG.errorf(e, "[%s] Duplicate constraint violation: %s", errorId, e.getMessage());
+        return Response.status(Response.Status.CONFLICT)
+            .entity(ErrorResponse.from("CONFLICT", "Duplicate request [errorId=" + errorId + "]",
+                List.of(new ErrorDetail("idempotencyKey", "Duplicate key or constraint violation"))))
             .build();
+    }
+
+    private Response handleGeneric(Exception e) {
+        String errorId = UUID.randomUUID().toString().substring(0, 8);
+        LOG.errorf(e, "[%s] Unhandled exception: %s", errorId, e.getMessage());
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+            .entity(ErrorResponse.from("INTERNAL_ERROR", "An unexpected error occurred [errorId=" + errorId + "]"))
+            .build();
+    }
+
+    boolean isConstraintViolation(Throwable t) {
+        while (t != null) {
+            String cls = t.getClass().getName();
+            if (t instanceof jakarta.persistence.PersistenceException
+                || t instanceof java.sql.SQLIntegrityConstraintViolationException
+                || cls.contains("ConstraintViolationException")
+                || cls.contains("EntityExistsException")) {
+                String msg = String.valueOf(t.getMessage()).toLowerCase();
+                if (msg.contains("constraint") || msg.contains("unique") || msg.contains("duplicate")
+                    || cls.contains("ConstraintViolation") || t instanceof jakarta.persistence.EntityExistsException) {
+                    return true;
+                }
+            }
+            String msg = String.valueOf(t.getMessage()).toLowerCase();
+            if (msg.contains("uq_payments_idempotency") || msg.contains("uq_outbox_idempotency")
+                || (msg.contains("duplicate") && msg.contains("key"))
+                || msg.contains("unique constraint") || msg.contains("unique index")) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 }

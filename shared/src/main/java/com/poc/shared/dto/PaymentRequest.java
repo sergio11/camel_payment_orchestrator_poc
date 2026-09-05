@@ -25,8 +25,9 @@ public record PaymentRequest(
     @NotNull(message = "Payment method is required")
     String paymentMethod,
 
-    @Size(max = 2, message = "Country code max 2 characters (ISO 3166-1 alpha-2)")
+    @Pattern(regexp = "^[A-Z]{2}$", message = "Country must be ISO 3166-1 alpha-2 (e.g. US)")
     String country,
 
+    @Size(max = 20, message = "Metadata max 20 entries")
     Map<String, Object> metadata
 ) {}

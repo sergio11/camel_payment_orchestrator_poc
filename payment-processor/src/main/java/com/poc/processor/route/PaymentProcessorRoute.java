@@ -1,9 +1,8 @@
 package com.poc.processor.route;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.processor.ContentBasedRouterBean;
-import com.poc.processor.processor.FraudEvaluationProcessor;
-import com.poc.processor.processor.PaymentEnrichProcessor;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -11,6 +10,14 @@ import org.apache.camel.builder.RouteBuilder;
 
 @ApplicationScoped
 public class PaymentProcessorRoute extends RouteBuilder {
+
+    // POC reliability: canonical Kafka topics for retry (transient, re-drivable) vs dead-letter (poison, terminal).
+    // A4 will consume payments.events.retry; poison never goes to retry to avoid infinite loops.
+    public static final String RETRY_TOPIC_URI = "kafka:{{kafka.topic.payments.retry}}";
+    public static final String DEAD_LETTER_TOPIC_URI = "kafka:{{kafka.topic.dead.letter}}";
+    public static final String DIRECT_RETRY_HANDLER = "direct:retry-handler";
+    public static final String DIRECT_POISON_DLQ = "direct:poison-dlq";
+    public static final String DIRECT_DLQ_HANDLER = "direct:dlq-handler";
 
     @Inject
     ObjectMapper objectMapper;
@@ -20,16 +27,29 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Override
     public void configure() {
-        errorHandler(deadLetterChannel("direct:dlq-handler")
+        // Transient failures: 3 redeliveries with exponential back-off, then retry topic (re-drivable, A4).
+        errorHandler(deadLetterChannel(DIRECT_RETRY_HANDLER)
             .useOriginalMessage()
-            .maximumRedeliveries(0)
+            .maximumRedeliveries(3)
+            .redeliveryDelay(1000)
+            .useExponentialBackOff()
             .logRetryAttempted(true)
             .logExhausted(true));
 
+        // Poison messages (bad JSON, invalid fields): no redelivery, straight to dead-letter.
+        // Must be declared before routes; handled(true) stops infinite reprocessing.
+        onException(JsonProcessingException.class, IllegalArgumentException.class)
+            .handled(true)
+            .maximumRedeliveries(0)
+            .logExhausted(true)
+            .log("Poison message, routing to DLQ without retry: ${exception.message}")
+            .to(DIRECT_POISON_DLQ);
+
         var paymentJson = new org.apache.camel.component.jackson.JacksonDataFormat(objectMapper, PaymentMessage.class);
 
-        // POC: auto-commit to avoid infinite reprocessing
-        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=true&autoOffsetReset=earliest")
+        // POC: manual commit (autoCommitEnable=false) for at-least-once.
+        // Camel commits the offset only after the route completes; failures are redelivered, poison goes to DLQ.
+        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=false&autoOffsetReset=earliest")
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
             .unmarshal(paymentJson)
@@ -89,11 +109,28 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .to("direct:provider-selection")
             .end();
 
-        from("direct:dlq-handler")
+        // Transient-exhausted handler: re-drivable retry topic (consumed by A4 reviewer, not auto-replayed).
+        from(DIRECT_RETRY_HANDLER)
+            .routeId("retry-handler")
+            .log("Exhausted retries for payment ${header.OriginalPaymentId}: ${exception.message}")
+            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+            .to(RETRY_TOPIC_URI)
+            .log("Published to retry topic");
+
+        // Poison handler: terminal dead-letter, no retry.
+        from(DIRECT_POISON_DLQ)
+            .routeId("poison-dlq-handler")
+            .log("Poison payment ${header.OriginalPaymentId}: ${exception.message}")
+            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+            .to(DEAD_LETTER_TOPIC_URI)
+            .log("Published poison to dead letter queue");
+
+        // Legacy alias kept for backward compatibility (other routes/tests may reference it).
+        from(DIRECT_DLQ_HANDLER)
             .routeId("error-dlq-handler")
             .log("Error processing payment ${header.OriginalPaymentId}: ${exception.message}")
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
-            .to("kafka:{{kafka.topic.dead.letter}}")
+            .to(DEAD_LETTER_TOPIC_URI)
             .log("Published to dead letter queue");
     }
 }

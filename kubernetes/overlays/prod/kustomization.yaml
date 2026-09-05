@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: poc-camel
+
+resources:
+  - ../../base
+
+replicas:
+  - name: api-gateway
+    count: 2
+  - name: payment-processor
+    count: 2
+
+images:
+  - name: poc-camel/api-gateway
+    newTag: v1.0-poc
+  - name: poc-camel/payment-processor
+    newTag: v1.0-poc
+
+patches:
+  - path: patches/api-gateway-prod-patch.yaml
+    target:
+      kind: Deployment
+      name: api-gateway
+  - path: patches/payment-processor-prod-patch.yaml
+    target:
+      kind: Deployment
+      name: payment-processor

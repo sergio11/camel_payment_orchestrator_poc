@@ -60,6 +60,25 @@ services:
     networks:
       - poc-camel-net
 
+  postgres:
+    image: postgres:16
+    container_name: poc-camel-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments123
+    volumes:
+      - poc-camel-postgres-data:/var/lib/postgresql/data
+    networks:
+      - poc-camel-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments -d payments"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: poc-camel-prometheus
@@ -99,6 +118,8 @@ services:
       - ./monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./monitoring/grafana-config.ini:/etc/grafana/grafana.ini:ro
       - poc-camel-grafana-data:/var/lib/grafana
+    env_file:
+      - ./monitoring/grafana.env
     environment:
       GF_SECURITY_ADMIN_USER: poc-admin
       GF_SECURITY_ADMIN_PASSWORD: poc-demo-pass-2026
@@ -115,3 +136,4 @@ networks:
 volumes:
   poc-camel-prometheus-data:
   poc-camel-grafana-data:
+  poc-camel-postgres-data:

@@ -40,7 +40,7 @@ public class FraudEngineRoute extends RouteBuilder {
             .setBody(header("OriginalPaymentMessage"))
             .setHeader("kafka.KEY", simple("${body.paymentId}"))
             .marshal(paymentJson)
-            .to("kafka:{{kafka.topic.payments.failed}}")
-            .log("Published fraud review and failed event for: ${header.OriginalPaymentMessage.paymentId}");
+            .to("kafka:{{kafka.topic.payments.review}}")
+            .log("Published fraud review event for: ${header.OriginalPaymentMessage.paymentId}");
     }
 }

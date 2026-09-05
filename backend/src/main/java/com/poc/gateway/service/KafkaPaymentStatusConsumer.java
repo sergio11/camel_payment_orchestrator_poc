@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.Startup;import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.apache.kafka.clients.consumer.*;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.jboss.logging.Logger;
 
@@ -32,6 +33,9 @@ public class KafkaPaymentStatusConsumer {
 
     @ConfigProperty(name = "kafka.topic.payments.failed")
     String paymentsFailedTopic;
+
+    @ConfigProperty(name = "kafka.topic.payments.review", defaultValue = "payments.events.review")
+    String paymentsReviewTopic;
 
     @Inject
     PaymentRepository repository;
@@ -93,25 +97,37 @@ public class KafkaPaymentStatusConsumer {
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 
         consumer = new KafkaConsumer<>(props);
-        consumer.subscribe(Arrays.asList(paymentsProcessedTopic, paymentsFailedTopic));
+        consumer.subscribe(Arrays.asList(paymentsProcessedTopic, paymentsFailedTopic, paymentsReviewTopic));
 
-        LOG.info("Payment status consumer started, listening to: " + paymentsProcessedTopic + ", " + paymentsFailedTopic);
+        LOG.info("Payment status consumer started, listening to: " + paymentsProcessedTopic + ", " + paymentsFailedTopic + ", " + paymentsReviewTopic);
 
         try {
             while (running.get()) {
                 try {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+                    Map<TopicPartition, OffsetAndMetadata> offsetsToCommit = new HashMap<>();
                     for (ConsumerRecord<String, String> record : records) {
                         try {
                             processRecord(record);
-                        } catch (Exception e) {
-                            LOG.errorf(e, "Error processing record from topic %s partition %d offset %d key %s, skipping poison record",
+                            offsetsToCommit.put(
+                                new TopicPartition(record.topic(), record.partition()),
+                                new OffsetAndMetadata(record.offset() + 1));
+                        } catch (TransientConsumerException e) {
+                            LOG.errorf(e, "Transient error for record topic %s partition %d offset %d key %s, NOT committing (will be redelivered)",
                                 record.topic(), record.partition(), record.offset(), record.key());
-                            incrementCounter("payment.consumer.poison", record.topic());
+                            incrementCounter("payment.consumer.retry", record.topic());
+                            break;
+                        } catch (Exception e) {
+                            LOG.errorf(e, "Error processing record from topic %s partition %d offset %d key %s, routing poison to DLQ",
+                                record.topic(), record.partition(), record.offset(), record.key());
+                            routePoisonToDlq(record, e.getMessage());
+                            offsetsToCommit.put(
+                                new TopicPartition(record.topic(), record.partition()),
+                                new OffsetAndMetadata(record.offset() + 1));
                         }
                     }
-                    if (!records.isEmpty()) {
-                        consumer.commitSync();
+                    if (!offsetsToCommit.isEmpty()) {
+                        consumer.commitSync(offsetsToCommit);
                     }
                 } catch (org.apache.kafka.common.errors.WakeupException e) {
                     if (running.get()) {
@@ -136,8 +152,7 @@ public class KafkaPaymentStatusConsumer {
     private void processRecord(ConsumerRecord<String, String> record) throws Exception {
         String paymentId = record.key();
         if (paymentId == null) {
-            LOG.warn("Received record with null paymentId, skipping poison record");
-            incrementCounter("payment.consumer.poison", record.topic());
+            routePoisonToDlq(record, "null key");
             return;
         }
 
@@ -145,46 +160,72 @@ public class KafkaPaymentStatusConsumer {
         try {
             uuid = java.util.UUID.fromString(paymentId);
         } catch (IllegalArgumentException e) {
-            LOG.warnf("Invalid UUID format for paymentId: %s, skipping poison record", paymentId);
-            incrementCounter("payment.consumer.poison", record.topic());
+            routePoisonToDlq(record, "invalid UUID: " + paymentId);
             return;
         }
 
-        Optional<com.poc.gateway.entity.Payment> paymentOpt = repository.findById(uuid);
-        if (paymentOpt.isEmpty()) {
-            LOG.warnf("Payment not found: %s, skipping poison record", paymentId);
-            incrementCounter("payment.consumer.poison", record.topic());
-            return;
-        }
-
-        com.poc.gateway.entity.Payment payment = paymentOpt.get();
         PaymentStatus newStatus;
-
         if (paymentsProcessedTopic.equals(record.topic())) {
             newStatus = PaymentStatus.APPROVED;
-            LOG.infof("Payment %s APPROVED", paymentId);
         } else if (paymentsFailedTopic.equals(record.topic())) {
             newStatus = PaymentStatus.FAILED;
-            LOG.infof("Payment %s FAILED", paymentId);
+        } else if (paymentsReviewTopic.equals(record.topic())) {
+            newStatus = PaymentStatus.REVIEW;
         } else {
-            LOG.warnf("Unexpected topic: %s, skipping poison record for payment %s", record.topic(), paymentId);
-            incrementCounter("payment.consumer.poison", record.topic());
+            routePoisonToDlq(record, "unexpected topic: " + record.topic());
             return;
         }
 
-        if (payment.status() != PaymentStatus.PENDING) {
-            LOG.warnf("Skipping status transition for payment %s: current=%s, requested=%s (only PENDING may transition)",
-                paymentId, payment.status(), newStatus);
+        Optional<com.poc.gateway.entity.Payment> paymentOpt;
+        try {
+            paymentOpt = repository.findById(uuid);
+        } catch (Exception e) {
+            throw new TransientConsumerException("DB lookup failed for " + paymentId, e);
+        }
+        if (paymentOpt.isEmpty()) {
+            routePoisonToDlq(record, "payment not found: " + paymentId);
+            return;
+        }
+
+        Optional<com.poc.gateway.entity.Payment> updated;
+        try {
+            updated = repository.updateIfPending(uuid, newStatus);
+        } catch (Exception e) {
+            throw new TransientConsumerException("DB update failed for " + paymentId, e);
+        }
+        if (updated.isEmpty()) {
+            LOG.warnf("Skipping status transition for payment %s: already transitioned (only PENDING may transition)", paymentId);
             incrementCounter("payment.consumer.skipped", record.topic());
             return;
         }
 
-        String previousStatus = payment.status().name();
-        com.poc.gateway.entity.Payment updated = repository.update(uuid, newStatus);
-        boolean statusPublished = kafkaEventPublisher.publishStatusChanged(paymentId, previousStatus, newStatus.name());
+        LOG.infof("Payment %s %s", paymentId, newStatus);
+        boolean statusPublished;
+        try {
+            statusPublished = kafkaEventPublisher.publishStatusChanged(paymentId, PaymentStatus.PENDING.name(), newStatus.name());
+        } catch (Exception e) {
+            throw new TransientConsumerException("status-changed publish failed for " + paymentId, e);
+        }
         if (!statusPublished) {
-            LOG.errorf("Failed to publish status changed for payment %s: %s -> %s", paymentId, previousStatus, newStatus);
-            incrementCounter("payment.consumer.statusPublishFailed", record.topic());
+            throw new TransientConsumerException("status-changed publish returned false for " + paymentId, null);
+        }
+    }
+
+    private void routePoisonToDlq(ConsumerRecord<String, String> record, String reason) {
+        LOG.warnf("Poison record topic=%s partition=%d offset=%d key=%s reason=%s, routing to DLQ",
+            record.topic(), record.partition(), record.offset(), record.key(), reason);
+        incrementCounter("payment.consumer.poison", record.topic());
+        boolean published = false;
+        try {
+            published = kafkaEventPublisher.publishDeadLetter(record.key(), record.topic(), reason, record.value());
+        } catch (Exception e) {
+            LOG.errorf(e, "DLQ publish threw for key %s", record.key());
+        }
+        if (published) {
+            incrementCounter("payment.consumer.dlq", record.topic());
+        } else {
+            LOG.errorf("DLQ publish failed for key %s reason=%s, offset still committed to avoid infinite loop", record.key(), reason);
+            incrementCounter("payment.consumer.dlqFailed", record.topic());
         }
     }
 
@@ -197,6 +238,12 @@ public class KafkaPaymentStatusConsumer {
             }
         } catch (Exception e) {
             LOG.debugf("counter %s{topic=%s} +1 (MeterRegistry unavailable)", name, topic);
+        }
+    }
+
+    static class TransientConsumerException extends Exception {
+        TransientConsumerException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 }

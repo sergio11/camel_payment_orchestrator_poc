@@ -13,18 +13,28 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * Simulated mock provider for the {@code mock} profile.
+ * Not a real HTTP integration: returns canned success/failure with latency.
+ */
 @ApplicationScoped
 @Path("/provider-b")
-public class ProviderBService {
+public class ProviderBService implements PaymentProvider {
 
     private static final double FAILURE_RATE = 0.02; // 2% failure
     private static final int MIN_LATENCY_MS = 500;
     private static final int MAX_LATENCY_MS = 1000;
 
+    @Override
+    public String providerId() {
+        return "provider-b";
+    }
+
     @POST
     @Path("/process")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    @Override
     public Response processPayment(PaymentMessage paymentMessage) {
         String paymentId = paymentMessage.paymentId();
         String amount = paymentMessage.amount() != null ? paymentMessage.amount().toString() : null;

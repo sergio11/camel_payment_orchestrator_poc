@@ -9,6 +9,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
+          imagePullPolicy: IfNotPresent
           resources:
             requests:
               cpu: "100m"

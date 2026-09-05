@@ -3,6 +3,7 @@ package com.poc.gateway.service;
 import com.poc.gateway.entity.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
+import com.poc.gateway.repository.OutboxEventRepository;
 import com.poc.gateway.repository.PaymentRepository;
 import com.poc.gateway.service.KafkaEventPublisher;
 import com.poc.shared.dto.PaymentRequest;
@@ -29,6 +30,9 @@ class PaymentServiceTest {
 
     @Mock
     PaymentRepository repository;
+
+    @Mock
+    OutboxEventRepository outbox;
 
     @Mock
     KafkaEventPublisher kafkaEventPublisher;
@@ -64,7 +68,9 @@ class PaymentServiceTest {
             Map.of()
         );
 
-        when(repository.save(any(Payment.class))).thenAnswer(invocation -> {
+        when(outbox.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(repository.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(repository.save(any(Payment.class), anyString())).thenAnswer(invocation -> {
             Payment p = invocation.getArgument(0);
             return p.withStatus(PaymentStatus.PENDING);
         });
@@ -79,8 +85,65 @@ class PaymentServiceTest {
         assertEquals("EUR", response.currency());
         assertEquals("cust-1", response.customerId());
         assertEquals("PENDING", response.status());
-        verify(repository, times(1)).save(any(Payment.class));
+        verify(repository, times(1)).save(any(Payment.class), anyString());
         verify(kafkaEventPublisher, times(1)).publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+        );
+    }
+
+    @Test
+    void createPayment_sameIdempotencyKey_returnsSamePaymentOnce() {
+        PaymentRequest request = new PaymentRequest(
+            new BigDecimal("50.00"),
+            "USD",
+            "cust-idem",
+            "CREDIT_CARD",
+            "US",
+            Map.of()
+        );
+        String key = UUID.randomUUID().toString();
+
+        when(outbox.findByIdempotencyKey(eq(key))).thenReturn(Optional.empty());
+        when(repository.findByIdempotencyKey(eq(key))).thenReturn(Optional.empty());
+        when(repository.save(any(Payment.class), eq(key))).thenAnswer(invocation -> {
+            Payment p = invocation.getArgument(0);
+            return p.withStatus(PaymentStatus.PENDING);
+        });
+        when(kafkaEventPublisher.publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+        )).thenReturn(true);
+
+        PaymentResponse first = service.createPayment(request, key);
+        PaymentResponse second = service.createPayment(request, key);
+
+        assertEquals(first.id(), second.id());
+        verify(repository, times(1)).save(any(Payment.class), eq(key));
+        verify(kafkaEventPublisher, times(1)).publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+        );
+    }
+
+    @Test
+    void createPayment_existingKey_returnsStoredPaymentWithoutPublish() {
+        String key = UUID.randomUUID().toString();
+        Payment stored = createEntity(UUID.randomUUID().toString(), "cust-replay", PaymentStatus.PENDING);
+        PaymentRequest request = new PaymentRequest(
+            new BigDecimal("50.00"),
+            "USD",
+            "cust-replay",
+            "CREDIT_CARD",
+            "US",
+            Map.of()
+        );
+
+        when(outbox.findByIdempotencyKey(eq(key))).thenReturn(Optional.empty());
+        when(repository.findByIdempotencyKey(eq(key))).thenReturn(Optional.of(stored));
+
+        PaymentResponse response = service.createPayment(request, key);
+
+        assertEquals(stored.id().toString(), response.id());
+        verify(repository, never()).save(any(), anyString());
+        verify(kafkaEventPublisher, never()).publishPaymentReceived(
             anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
         );
     }
@@ -198,14 +261,7 @@ class PaymentServiceTest {
 
     @Test
     void listPayments_withInvalidStatus_returnsAllPayments() {
-        List<Payment> entities = List.of(
-            createEntity(UUID.randomUUID().toString(), "cust-1", PaymentStatus.PENDING)
-        );
-        when(repository.findAll(null, null, 20, 0)).thenReturn(entities);
-
-        List<PaymentResponse> results = service.listPayments(null, "TYPO_INVALID", 20, 0);
-
-        assertEquals(1, results.size());
-        verify(repository).findAll(null, null, 20, 0);
+        assertThrows(IllegalArgumentException.class,
+            () -> service.listPayments(null, "TYPO_INVALID", 20, 0));
     }
 }

@@ -39,6 +39,7 @@ logs/
 .env.local
 .env.*.local
 .env
+monitoring/grafana.env
 
 # Kubernetes
 kubeconfig*
