@@ -7,7 +7,7 @@ metadata:
     app: poc-camel
     component: tracing
 data:
-  jaeger.endpoint: "http://jaeger-collector:14268/api/traces"
+  jaeger.endpoint: "http://jaeger:14268/api/traces"
   jaeger.service.name.api-gateway: "api-gateway"
   jaeger.service.name.payment-processor: "payment-processor"
   jaeger.sampler.type: "const"

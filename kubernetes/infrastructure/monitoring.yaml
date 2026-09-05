@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
+  namespace: poc-camel
   labels:
     app: monitoring
 data:
@@ -75,12 +76,6 @@ data:
           - action: labelmap
             regex: __meta_kubernetes_pod_label_(.+)
 
-      - job_name: 'kafka'
-        static_configs:
-          - targets: ['kafka:9092']
-            labels:
-              component: 'kafka'
-
       - job_name: 'kubernetes-nodes'
         kubernetes_sd_configs:
           - role: node
@@ -114,6 +109,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: monitoring-stack
+  namespace: poc-camel
   labels:
     app: monitoring
 spec:
@@ -126,6 +122,12 @@ spec:
     - name: prometheus-config
       mountPath: /etc/prometheus/prometheus.yml
       subPath: prometheus-config.yaml
+    readinessProbe:
+      httpGet:
+        path: /-/ready
+        port: 9090
+      initialDelaySeconds: 10
+      periodSeconds: 10
   - name: grafana
     image: grafana/grafana:10.1.0
     ports:
@@ -135,6 +137,12 @@ spec:
       value: "admin"
     - name: GF_SECURITY_ADMIN_PASSWORD
       value: "admin"
+    readinessProbe:
+      httpGet:
+        path: /api/health
+        port: 3000
+      initialDelaySeconds: 15
+      periodSeconds: 10
   volumes:
   - name: prometheus-config
     configMap:
@@ -144,6 +152,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
+  namespace: poc-camel
 spec:
   selector:
     app: monitoring
@@ -156,6 +165,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: grafana
+  namespace: poc-camel
 spec:
   selector:
     app: monitoring

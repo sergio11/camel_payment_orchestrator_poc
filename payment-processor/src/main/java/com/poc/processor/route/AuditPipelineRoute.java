@@ -20,6 +20,7 @@ public class AuditPipelineRoute extends RouteBuilder {
             .routeId("audit-pipeline")
             .log("Auditing payment: ${body.paymentId}")
             .setHeader("AuditPaymentId", simple("${body.paymentId}"))
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
             .marshal(auditJson)
             .to("kafka:{{kafka.topic.audit}}")
             .log("Published audit event for: ${header.AuditPaymentId}");

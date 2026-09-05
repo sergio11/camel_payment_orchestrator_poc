@@ -6,9 +6,6 @@ namespace: poc-camel
 resources:
   - ../../base
 
-commonLabels:
-  environment: dev
-
 # Override replicas for dev environment
 replicas:
   - name: api-gateway
@@ -30,18 +27,8 @@ patches:
 # Dev-specific images (use local images loaded into Kind)
 images:
   - name: poc-camel/api-gateway
+    newName: localhost/poc-camel/api-gateway
     newTag: dev
   - name: poc-camel/payment-processor
+    newName: localhost/poc-camel/payment-processor
     newTag: dev
-
-# Dev-specific config
-configMapGenerator:
-  - name: app-config
-    behavior: merge
-    literals:
-      - quarkus.log.category."com.poc".level=DEBUG
-      - quarkus.log.console.json=false
-  - name: fraud-rules-config
-    behavior: merge
-    literals:
-      - fraud.rules.high-amount-threshold=10000

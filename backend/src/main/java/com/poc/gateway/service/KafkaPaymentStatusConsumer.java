@@ -7,7 +7,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+import io.quarkus.runtime.Startup;import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.jboss.logging.Logger;
@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @ApplicationScoped
+@Startup
 public class KafkaPaymentStatusConsumer {
 
     private static final Logger LOG = Logger.getLogger(KafkaPaymentStatusConsumer.class);
