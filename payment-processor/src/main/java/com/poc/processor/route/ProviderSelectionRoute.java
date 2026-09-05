@@ -30,7 +30,18 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:provider-selection")
             .routeId("provider-selection")
-            .log("Selecting provider for payment: ${header.CamelPaymentId}")
+            .process(exchange -> {
+                PaymentMessage orig = exchange.getMessage().getHeader("OriginalPaymentMessage", PaymentMessage.class);
+                if (orig != null) {
+                    if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
+                        exchange.getMessage().setHeader("OriginalPaymentId", orig.paymentId());
+                    }
+                    if (exchange.getMessage().getHeader("OriginalEventId") == null) {
+                        exchange.getMessage().setHeader("OriginalEventId", orig.eventId());
+                    }
+                }
+            })
+            .log("Selecting provider for payment: ${header.OriginalPaymentId}")
             .dynamicRouter(method(ProviderRouterBean.class, "routeToProvider"))
             .end();
 
@@ -46,7 +57,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .log("Provider A failed after retries, falling back to Provider B: ${exception.message}")
                 .to("direct:provider-b-fallback")
             .end()
-            .log("Routing to Provider A: ${header.CamelPaymentId}")
+            .log("Routing to Provider A: ${header.OriginalPaymentId}")
             .circuitBreaker()
                 .inheritErrorHandler(true)
                 .resilience4jConfiguration()
@@ -57,7 +68,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .end()
                 .to("direct:call-provider-a")
             .endCircuitBreaker()
-            .log("Provider A completed for: ${header.CamelPaymentId}");
+            .log("Provider A completed for: ${header.OriginalPaymentId}");
 
         from("direct:call-provider-a")
             .routeId("call-provider-a")
@@ -65,27 +76,43 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .setHeader("Content-Type", constant("application/json"))
             .process(exchange -> {
                 exchange.setProperty("CamelFraudResult", exchange.getMessage().getBody());
-                exchange.getMessage().setBody(exchange.getMessage().getHeader("OriginalPaymentMessage"));
+                PaymentMessage orig = exchange.getMessage().getHeader("OriginalPaymentMessage", PaymentMessage.class);
+                if (orig != null) {
+                    exchange.getMessage().setBody(orig);
+                    if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
+                        exchange.getMessage().setHeader("OriginalPaymentId", orig.paymentId());
+                    }
+                    if (exchange.getMessage().getHeader("OriginalEventId") == null) {
+                        exchange.getMessage().setHeader("OriginalEventId", orig.eventId());
+                    }
+                }
             })
-            .marshal(paymentJson)
-            .to("netty-http:{{provider.a-url}}")
-            .unmarshal(responseJson)
             .choice()
-                .when(simple("${body.success} == true"))
-                    .log("Provider A success: ${body.transactionId}")
-                    .process(exchange -> {
-                        exchange.getMessage().setBody(exchange.getProperty("CamelFraudResult"));
-                    })
-                    .setHeader("kafka.KEY", simple("${body.paymentId}"))
-                    .log("Publishing processed event for payment: ${header.kafka.KEY}")
-                    .marshal(fraudResultJson)
-                    .to("kafka:{{kafka.topic.payments.processed}}")
+                .when(header("OriginalPaymentMessage").isNull())
+                    .log("Missing OriginalPaymentMessage, routing to dead letter")
+                    .to("direct:dead-letter")
+                    .stop()
                 .otherwise()
-                    .log("Provider A returned error: ${body.errorCode}")
-                    .process(exchange -> {
-                        ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
-                        throw new RuntimeException("Provider A error: " + (resp != null ? resp.errorMessage() : "unknown"));
-                    })
+                    .marshal(paymentJson)
+                    .to("netty-http:{{provider.a-url}}")
+                    .unmarshal(responseJson)
+                    .choice()
+                        .when(simple("${body.success} == true"))
+                            .log("Provider A success: ${body.transactionId}")
+                            .process(exchange -> {
+                                exchange.getMessage().setBody(exchange.getProperty("CamelFraudResult"));
+                            })
+                            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+                            .log("Publishing processed event for payment: ${header.kafka.KEY}")
+                            .marshal(fraudResultJson)
+                            .to("kafka:{{kafka.topic.payments.processed}}")
+                        .otherwise()
+                            .log("Provider A returned error: ${body.errorCode}")
+                            .process(exchange -> {
+                                ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
+                                throw new RuntimeException("Provider A error: " + (resp != null ? resp.errorMessage() : "unknown"));
+                            })
+                    .end()
             .end();
 
         from("direct:provider-b-fallback")
@@ -100,7 +127,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .log("Provider B also failed, sending to dead letter: ${exception.message}")
                 .to("direct:dead-letter")
             .end()
-            .log("Fallback to Provider B: ${header.CamelPaymentId}")
+            .log("Fallback to Provider B: ${header.OriginalPaymentId}")
             .circuitBreaker()
                 .inheritErrorHandler(true)
                 .resilience4jConfiguration()
@@ -111,7 +138,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .end()
                 .to("direct:call-provider-b")
             .endCircuitBreaker()
-            .log("Provider B completed for: ${header.CamelPaymentId}");
+            .log("Provider B completed for: ${header.OriginalPaymentId}");
 
         from("direct:call-provider-b")
             .routeId("call-provider-b")
@@ -119,41 +146,69 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .setHeader("Content-Type", constant("application/json"))
             .process(exchange -> {
                 exchange.setProperty("CamelFraudResult", exchange.getMessage().getBody());
-                exchange.getMessage().setBody(exchange.getMessage().getHeader("OriginalPaymentMessage"));
+                PaymentMessage orig = exchange.getMessage().getHeader("OriginalPaymentMessage", PaymentMessage.class);
+                if (orig != null) {
+                    exchange.getMessage().setBody(orig);
+                    if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
+                        exchange.getMessage().setHeader("OriginalPaymentId", orig.paymentId());
+                    }
+                    if (exchange.getMessage().getHeader("OriginalEventId") == null) {
+                        exchange.getMessage().setHeader("OriginalEventId", orig.eventId());
+                    }
+                }
             })
-            .marshal(paymentJson)
-            .to("netty-http:{{provider.b-url}}")
-            .unmarshal(responseJson)
             .choice()
-                .when(simple("${body.success} == true"))
-                    .log("Provider B success: ${body.transactionId}")
-                    .process(exchange -> {
-                        exchange.getMessage().setBody(exchange.getProperty("CamelFraudResult"));
-                    })
-                    .setHeader("kafka.KEY", simple("${body.paymentId}"))
-                    .log("Publishing processed event for payment: ${header.kafka.KEY}")
-                    .marshal(fraudResultJson)
-                    .to("kafka:{{kafka.topic.payments.processed}}")
+                .when(header("OriginalPaymentMessage").isNull())
+                    .log("Missing OriginalPaymentMessage, routing to dead letter")
+                    .to("direct:dead-letter")
+                    .stop()
                 .otherwise()
-                    .log("Provider B returned error: ${body.errorCode}")
-                    .process(exchange -> {
-                        ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
-                        throw new RuntimeException("Provider B error: " + (resp != null ? resp.errorMessage() : "unknown"));
-                    })
+                    .marshal(paymentJson)
+                    .to("netty-http:{{provider.b-url}}")
+                    .unmarshal(responseJson)
+                    .choice()
+                        .when(simple("${body.success} == true"))
+                            .log("Provider B success: ${body.transactionId}")
+                            .process(exchange -> {
+                                exchange.getMessage().setBody(exchange.getProperty("CamelFraudResult"));
+                            })
+                            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+                            .log("Publishing processed event for payment: ${header.kafka.KEY}")
+                            .marshal(fraudResultJson)
+                            .to("kafka:{{kafka.topic.payments.processed}}")
+                        .otherwise()
+                            .log("Provider B returned error: ${body.errorCode}")
+                            .process(exchange -> {
+                                ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
+                                throw new RuntimeException("Provider B error: " + (resp != null ? resp.errorMessage() : "unknown"));
+                            })
+                    .end()
             .end();
 
         from("direct:dead-letter")
             .routeId("dead-letter")
-            .log("Sending to dead letter queue: ${header.CamelPaymentId}")
             .process(exchange -> {
                 PaymentMessage orig = exchange.getIn().getHeader("OriginalPaymentMessage", PaymentMessage.class);
                 if (orig != null) {
                     exchange.getIn().setBody(orig);
+                    if (exchange.getIn().getHeader("OriginalPaymentId") == null) {
+                        exchange.getIn().setHeader("OriginalPaymentId", orig.paymentId());
+                    }
+                    if (exchange.getIn().getHeader("OriginalEventId") == null) {
+                        exchange.getIn().setHeader("OriginalEventId", orig.eventId());
+                    }
                 }
             })
-            .setHeader("kafka.KEY", simple("${body.paymentId}"))
-            .marshal(stringJson)
-            .to("kafka:{{kafka.topic.dead.letter}}")
-            .log("Published to dead letter topic");
+            .choice()
+                .when(simple("${body} == null"))
+                    .log("Missing body and OriginalPaymentMessage, dropping message: ${header.OriginalPaymentId}")
+                    .stop()
+                .otherwise()
+                    .log("Sending to dead letter queue: ${header.OriginalPaymentId}")
+                    .setHeader("kafka.KEY", header("OriginalPaymentId"))
+                    .marshal(stringJson)
+                    .to("kafka:{{kafka.topic.dead.letter}}")
+                    .log("Published to dead letter topic")
+            .end();
     }
 }

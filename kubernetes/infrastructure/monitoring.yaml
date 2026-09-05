@@ -134,9 +134,9 @@ spec:
     - containerPort: 3000
     env:
     - name: GF_SECURITY_ADMIN_USER
-      value: "admin"
+      value: "poc-admin"
     - name: GF_SECURITY_ADMIN_PASSWORD
-      value: "admin"
+      value: "poc-demo-pass-2026"
     readinessProbe:
       httpGet:
         path: /api/health

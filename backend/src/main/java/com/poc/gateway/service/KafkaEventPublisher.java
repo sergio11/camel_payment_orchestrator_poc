@@ -89,7 +89,8 @@ public class KafkaEventPublisher {
                     LOG.infof("Published payment %s to Kafka topic %s (partition=%d, offset=%d)",
                         paymentId, paymentsReceivedTopic, recordMetadata.partition(), recordMetadata.offset());
                 }
-            }).get(10, TimeUnit.SECONDS);
+            }).get(16, TimeUnit.SECONDS);
+            // 16s > delivery.timeout.ms (15s) + margin so sync get covers full retry window.
             return true;
         } catch (TimeoutException e) {
             LOG.errorf(e, "Timeout publishing payment %s to Kafka", paymentId);
@@ -100,7 +101,7 @@ public class KafkaEventPublisher {
         }
     }
 
-    public void publishStatusChanged(String paymentId, String previousStatus, String newStatus) {
+    public boolean publishStatusChanged(String paymentId, String previousStatus, String newStatus) {
         try {
             String payload = objectMapper.writeValueAsString(Map.of(
                 "paymentId", paymentId,
@@ -115,9 +116,14 @@ public class KafkaEventPublisher {
                     } else {
                         LOG.infof("Published status changed for %s: %s -> %s", paymentId, previousStatus, newStatus);
                     }
-                });
+                }).get(16, TimeUnit.SECONDS);
+            return true;
+        } catch (TimeoutException e) {
+            LOG.errorf(e, "Timeout publishing status changed for %s: %s -> %s", paymentId, previousStatus, newStatus);
+            return false;
         } catch (Exception e) {
-            LOG.errorf(e, "Error serializing status changed for %s", paymentId);
+            LOG.errorf(e, "Error publishing status changed for %s: %s -> %s", paymentId, previousStatus, newStatus);
+            return false;
         }
     }
 }

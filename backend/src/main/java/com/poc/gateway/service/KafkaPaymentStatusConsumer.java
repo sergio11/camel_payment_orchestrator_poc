@@ -6,7 +6,9 @@ import com.poc.gateway.repository.PaymentRepository;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.runtime.Startup;import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -39,6 +41,9 @@ public class KafkaPaymentStatusConsumer {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    Instance<MeterRegistry> meterRegistries;
 
     private volatile KafkaConsumer<String, String> consumer;
     private final AtomicBoolean running = new AtomicBoolean(true);
@@ -100,7 +105,9 @@ public class KafkaPaymentStatusConsumer {
                         try {
                             processRecord(record);
                         } catch (Exception e) {
-                            LOG.errorf(e, "Error processing record from topic %s", record.topic());
+                            LOG.errorf(e, "Error processing record from topic %s partition %d offset %d key %s, skipping poison record",
+                                record.topic(), record.partition(), record.offset(), record.key());
+                            incrementCounter("payment.consumer.poison", record.topic());
                         }
                     }
                     if (!records.isEmpty()) {
@@ -129,7 +136,8 @@ public class KafkaPaymentStatusConsumer {
     private void processRecord(ConsumerRecord<String, String> record) throws Exception {
         String paymentId = record.key();
         if (paymentId == null) {
-            LOG.warn("Received record with null paymentId, skipping");
+            LOG.warn("Received record with null paymentId, skipping poison record");
+            incrementCounter("payment.consumer.poison", record.topic());
             return;
         }
 
@@ -137,13 +145,15 @@ public class KafkaPaymentStatusConsumer {
         try {
             uuid = java.util.UUID.fromString(paymentId);
         } catch (IllegalArgumentException e) {
-            LOG.warnf("Invalid UUID format for paymentId: %s", paymentId);
+            LOG.warnf("Invalid UUID format for paymentId: %s, skipping poison record", paymentId);
+            incrementCounter("payment.consumer.poison", record.topic());
             return;
         }
 
         Optional<com.poc.gateway.entity.Payment> paymentOpt = repository.findById(uuid);
         if (paymentOpt.isEmpty()) {
-            LOG.warnf("Payment not found: %s", paymentId);
+            LOG.warnf("Payment not found: %s, skipping poison record", paymentId);
+            incrementCounter("payment.consumer.poison", record.topic());
             return;
         }
 
@@ -157,12 +167,36 @@ public class KafkaPaymentStatusConsumer {
             newStatus = PaymentStatus.FAILED;
             LOG.infof("Payment %s FAILED", paymentId);
         } else {
-            LOG.warnf("Unexpected topic: %s, skipping record for payment %s", record.topic(), paymentId);
+            LOG.warnf("Unexpected topic: %s, skipping poison record for payment %s", record.topic(), paymentId);
+            incrementCounter("payment.consumer.poison", record.topic());
+            return;
+        }
+
+        if (payment.status() != PaymentStatus.PENDING) {
+            LOG.warnf("Skipping status transition for payment %s: current=%s, requested=%s (only PENDING may transition)",
+                paymentId, payment.status(), newStatus);
+            incrementCounter("payment.consumer.skipped", record.topic());
             return;
         }
 
         String previousStatus = payment.status().name();
         com.poc.gateway.entity.Payment updated = repository.update(uuid, newStatus);
-        kafkaEventPublisher.publishStatusChanged(paymentId, previousStatus, newStatus.name());
+        boolean statusPublished = kafkaEventPublisher.publishStatusChanged(paymentId, previousStatus, newStatus.name());
+        if (!statusPublished) {
+            LOG.errorf("Failed to publish status changed for payment %s: %s -> %s", paymentId, previousStatus, newStatus);
+            incrementCounter("payment.consumer.statusPublishFailed", record.topic());
+        }
+    }
+
+    private void incrementCounter(String name, String topic) {
+        try {
+            if (meterRegistries != null && !meterRegistries.isUnsatisfied()) {
+                meterRegistries.get().counter(name, "topic", String.valueOf(topic)).increment();
+            } else {
+                LOG.debugf("counter %s{topic=%s} +1", name, topic);
+            }
+        } catch (Exception e) {
+            LOG.debugf("counter %s{topic=%s} +1 (MeterRegistry unavailable)", name, topic);
+        }
     }
 }

@@ -17,10 +17,10 @@ class ContentBasedRouterTest {
     ContentBasedRouterBean routerBean;
 
     @Test
-    @DisplayName("3.41: Verify high amount (>15000) routes to fraud-review")
+    @DisplayName("3.41: Verify high amount (>10000) routes to fraud-review")
     void testHighAmountRoutesToFraudReview() {
-        String route = routerBean.routeToFraudCheck(new BigDecimal("15001"), "CREDIT_CARD", "US");
-        assertEquals("direct:fraud-review", route, "Amount > 15000 should route to fraud-review");
+        String route = routerBean.routeToFraudCheck(new BigDecimal("10001"), "CREDIT_CARD", "US");
+        assertEquals("direct:fraud-review", route, "Amount > 10000 should route to fraud-review");
     }
 
     @Test

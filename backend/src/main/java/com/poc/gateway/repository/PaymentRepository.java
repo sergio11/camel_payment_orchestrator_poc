@@ -45,6 +45,8 @@ public class PaymentRepository {
         return store.values().stream()
             .filter(p -> customerId == null || p.customerId().equals(customerId))
             .filter(p -> status == null || p.status() == status)
+            .sorted(java.util.Comparator.comparing(Payment::createdAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                .thenComparing(Payment::id))
             .skip(offset)
             .limit(limit)
             .toList();

@@ -36,12 +36,15 @@ RUN chown -R appuser:appgroup /app
 
 USER appuser
 
-# Expose HTTP port
-EXPOSE 8081
+# Expose HTTP port (must match K8s containerPort 8080 + QUARKUS_HTTP_PORT=8080;
+# local default quarkus.http.port=8081 is overridden in K8s via env)
+EXPOSE 8080
 
-# Health check
+# Health check (wget already exists in alpine/busybox, avoids apk add curl;
+# path /health/ready matches quarkus.smallrye-health.root-path=/health + K8s probes,
+# NOT /q/health/ready which would 404 with custom root-path)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health/ready || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health/ready || exit 1
 
 # Run the application
 ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-jar", "quarkus-run.jar"]

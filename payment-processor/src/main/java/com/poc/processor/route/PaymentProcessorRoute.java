@@ -21,16 +21,26 @@ public class PaymentProcessorRoute extends RouteBuilder {
     @Override
     public void configure() {
         errorHandler(deadLetterChannel("direct:dlq-handler")
+            .useOriginalMessage()
+            .maximumRedeliveries(0)
             .logRetryAttempted(true)
             .logExhausted(true));
 
         var paymentJson = new org.apache.camel.component.jackson.JacksonDataFormat(objectMapper, PaymentMessage.class);
 
-        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=false&autoOffsetReset=earliest&allowManualCommit=true")
+        // POC: auto-commit to avoid infinite reprocessing
+        from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=true&autoOffsetReset=earliest")
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
             .unmarshal(paymentJson)
-            .log("Received payment: ${body.paymentId}")
+            .process(exchange -> {
+                PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+                if (msg != null) {
+                    exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
+                    exchange.getIn().setHeader("OriginalEventId", msg.eventId());
+                }
+            })
+            .log("Received payment: ${header.OriginalPaymentId}")
             .wireTap("direct:audit-pipeline")
             .process("paymentEnrichProcessor")
             .process(exchange -> {
@@ -47,10 +57,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
                     .to("direct:fraud-check")
             .end()
-            .log("Payment processed: ${header.OriginalPaymentMessage.paymentId} -> ${header.CamelFraudAction}")
-            .process(exchange -> {
-                exchange.getMessage().setHeader("CamelKafkaManualCommit", true);
-            });
+            .log("Payment processed: ${header.OriginalPaymentId} -> ${header.CamelFraudAction}");
 
         from("direct:fraud-review")
             .routeId("fraud-review-high-value")
@@ -84,9 +91,8 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
         from("direct:dlq-handler")
             .routeId("error-dlq-handler")
-            .log("Error processing payment: ${exception.message}")
-            .setHeader("kafka.KEY", simple("${body.paymentId}"))
-            .marshal(paymentJson)
+            .log("Error processing payment ${header.OriginalPaymentId}: ${exception.message}")
+            .setHeader("kafka.KEY", header("OriginalPaymentId"))
             .to("kafka:{{kafka.topic.dead.letter}}")
             .log("Published to dead letter queue");
     }

@@ -46,7 +46,7 @@ services:
       retries: 5
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: poc-camel-kafka-ui
     depends_on:
       - kafka
@@ -100,8 +100,8 @@ services:
       - ./monitoring/grafana-config.ini:/etc/grafana/grafana.ini:ro
       - poc-camel-grafana-data:/var/lib/grafana
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: poc-admin
+      GF_SECURITY_ADMIN_PASSWORD: poc-demo-pass-2026
       GF_USERS_ALLOW_SIGN_UP: "false"
     networks:
       - poc-camel-net

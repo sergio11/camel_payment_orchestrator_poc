@@ -32,7 +32,7 @@ spec:
       containers:
         - name: api-gateway
           image: poc-camel/api-gateway:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http

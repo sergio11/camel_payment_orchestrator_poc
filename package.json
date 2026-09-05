@@ -12,6 +12,6 @@
     "arch:check": "npm run arch:check --prefix backend && npm run arch:check --prefix frontend"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "latest"
+    "@fission-ai/openspec": "1.3.1"
   }
 }

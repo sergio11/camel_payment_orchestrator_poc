@@ -39,9 +39,8 @@ public class PaymentService {
         );
         
         if (!published) {
-            LOG.warnf("Kafka publish failed for payment %s, compensating by removing from repository", saved.id());
-            repository.deleteById(saved.id());
-            throw new RuntimeException("Failed to publish payment event to Kafka. Payment was not created.");
+            LOG.errorf("Kafka publish failed for payment %s, leaving as PENDING for retry", saved.id());
+            throw new RuntimeException("Failed to publish payment event to Kafka. Payment " + saved.id() + " left as PENDING.");
         }
         
         return PaymentMapper.toResponse(saved);

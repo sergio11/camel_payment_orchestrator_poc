@@ -67,9 +67,11 @@ scrape_configs:
       - action: labelmap
         regex: __meta_kubernetes_pod_label_(.+)
 
+  # POC: kafka has no metrics exporter (9092 is the broker protocol port, not HTTP metrics).
+  # Keep job disabled to avoid failed scrapes; enable only if a JMX/exporter sidecar is added.
   - job_name: 'kafka'
     static_configs:
-      - targets: ['kafka:9092']
+      - targets: [] # was ['kafka:9092'] - broker port, not scrapeable
         labels:
           component: 'kafka'
 
