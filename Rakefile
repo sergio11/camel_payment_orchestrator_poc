@@ -234,7 +234,7 @@ namespace :infra do
   desc 'Start local infrastructure (podman-compose: kafka, postgres, monitoring)'
   task :up do
     run_cmd("#{CONTAINER_ENGINE}-compose up -d", fail: false)
-    run_cmd("#{CONTAINER_ENGINE} ps --format 'table {{.Names}}\\t{{.Status}}'", fail: false)
+    Rake::Task['infra:ps'].invoke
   end
 
   desc 'Stop local infrastructure'
@@ -244,7 +244,8 @@ namespace :infra do
 
   desc 'Show infrastructure status'
   task :ps do
-    run_cmd("#{CONTAINER_ENGINE} ps --format 'table {{.Names}}\\t{{.Status}}'")
+    run_cmd("#{CONTAINER_ENGINE} pod ps", fail: false)
+    run_cmd("#{CONTAINER_ENGINE} ps", fail: false)
   end
 
   desc 'Show infrastructure logs (SVC=name, default all)'
