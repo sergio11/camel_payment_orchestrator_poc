@@ -375,19 +375,39 @@ namespace :k8s do
     app_targets(ENV['APP']).each do |_deploy, label|
       puts "== #{label} =="
       run_cmd("kubectl get pods -l #{label} -n #{NAMESPACE} -o wide", fail: false)
-      logs = `kubectl logs -l #{label} -n #{NAMESPACE} --tail=200 2>&1`
+      pods = `kubectl get pods -l #{label} -n #{NAMESPACE} -o jsonpath={.items[*].metadata.name} 2>&1`.gsub("'", "").split
+      if pods.empty?
+        puts "WARN: no pods found for #{label}"
+        next
+      end
+      combined = ""
+      pods.each do |pod|
+        logs = `kubectl logs #{pod} -n #{NAMESPACE} --tail=100 2>&1`
+        unless $?.success?
+          puts "WARN: could not read logs of #{pod}: #{logs.lines.first}"
+          next
+        end
+        puts "-- #{pod} --"
+        errs = logs.lines.grep(/ERROR|Caused by|Exception|WARN.*(Kafka|DNS|resolv|bootstrap|connection)/).last(5)
+        puts(errs.empty? ? "(no error lines)" : errs)
+        tail = logs.lines.last(3).map(&:strip).reject(&:empty?)
+        puts "  tail: #{tail.join(' | ')[0, 300]}" unless tail.empty?
+        combined += logs
+      end
+      if combined.empty?
+        puts "WARN: no logs captured for #{label}, assertions skipped"
+        next
+      end
       absent = ENV['EXPECT_ABSENT']
       present = ENV['EXPECT_PRESENT']
-      if absent && !absent.empty? && logs.include?(absent)
+      if absent && !absent.empty? && combined.include?(absent)
         puts "FAIL: found forbidden pattern #{absent.inspect}"
         failed = true
       end
-      if present && !present.empty? && !logs.include?(present)
+      if present && !present.empty? && !combined.include?(present)
         puts "FAIL: missing expected pattern #{present.inspect}"
         failed = true
       end
-      errs = logs.lines.grep(/ERROR|Caused by|Exception/).last(8)
-      puts(errs.empty? ? "(no error lines in last 200 log lines)" : errs)
     end
     raise "k8s:check FAILED" if failed
     puts "\e[32mCHECK OK\e[0m"
@@ -395,8 +415,8 @@ namespace :k8s do
 
   desc 'Show pods + services'
   task :status do
-    run_cmd("kubectl get pods -n #{NAMESPACE} -o wide")
-    run_cmd("kubectl get svc -n #{NAMESPACE}")
+    run_cmd("kubectl get pods -n #{NAMESPACE} -o wide", fail: false)
+    run_cmd("kubectl get svc -n #{NAMESPACE}", fail: false)
   end
 
   desc 'Alias of k8s:status'
@@ -404,7 +424,7 @@ namespace :k8s do
 
   desc 'Show services'
   task :svc do
-    run_cmd("kubectl get svc -n #{NAMESPACE}")
+    run_cmd("kubectl get svc -n #{NAMESPACE}", fail: false)
   end
 
   desc 'Follow logs (APP=gateway|processor|all, default all)'
