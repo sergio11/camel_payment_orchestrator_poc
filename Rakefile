@@ -64,6 +64,14 @@ rescue StandardError
   false
 end
 
+def app_targets(app)
+  case (app || 'all').downcase
+  when 'gateway' then [['api-gateway', 'app=api-gateway']]
+  when 'processor' then [['payment-processor', 'app=payment-processor']]
+  else [['api-gateway', 'app=api-gateway'], ['payment-processor', 'app=payment-processor']]
+  end
+end
+
 def k8s_wait(label, timeout: 120)
   kc("wait --for=condition=ready pod -l #{label} -n #{NAMESPACE} --timeout=#{timeout}s")
 end
@@ -349,6 +357,42 @@ namespace :k8s do
     end
   end
 
+  desc 'Rebuild image(s), load into Kind and restart (APP=gateway|processor|all)'
+  task :rebuild do
+    names = app_targets(ENV['APP']).map(&:first)
+    names.each do |name|
+      short = "poc-camel/#{name}:dev"
+      run_cmd("#{CONTAINER_ENGINE} build -t #{short} -t localhost/#{short} -f #{IMAGES[name]} .")
+    end
+    Rake::Task['k8s:load'].invoke
+    Rake::Task['k8s:restart'].invoke
+  end
+
+  desc 'Verify pods and assert log patterns (APP=..., EXPECT_ABSENT=..., EXPECT_PRESENT=...)'
+  task :check do
+    raise "No cluster context (is podman machine / Kind up?) — recover the environment first" unless system("kubectl cluster-info >NUL 2>&1") || system("kubectl cluster-info >/dev/null 2>&1")
+    failed = false
+    app_targets(ENV['APP']).each do |_deploy, label|
+      puts "== #{label} =="
+      run_cmd("kubectl get pods -l #{label} -n #{NAMESPACE} -o wide", fail: false)
+      logs = `kubectl logs -l #{label} -n #{NAMESPACE} --tail=200 2>&1`
+      absent = ENV['EXPECT_ABSENT']
+      present = ENV['EXPECT_PRESENT']
+      if absent && !absent.empty? && logs.include?(absent)
+        puts "FAIL: found forbidden pattern #{absent.inspect}"
+        failed = true
+      end
+      if present && !present.empty? && !logs.include?(present)
+        puts "FAIL: missing expected pattern #{present.inspect}"
+        failed = true
+      end
+      errs = logs.lines.grep(/ERROR|Caused by|Exception/).last(8)
+      puts(errs.empty? ? "(no error lines in last 200 log lines)" : errs)
+    end
+    raise "k8s:check FAILED" if failed
+    puts "\e[32mCHECK OK\e[0m"
+  end
+
   desc 'Show pods + services'
   task :status do
     run_cmd("kubectl get pods -n #{NAMESPACE} -o wide")
@@ -532,6 +576,8 @@ task :default do
       rake k8s:undeploy      Apps only (keep infra)
       rake k8s:deploy        Apps via Kustomize (OVERLAY=#{OVERLAY})
       rake k8s:restart [APP=] Rollout restart + wait
+      rake k8s:rebuild [APP=] Rebuild image + load + restart
+      rake k8s:check [APP=]  Verify pods + assert log patterns
       rake k8s:status        Pods + services
       rake k8s:logs [APP=]   Follow logs
       rake k8s:portforward   Gateway -> localhost:8080
