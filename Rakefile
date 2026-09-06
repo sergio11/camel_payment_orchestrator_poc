@@ -2,14 +2,14 @@
 # Requires: Ruby 3.x, Podman, Maven, kubectl, kind (for k8s:* tasks)
 #
 # You should never need raw kubectl/kind: every platform operation is wrapped here.
-# Quickstart (fresh Kind):
-#   rake up                # full deploy: namespace + infra + images + apps
-#   rake status            # pods + services
-#   rake smoke             # e2e payment check through port-forward
-#   rake logs APP=gateway  # follow logs (gateway|processor|all)
-#   rake down              # undeploy everything, keep cluster
-#   rake k8s:reset         # down + up from scratch
-#   rake k8s:cluster_delete# delete the Kind cluster itself
+# Quickstart:
+#   rake infra:start       # local infra (compose)
+#   rake test:run          # all tests + coverage gate 98%
+#   rake k8s:build         # images into Kind (APP= to filter)
+#   rake k8s:deploy        # full deploy (OVERLAY=dev|prod)
+#   rake k8s:check SMOKE=1 # verify pods + e2e payment
+#   rake k8s:undeploy      # remove everything (APPS_ONLY=1 for apps only)
+#   rake help              # full list with flags
 #
 # knobs: OVERLAY=dev|prod (default dev), CLUSTER=poc-camel, NAMESPACE=poc-camel,
 #        CONTAINER_ENGINE=podman|docker
@@ -198,40 +198,18 @@ end
 # Test Tasks
 # ──────────────────────────────────────────────────────────────────────────────
 namespace :test do
-  desc 'Run all tests with JaCoCo coverage'
+  desc 'Run all tests (unit + integration + e2e) with coverage gate 98%'
   task :run do
+    args = ["clean", "verify", "-Dsurefire.useFile=false"]
+    args << "-Djacoco.skip=true" if ENV['COVERAGE'] == '0'
+    scope = { 'processor' => 'payment-processor', 'backend' => 'backend',
+              'shared' => 'shared' }[(ENV['SCOPE'] || '').downcase] || ENV['SCOPE']
+    args << "-pl #{scope} -am" if scope && !scope.empty?
     begin
-      mvn("clean test -Dsurefire.useFile=false")
+      mvn(args.join(" "))
     ensure
-      print_coverage_table
+      print_coverage_table unless ENV['COVERAGE'] == '0'
     end
-  end
-
-  desc 'Run all tests without coverage (faster)'
-  task :quick do
-    mvn("clean test -Dsurefire.useFile=false -Djacoco.skip=true")
-  end
-
-  desc 'Run only payment-processor tests'
-  task :payment do
-    begin
-      mvn("test -pl payment-processor -am -Dsurefire.useFile=false")
-    ensure
-      print_coverage_table
-    end
-  end
-
-  desc 'Verify coverage meets minimum threshold (98%)'
-  task :verify do
-    mvn("clean verify -Dsurefire.useFile=false")
-  end
-
-  desc 'Alias of test:run'
-  task :all => :run
-
-  desc 'Show coverage report'
-  task :coverage do
-    print_coverage_table
   end
 end
 
@@ -239,27 +217,18 @@ end
 # Local Infrastructure Tasks (podman-compose, no K8s)
 # ──────────────────────────────────────────────────────────────────────────────
 namespace :infra do
-  desc 'Start local infrastructure (podman-compose: kafka, postgres, monitoring)'
-  task :up do
+  desc 'Start all infrastructure services'
+  task :start do
     run_cmd("#{CONTAINER_ENGINE}-compose up -d", fail: false)
-    Rake::Task['infra:ps'].invoke
-  end
-
-  desc 'Stop local infrastructure'
-  task :down do
-    run_cmd("#{CONTAINER_ENGINE}-compose down -v", fail: false)
-  end
-
-  desc 'Show infrastructure status'
-  task :ps do
     run_cmd("#{CONTAINER_ENGINE} pod ps", fail: false)
     run_cmd("#{CONTAINER_ENGINE} ps", fail: false)
+    svc = ENV['SVC'] || ''
+    run_cmd("#{CONTAINER_ENGINE}-compose logs -f --tail=100 #{svc}", fail: false) unless svc.empty?
   end
 
-  desc 'Show infrastructure logs (SVC=name, default all)'
-  task :logs do
-    svc = ENV['SVC'] || ''
-    run_cmd("#{CONTAINER_ENGINE}-compose logs -f --tail=100 #{svc}", fail: false)
+  desc 'Stop all infrastructure services'
+  task :stop do
+    run_cmd("#{CONTAINER_ENGINE}-compose down -v", fail: false)
   end
 end
 
@@ -267,33 +236,10 @@ end
 # Kubernetes Tasks (Kind) — no raw kubectl/kind needed
 # ──────────────────────────────────────────────────────────────────────────────
 namespace :k8s do
-  desc "Full deployment into Kind (OVERLAY=#{OVERLAY})"
-  task :up do
-    Rake::Task['k8s:namespace'].invoke
-    Rake::Task['k8s:infra'].invoke
-    Rake::Task['k8s:build'].invoke
-    if kind_cluster_exists?
-      Rake::Task['k8s:load'].invoke
-    else
-      puts "Skipping k8s:load (no Kind cluster #{CLUSTER} found — run rake k8s:cluster first)"
-    end
-    Rake::Task['k8s:deploy'].invoke
-    puts "\n\e[32m=== Deployment complete (OVERLAY=#{OVERLAY}) ===\e[0m"
-    Rake::Task['k8s:status'].invoke
-  end
-
-  desc 'Reset from scratch (down + up)'
-  task :reset do
-    Rake::Task['k8s:down'].invoke
-    Rake::Task['k8s:up'].invoke
-  end
-
-  desc "Create namespace #{NAMESPACE} (idempotent)"
   task :namespace do
     run_cmd("kubectl create namespace #{NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -", fail: false)
   end
 
-  desc 'Deploy infrastructure (Kafka, Postgres, Jaeger, Monitoring)'
   task :infra do
     Dir.glob("#{INFRA_DIR}/*.yaml").sort.each do |manifest|
       run_cmd("kubectl apply -f #{manifest}", fail: false)
@@ -305,70 +251,43 @@ namespace :k8s do
     kc("wait --for=condition=ready pod/monitoring-stack -n #{NAMESPACE} --timeout=60s")
   end
 
-  desc 'Deploy applications via Kustomize (OVERLAY=dev|prod)'
+  desc 'Deploy to Kubernetes'
   task :deploy do
+    unless kind_cluster_exists?
+      raise "No Kind cluster #{CLUSTER}: create it first, then rake k8s:deploy"
+    end
     unless Dir.exist?(OVERLAY_DIR)
       raise "Overlay not found: #{OVERLAY_DIR} (use OVERLAY=dev|prod)"
     end
-    run_cmd("kubectl apply -k #{OVERLAY_DIR}")
-    puts "\nWaiting for applications to be ready..."
-    k8s_wait("app=api-gateway", timeout: 180)
-    k8s_wait("app=payment-processor", timeout: 180)
-  end
-
-  desc 'Create Kind cluster (idempotent)'
-  task :cluster do
-    if kind_cluster_exists?
-      puts "Kind cluster #{CLUSTER} already exists, skipping creation"
+    if ENV['RESTART_ONLY'] == '1'
+      app_targets(ENV['APP']).each do |d, label|
+        kc("rollout restart deployment/#{d} -n #{NAMESPACE}")
+        k8s_wait(label, timeout: 180)
+      end
     else
-      run_cmd("kind create cluster --name #{CLUSTER}")
+      Rake::Task['k8s:namespace'].invoke
+      Rake::Task['k8s:infra'].invoke
+      run_cmd("kubectl apply -k #{OVERLAY_DIR}")
+      puts "\nWaiting for applications to be ready..."
+      k8s_wait("app=api-gateway", timeout: 180)
+      k8s_wait("app=payment-processor", timeout: 180)
+      puts "\n\e[32m=== Deployment complete (OVERLAY=#{OVERLAY}) ===\e[0m"
+      run_cmd("kubectl get pods -n #{NAMESPACE} -o wide", fail: false)
+      run_cmd("kubectl get svc -n #{NAMESPACE}", fail: false)
     end
   end
 
-  desc 'Delete Kind cluster'
-  task :cluster_delete do
-    run_cmd("kind delete cluster --name #{CLUSTER}", fail: false)
-  end
-
-  desc 'Undeploy everything (apps first, infra second, namespace last)'
-  task :down do
-    run_cmd("kubectl delete -k #{OVERLAY_DIR}", fail: false)
-    run_cmd("kubectl delete -f #{INFRA_DIR} --recursive", fail: false)
-    run_cmd("kubectl delete namespace #{NAMESPACE}", fail: false)
-  end
-
-  desc 'Undeploy apps only (keep infra + namespace)'
+  desc 'Undeploy from Kubernetes'
   task :undeploy do
     run_cmd("kubectl delete -k #{OVERLAY_DIR}", fail: false)
-  end
-
-  desc 'Restart app deployments (APP=gateway|processor|all)'
-  task :restart do
-    app = (ENV['APP'] || 'all').downcase
-    targets = case app
-              when 'gateway' then ['api-gateway']
-              when 'processor' then ['payment-processor']
-              else ['api-gateway', 'payment-processor']
-              end
-    targets.each { |d| kc("rollout restart deployment/#{d} -n #{NAMESPACE}") }
-    targets.each do |d|
-      label = d == 'api-gateway' ? 'app=api-gateway' : 'app=payment-processor'
-      k8s_wait(label, timeout: 180)
+    unless ENV['APPS_ONLY'] == '1'
+      run_cmd("kubectl delete -f #{INFRA_DIR} --recursive", fail: false)
+      run_cmd("kubectl delete namespace #{NAMESPACE}", fail: false)
     end
+    run_cmd("kind delete cluster --name #{CLUSTER}", fail: false) if ENV['CLUSTER_DELETE'] == '1'
   end
 
-  desc 'Rebuild image(s), load into Kind and restart (APP=gateway|processor|all)'
-  task :rebuild do
-    names = app_targets(ENV['APP']).map(&:first)
-    names.each do |name|
-      short = "poc-camel/#{name}:dev"
-      run_cmd("#{CONTAINER_ENGINE} build -t #{short} -t localhost/#{short} -f #{IMAGES[name]} .")
-    end
-    Rake::Task['k8s:load'].invoke
-    Rake::Task['k8s:restart'].invoke
-  end
-
-  desc 'Verify pods and assert log patterns (APP=..., EXPECT_ABSENT=..., EXPECT_PRESENT=...)'
+  desc 'Verify pods and assert log patterns (APP=..., EXPECT_ABSENT=..., EXPECT_PRESENT=..., SMOKE=1)'
   task :check do
     raise "No cluster context (is podman machine / Kind up?) — recover the environment first" unless system("kubectl cluster-info >NUL 2>&1") || system("kubectl cluster-info >/dev/null 2>&1")
     failed = false
@@ -411,23 +330,14 @@ namespace :k8s do
     end
     raise "k8s:check FAILED" if failed
     puts "\e[32mCHECK OK\e[0m"
+    Rake::Task['k8s:smoke'].invoke if ENV['SMOKE'] == '1'
   end
 
-  desc 'Show pods + services'
   task :status do
     run_cmd("kubectl get pods -n #{NAMESPACE} -o wide", fail: false)
     run_cmd("kubectl get svc -n #{NAMESPACE}", fail: false)
   end
 
-  desc 'Alias of k8s:status'
-  task :pods => :status
-
-  desc 'Show services'
-  task :svc do
-    run_cmd("kubectl get svc -n #{NAMESPACE}", fail: false)
-  end
-
-  desc 'Follow logs (APP=gateway|processor|all, default all)'
   task :logs do
     app = (ENV['APP'] || ENV['app'] || 'all').downcase
     selector = case app
@@ -438,39 +348,27 @@ namespace :k8s do
     if selector
       run_cmd("kubectl logs -f -l #{selector} -n #{NAMESPACE} --tail=100", fail: false)
     else
-      run_cmd("kubectl logs -f -l app=api-gateway -n #{NAMESPACE} --tail=50 & kubectl logs -f -l app=payment-processor -n #{NAMESPACE} --tail=50", fail: false)
+      run_cmd("kubectl logs -f -l app=api-gateway -n #{NAMESPACE} --tail=50", fail: false)
+      run_cmd("kubectl logs -f -l app=payment-processor -n #{NAMESPACE} --tail=50", fail: false)
     end
   end
 
-  desc 'Show pod logs (api-gateway)'
-  task :logs_api do
-    ENV['APP'] = 'gateway'
-    Rake::Task['k8s:logs'].invoke
-  end
-
-  desc 'Show pod logs (payment-processor)'
-  task :logs_processor do
-    ENV['APP'] = 'processor'
-    Rake::Task['k8s:logs'].invoke
-  end
-
-  desc 'Build container images (dual-tag for Kind/dev overlay)'
+  desc 'Build and load container images (APP=gateway|processor|all)'
   task :build do
-    IMAGES.each do |name, dockerfile|
-      next unless File.exist?(dockerfile)
+    names = app_targets(ENV['APP']).map(&:first)
+    names.each do |name|
       short = "poc-camel/#{name}:dev"
-      kind_name = "localhost/#{short}"
-      run_cmd("#{CONTAINER_ENGINE} build -t #{short} -t #{kind_name} -f #{dockerfile} .")
+      run_cmd("#{CONTAINER_ENGINE} build -t #{short} -t localhost/#{short} -f #{IMAGES[name]} .")
     end
+    Rake::Task['k8s:load'].invoke
   end
 
-  desc 'Load images into Kind cluster (Windows-safe via tar file)'
   task :load do
     unless kind_cluster_exists?
-      raise "No Kind cluster #{CLUSTER} — run rake k8s:cluster first"
+      raise "No Kind cluster #{CLUSTER}: create it first, then rake k8s:build"
     end
-    ['poc-camel/api-gateway:dev', 'localhost/poc-camel/api-gateway:dev',
-     'poc-camel/payment-processor:dev', 'localhost/poc-camel/payment-processor:dev'].each do |img|
+    names = app_targets(ENV['APP']).map(&:first)
+    names.flat_map { |n| ["poc-camel/#{n}:dev", "localhost/poc-camel/#{n}:dev"] }.each do |img|
       tar = File.join(Dir.tmpdir, "kind-load-#{img.gsub(/[\/:]/, '_')}.tar")
       if run_cmd("#{CONTAINER_ENGINE} save -o #{tar} #{img}", fail: false)
         run_cmd("kind load image-archive #{tar} --name #{CLUSTER}", fail: false)
@@ -481,13 +379,11 @@ namespace :k8s do
     end
   end
 
-  desc 'Forward api-gateway to localhost:8080'
   task :portforward do
     puts "Forwarding api-gateway:8080 -> localhost:8080 (Ctrl+C to stop)"
     run_cmd("kubectl port-forward svc/api-gateway-external 8080:8080 -n #{NAMESPACE}", fail: false)
   end
 
-  desc 'Smoke test: create + fetch a payment through port-forward'
   task :smoke do
     pf = IO.popen("kubectl port-forward svc/api-gateway-external 8080:8080 -n #{NAMESPACE}")
     sleep 6
@@ -524,85 +420,29 @@ namespace :k8s do
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Build Tasks
-# ──────────────────────────────────────────────────────────────────────────────
-namespace :build do
-  desc 'Build without tests'
-  task :compile do
-    mvn("clean package -DskipTests")
-  end
-
-  desc 'Build and test'
-  task :full do
-    mvn("clean verify")
-  end
-end
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Top-level shortcuts (so raw kubectl/kind are never needed)
-# ──────────────────────────────────────────────────────────────────────────────
-desc 'Full deploy into Kind (shortcut for k8s:up)'
-task :up => 'k8s:up'
-
-desc 'Undeploy everything (shortcut for k8s:down)'
-task :down => 'k8s:down'
-
-desc 'Show pods + services (shortcut for k8s:status)'
-task :status => 'k8s:status'
-
-desc 'Follow app logs (shortcut for k8s:logs, APP=gateway|processor|all)'
-task :logs => 'k8s:logs'
-
-desc 'Smoke test a payment (shortcut for k8s:smoke)'
-task :smoke => 'k8s:smoke'
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Help
 # ──────────────────────────────────────────────────────────────────────────────
-desc 'List all available tasks'
-task :default do
+desc 'Show all available tasks'
+task :help do
   puts <<~HELP
-    Payment Orchestration Layer (poc-camel) — everything runs through Rake,
-    no raw kubectl/kind/podman commands needed.
-    ==========================================================
-    Shortcuts:
-      rake up                Full deploy into Kind (OVERLAY=dev|prod)
-      rake status            Pods + services
-      rake smoke             E2E payment check (create + fetch)
-      rake logs [APP=gateway|processor|all]
-      rake down              Undeploy everything (keep cluster)
+    poc-camel - Available Tasks
+    ===========================
+      rake help              Show all available tasks
+      rake infra:start       Start all infrastructure services
+      rake infra:stop        Stop all infrastructure services
+      rake test:run          Run all tests (unit + integration + e2e) with coverage gate 98%
+      rake k8s:build         Build and load container images (APP=gateway|processor|all)
+      rake k8s:deploy        Deploy to Kubernetes (OVERLAY=dev|prod, RESTART_ONLY=1)
+      rake k8s:undeploy      Undeploy from Kubernetes (APPS_ONLY=1, CLUSTER_DELETE=1)
+      rake k8s:check         Verify pods + log asserts (APP=, EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1)
 
-    Tests / build:
-      rake test:run          All tests + coverage
-      rake test:quick        Tests without coverage
-      rake test:payment      payment-processor tests only
-      rake test:verify       Coverage gate (98%)
-      rake test:coverage     Show last coverage table
-      rake build:compile     Package without tests
-      rake build:full        clean verify
-
-    Local infra (no K8s):
-      rake infra:up          podman-compose up
-      rake infra:down        podman-compose down -v
-      rake infra:ps          Container status
-      rake infra:logs [SVC=] Follow compose logs
-
-    Kind lifecycle + deploy:
-      rake k8s:cluster       Create cluster (idempotent)
-      rake k8s:cluster_delete Delete cluster
-      rake k8s:up            namespace+infra+build+load+apps
-      rake k8s:reset         down + up from scratch
-      rake k8s:down          Undeploy everything
-      rake k8s:undeploy      Apps only (keep infra)
-      rake k8s:deploy        Apps via Kustomize (OVERLAY=#{OVERLAY})
-      rake k8s:restart [APP=] Rollout restart + wait
-      rake k8s:rebuild [APP=] Rebuild image + load + restart
-      rake k8s:check [APP=]  Verify pods + assert log patterns
-      rake k8s:status        Pods + services
-      rake k8s:logs [APP=]   Follow logs
-      rake k8s:portforward   Gateway -> localhost:8080
-      rake k8s:smoke         E2E payment check
-
-    Env knobs: OVERLAY=dev|prod CLUSTER=#{CLUSTER} NAMESPACE=#{NAMESPACE} CONTAINER_ENGINE=#{CONTAINER_ENGINE}
+    Flags (ENV, hidden from rake -T):
+      test:run  COVERAGE=0 (skip coverage), SCOPE=processor|backend|shared
+      infra:start SVC=name (follow logs after start)
+      k8s:*     APP=gateway|processor|all, OVERLAY=dev|prod
+      k8s:check EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1
+    Env knobs: OVERLAY=#{OVERLAY} CLUSTER=#{CLUSTER} NAMESPACE=#{NAMESPACE} CONTAINER_ENGINE=#{CONTAINER_ENGINE}
   HELP
 end
+
+task :default => :help
