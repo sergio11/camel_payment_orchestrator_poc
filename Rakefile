@@ -285,14 +285,10 @@ namespace :k8s do
     run_cmd("kind create cluster --name poc-camel")
   end
 
-  desc 'Undeploy everything'
+  desc 'Undeploy everything (apps first, infra second, namespace last)'
   task :down do
     run_cmd("kubectl delete -k #{File.join(ROOT, 'kubernetes', 'overlays', 'dev')}", fail: false)
     run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure')} --recursive", fail: false)
-    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'kafka.yaml')}", fail: false)
-    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'jaeger.yaml')}", fail: false)
-    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'monitoring.yaml')}", fail: false)
-    run_cmd("kubectl delete -f #{File.join(ROOT, 'kubernetes', 'infrastructure', 'postgres.yaml')}", fail: false)
     run_cmd("kubectl delete namespace poc-camel", fail: false)
   end
 
@@ -332,18 +328,19 @@ namespace :k8s do
     end
   end
 
-  desc 'Load images into Kind cluster (podman-friendly)'
+  desc 'Load images into Kind cluster (podman-friendly, Windows-safe via tar file)'
   task :load do
-    docker_ok = system("docker info >NUL 2>&1") || system("docker info >/dev/null 2>&1")
-    images = ['poc-camel/api-gateway:dev', 'poc-camel/payment-processor:dev']
+    require 'tmpdir'
+    images = ['poc-camel/api-gateway:dev', 'localhost/poc-camel/api-gateway:dev',
+              'poc-camel/payment-processor:dev', 'localhost/poc-camel/payment-processor:dev']
     images.each do |img|
-      if docker_ok
-        ok = run_cmd("kind load docker-image #{img} --name poc-camel", fail: false)
-        next if ok
+      tar = File.join(Dir.tmpdir, "kind-load-#{img.gsub(/[\/:]/, '_')}.tar")
+      if run_cmd("#{CONTAINER_ENGINE} save -o #{tar} #{img}", fail: false)
+        run_cmd("kind load image-archive #{tar} --name poc-camel", fail: false)
+        FileUtils.rm_f(tar)
+      else
+        puts "WARN: could not save image #{img}, skipping"
       end
-      ok = run_cmd("podman save #{img} localhost/#{img} 2>NUL | kind load image-archive /dev/stdin --name poc-camel", fail: false)
-      ok ||= run_cmd("podman save #{img} | kind load image-archive /dev/stdin --name poc-camel", fail: false)
-      run_cmd("kind load docker-image #{img} --name poc-camel", fail: false) unless ok
     end
   end
 

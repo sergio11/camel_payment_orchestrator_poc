@@ -16,8 +16,9 @@ resources:
   # postgres StatefulSet+PVC+Service live in kubernetes/infrastructure/postgres.yaml
   # and are deployed via k8s:infra (glob *.yaml), not here, to keep infra/app split.
 
-commonLabels:
-  managed-by: kustomize
+labels:
+  - pairs:
+      managed-by: kustomize
 
 commonAnnotations:
   managed-by: kustomize

@@ -68,10 +68,19 @@ spec:
         - port: 29092
           protocol: TCP
     - to:
-        - namespaceSelector: {}
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
           podSelector:
             matchLabels:
-              app: kube-dns
+              k8s-app: kube-dns
       ports:
         - port: 53
           protocol: UDP
@@ -98,10 +107,19 @@ spec:
         - port: 29092
           protocol: TCP
     - to:
-        - namespaceSelector: {}
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - port: 5432
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
           podSelector:
             matchLabels:
-              app: kube-dns
+              k8s-app: kube-dns
       ports:
         - port: 53
           protocol: UDP
