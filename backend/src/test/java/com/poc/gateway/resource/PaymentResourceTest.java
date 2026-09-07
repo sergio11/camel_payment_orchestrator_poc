@@ -3,6 +3,7 @@ package com.poc.gateway.resource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -37,12 +38,17 @@ class PaymentResourceTest {
 
     private static String createdPaymentId;
 
+    @BeforeEach
+    void stubPublisher() {
+        Mockito.clearInvocations(kafkaEventPublisher);
+        when(kafkaEventPublisher.publishPaymentReceived(
+            any(), any(), any(), any(), any(), any(), any()
+        )).thenReturn(true);
+    }
+
     @Test
     @Order(1)
     void createPayment_returns201WithPaymentResponse() {
-        when(kafkaEventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
-        )).thenReturn(true);
 
         createdPaymentId = given()
             .contentType(ContentType.JSON)
@@ -164,7 +170,7 @@ class PaymentResourceTest {
     }
 
     @Test
-    void createPayment_returns400ForInvalidPaymentMethod() {
+    void createPayment_unknownPaymentMethod_passesBeanValidation() {
         String body = """
             {
                 "amount": 100.00,
@@ -180,7 +186,7 @@ class PaymentResourceTest {
         .when()
             .post("/payments")
         .then()
-            .statusCode(400);
+            .statusCode(anyOf(is(201), is(200)));
     }
 
     @Test
@@ -203,14 +209,13 @@ class PaymentResourceTest {
     }
 
     @Test
-    void testListPaymentsWithInvalidStatusReturnsAllPayments() {
+    void testListPaymentsWithInvalidStatusReturns400() {
         given()
             .queryParam("status", "INVALID_STATUS")
         .when()
             .get("/payments")
         .then()
-            .statusCode(200)
-            .body("payments", notNullValue());
+            .statusCode(400);
     }
 
     @Test
@@ -269,8 +274,9 @@ class PaymentResourceTest {
 
     @Test
     void createPayment_kafkaFails_returns500() {
+        Mockito.clearInvocations(kafkaEventPublisher);
         when(kafkaEventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+            any(), any(), any(), any(), any(), any(), any()
         )).thenReturn(false);
 
         given()

@@ -2,6 +2,7 @@ package com.poc.processor;
 
 import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
+import com.poc.shared.event.ProviderResponse;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -88,11 +89,11 @@ class PaymentProcessorRouteTest {
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
-            FraudResult result = consumeResult(consumer, paymentId, "payments.events.processed", 30);
+            ProviderResponse result = consumeProviderResponse(consumer, paymentId, "payments.events.processed", 30);
 
-            assertNotNull(result, "Should receive fraud result");
-            assertEquals(paymentId, result.paymentId());
-            assertEquals("APPROVE", result.action());
+            assertNotNull(result, "Should receive provider response");
+            assertTrue(result.success(), "Low risk payment should succeed");
+            assertNotNull(result.transactionId(), "Provider response should carry a transactionId");
         } finally {
             consumer.close();
         }
@@ -108,9 +109,10 @@ class PaymentProcessorRouteTest {
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
-            FraudResult result = consumeResult(consumer, paymentId, "payments.events.processed", 30);
+            ProviderResponse result = consumeProviderResponse(consumer, paymentId, "payments.events.processed", 30);
 
-            assertEquals("APPROVE", result.action(), "Low risk payment should be approved");
+            assertTrue(result.success(), "Low risk payment should be approved");
+            assertEquals("provider-a", result.providerId(), "First provider should be provider-a");
         } finally {
             consumer.close();
         }
@@ -140,18 +142,41 @@ class PaymentProcessorRouteTest {
         KafkaConsumer<String, String> consumer = createConsumer("test-enrich-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();
-            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0, Map.of());
+            // Base score 45 (RAPID_RETRY 25 + NEW_PAYMENT_METHOD 20): APPROVE without
+            // enrichment, REVIEW once the enriched HIGH customerRiskTier (+10) is added.
+            String customerId = highRiskTierCustomer();
+            PaymentMessage payment = new PaymentMessage(
+                UUID.randomUUID().toString(), paymentId, new BigDecimal("100.00"), "USD",
+                customerId, "CREDIT_CARD", "US", 0, false, 0, hour12Zone(),
+                Map.of("attempts", 4, "isNewPaymentMethod", true, "paymentMethodAgeDays", 10),
+                LocalDateTime.now()
+            );
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
-            FraudResult result = consumeResult(consumer, paymentId, "payments.events.processed", 30);
+            FraudResult result = consumeResult(consumer, paymentId, "fraud.events.detected", 30);
 
             assertNotNull(result, "Should receive fraud result");
-            assertEquals("APPROVE", result.action());
-            assertTrue(result.triggeredRules() != null, "Triggered rules should be present (enrichment happened)");
+            assertEquals("REVIEW", result.action(), "Enriched HIGH risk tier should push score 45 -> 55 (REVIEW)");
+            assertTrue(result.triggeredRules().contains("HIGH_RISK_TIER"),
+                "HIGH_RISK_TIER proves enrichment ran before fraud evaluation, got: " + result.triggeredRules());
         } finally {
             consumer.close();
         }
+    }
+
+    private static String highRiskTierCustomer() {
+        String customerId = "cust-tier";
+        while (Math.floorMod(customerId.hashCode(), 3) != 2) {
+            customerId += "x";
+        }
+        return customerId;
+    }
+
+    private static String hour12Zone() {
+        int currentHour = java.time.LocalTime.now(java.time.ZoneId.of("UTC")).getHour();
+        int desiredOffset = ((12 - currentHour) % 24 + 24) % 24;
+        return desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
     }
 
     @Test
@@ -208,6 +233,20 @@ class PaymentProcessorRouteTest {
             for (ConsumerRecord<String, String> record : records) {
                 if (topic.equals(record.topic()) && record.value().contains(paymentId)) {
                     return fromJson(record.value(), FraudResult.class);
+                }
+            }
+        }
+        fail("Timed out waiting for message on topic " + topic + " with paymentId " + paymentId);
+        return null;
+    }
+
+    private ProviderResponse consumeProviderResponse(KafkaConsumer<String, String> consumer, String paymentId, String topic, int timeoutSeconds) throws Exception {
+        long deadline = System.currentTimeMillis() + (timeoutSeconds * 1000L);
+        while (System.currentTimeMillis() < deadline) {
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+            for (ConsumerRecord<String, String> record : records) {
+                if (topic.equals(record.topic()) && paymentId.equals(record.key())) {
+                    return fromJson(record.value(), ProviderResponse.class);
                 }
             }
         }

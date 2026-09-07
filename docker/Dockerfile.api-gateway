@@ -18,8 +18,9 @@ COPY shared/src shared/src
 COPY backend/src backend/src
 
 # Build the application
-# CI runs tests separately
-RUN mvn clean package -DskipTests -pl backend -am
+# Tests + JaCoCo check gate run inside the image build (backend needs no containers).
+# Do NOT reintroduce -DskipTests: images must only be built from green code.
+RUN mvn clean verify -pl backend -am
 
 # Stage 2: Runtime with Quarkus
 FROM eclipse-temurin:17-jre-alpine

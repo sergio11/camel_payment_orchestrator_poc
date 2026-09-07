@@ -121,16 +121,21 @@ public class PaymentRepository {
                 .filter(p -> status == null || p.status() == status)
                 .count();
         }
-        if (customerId != null && status != null) {
-            return PaymentEntity.count("customerId = ?1 and status = ?2", customerId, status);
-        }
+        StringBuilder jpql = new StringBuilder("SELECT COUNT(e) FROM PaymentEntity e WHERE 1=1");
         if (customerId != null) {
-            return PaymentEntity.count("customerId = ?1", customerId);
+            jpql.append(" AND e.customerId = :customerId");
         }
         if (status != null) {
-            return PaymentEntity.count("status = ?1", status);
+            jpql.append(" AND e.status = :status");
         }
-        return PaymentEntity.count();
+        var q = em.createQuery(jpql.toString(), Long.class);
+        if (customerId != null) {
+            q.setParameter("customerId", customerId);
+        }
+        if (status != null) {
+            q.setParameter("status", status);
+        }
+        return q.getSingleResult();
     }
 
     @Transactional

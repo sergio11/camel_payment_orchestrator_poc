@@ -8,7 +8,7 @@
 | Jackson serialization fails for BigDecimal | Medium | Low | Configure `@JsonSerialize(using = ToStringSerializer.class)` |
 | UUID validation fails on path parameter | Low | Medium | Add `@Pattern` validation for UUID format in resource |
 | ConcurrentHashMap thread-safety issues | Medium | Low | Use `computeIfAbsent` for thread-safe operations |
-| Custom validator not registered | Medium | Low | Ensure validator class has `@ApplicationScoped` annotation |
+| Custom validator not registered | Medium | Low | Keep validator as plain POJO with no CDI scope; Quarkus instantiates it via ArcConstraintValidatorFactory |
 | OpenAPI spec mismatch with implementation | Low | Medium | Run `rake spec:validate` before implementation |
 | In-memory storage loses data on restart | High | Low | Document limitation, defer DB to future phase |
 

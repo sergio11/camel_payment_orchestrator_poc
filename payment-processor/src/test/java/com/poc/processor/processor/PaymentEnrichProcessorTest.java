@@ -323,6 +323,21 @@ class PaymentEnrichProcessorTest {
     }
 
     @Test
+    @DisplayName("Enrichment handles truly null metadata map")
+    void enrichWithRiskData_handlesTrulyNullMetadata() {
+        PaymentMessage msg = new PaymentMessage(
+            "event-1", "payment-null-meta", new BigDecimal("100.00"), "USD", "customer-1",
+            "CREDIT_CARD", "US", 1, false, 30, "UTC",
+            null, LocalDateTime.now()
+        );
+        PaymentMessage enriched = processAndReturn(msg);
+
+        assertNotNull(enriched.metadata());
+        assertNotNull(enriched.metadata().get("enrichedAt"));
+        assertNotNull(enriched.metadata().get("customerRiskTier"));
+    }
+
+    @Test
     @DisplayName("Enrichment does not modify original metadata map")
     void enrichWithRiskData_doesNotModifyOriginal() {
         Map<String, Object> originalMetadata = new HashMap<>();

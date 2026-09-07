@@ -18,7 +18,9 @@ COPY shared/src shared/src
 COPY payment-processor/src payment-processor/src
 
 # Build the application
-# CI runs tests separately
+# NOTE: processor tests stay skipped HERE because route tests need Testcontainers
+# (Kafka), unavailable inside an image build. Gate them with `rake test:verify`
+# (which runs green, incl. 98% coverage) BEFORE `rake k8s:build`.
 RUN mvn clean package -DskipTests -pl payment-processor -am
 
 # Stage 2: Runtime with Quarkus

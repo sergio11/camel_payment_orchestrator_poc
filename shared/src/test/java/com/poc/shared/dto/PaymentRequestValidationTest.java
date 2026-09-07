@@ -13,6 +13,13 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Plain Java SE bean validation (Validation.buildDefaultValidatorFactory()).
+ * Limitation: this does NOT run inside Quarkus ArC, so it cannot catch CDI
+ * misconfiguration of custom ConstraintValidators (e.g. HV000030 surfacing
+ * as HTTP 500). Real regression coverage lives in the backend module
+ * (PaymentResourceValidationMatrixTest via POST /payments).
+ */
 class PaymentRequestValidationTest {
 
     private static Validator validator;

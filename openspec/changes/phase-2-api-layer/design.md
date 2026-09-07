@@ -309,8 +309,8 @@ public @interface SupportedCurrency {
     Class<? extends Payload>[] payload() default {};
 }
 
-@ApplicationScoped
 public class SupportedCurrencyValidator implements ConstraintValidator<SupportedCurrency, String> {
+    // Plain POJO, no CDI scope: Quarkus instantiates ConstraintValidators via ArcConstraintValidatorFactory.
     private static final Set<String> ALLOWED = Set.of("USD", "EUR", "GBP", "MXN", "JPY");
 
     @Override

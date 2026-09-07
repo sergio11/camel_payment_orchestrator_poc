@@ -90,7 +90,7 @@ public class PaymentService {
                 Optional<OutboxEventEntity> evt = outbox.findByIdempotencyKey(key);
                 if (evt.isPresent()) {
                     UUID agg = evt.get().aggregateId;
-                    if (agg != null && repository != null) {
+                    if (agg != null) {
                         Optional<Payment> p = repository.findById(agg);
                         p.ifPresent(payment -> idempotencyCache.putIfAbsent(key, payment));
                         if (p.isPresent()) {

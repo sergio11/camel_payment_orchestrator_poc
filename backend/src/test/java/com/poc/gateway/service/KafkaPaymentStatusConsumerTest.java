@@ -56,6 +56,7 @@ class KafkaPaymentStatusConsumerTest {
         consumer.bootstrapServers = "localhost:9092";
         consumer.paymentsProcessedTopic = "payments.processed";
         consumer.paymentsFailedTopic = "payments.failed";
+        consumer.paymentsReviewTopic = "payments.review";
 
         testPayment = new Payment(
             UUID.randomUUID(),
@@ -137,13 +138,14 @@ class KafkaPaymentStatusConsumerTest {
 
         Payment updatedPayment = testPayment.withStatus(PaymentStatus.APPROVED);
         when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
-        when(repository.update(paymentId, PaymentStatus.APPROVED)).thenReturn(updatedPayment);
+        when(repository.updateIfPending(paymentId, PaymentStatus.APPROVED)).thenReturn(Optional.of(updatedPayment));
+        when(kafkaEventPublisher.publishStatusChanged(anyString(), anyString(), anyString())).thenReturn(true);
 
         var method = KafkaPaymentStatusConsumer.class.getDeclaredMethod("processRecord", ConsumerRecord.class);
         method.setAccessible(true);
         method.invoke(consumer, record);
 
-        verify(repository).update(paymentId, PaymentStatus.APPROVED);
+        verify(repository).updateIfPending(paymentId, PaymentStatus.APPROVED);
         verify(kafkaEventPublisher).publishStatusChanged(
             paymentId.toString(), "PENDING", "APPROVED");
     }
@@ -157,13 +159,14 @@ class KafkaPaymentStatusConsumerTest {
 
         Payment updatedPayment = testPayment.withStatus(PaymentStatus.FAILED);
         when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
-        when(repository.update(paymentId, PaymentStatus.FAILED)).thenReturn(updatedPayment);
+        when(repository.updateIfPending(paymentId, PaymentStatus.FAILED)).thenReturn(Optional.of(updatedPayment));
+        when(kafkaEventPublisher.publishStatusChanged(anyString(), anyString(), anyString())).thenReturn(true);
 
         var method = KafkaPaymentStatusConsumer.class.getDeclaredMethod("processRecord", ConsumerRecord.class);
         method.setAccessible(true);
         method.invoke(consumer, record);
 
-        verify(repository).update(paymentId, PaymentStatus.FAILED);
+        verify(repository).updateIfPending(paymentId, PaymentStatus.FAILED);
         verify(kafkaEventPublisher).publishStatusChanged(
             paymentId.toString(), "PENDING", "FAILED");
     }
@@ -175,14 +178,12 @@ class KafkaPaymentStatusConsumerTest {
         ConsumerRecord<String, String> record = createRecord(
             "some.other.topic", paymentId.toString(), "{}");
 
-        when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
-
         var method = KafkaPaymentStatusConsumer.class.getDeclaredMethod("processRecord", ConsumerRecord.class);
         method.setAccessible(true);
         method.invoke(consumer, record);
 
-        verify(repository).findById(paymentId);
-        verify(repository, never()).update(any(), any());
+        verify(repository, never()).findById(any());
+        verify(repository, never()).updateIfPending(any(), any());
         verify(kafkaEventPublisher, never()).publishStatusChanged(any(), any(), any());
     }
 
@@ -225,7 +226,28 @@ class KafkaPaymentStatusConsumerTest {
         method.setAccessible(true);
         method.invoke(consumer, record);
 
-        verify(repository, never()).update(any(), any());
+        verify(repository, never()).updateIfPending(any(), any());
+    }
+
+    @Test
+    @DisplayName("processRecord - REVIEW topic updates status and publishes event")
+    void processRecord_reviewTopic_updatesStatusAndPublishes() throws Exception {
+        UUID paymentId = testPayment.id();
+        ConsumerRecord<String, String> record = createRecord(
+            "payments.review", paymentId.toString(), "{}");
+
+        Payment updatedPayment = testPayment.withStatus(PaymentStatus.REVIEW);
+        when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
+        when(repository.updateIfPending(paymentId, PaymentStatus.REVIEW)).thenReturn(Optional.of(updatedPayment));
+        when(kafkaEventPublisher.publishStatusChanged(anyString(), anyString(), anyString())).thenReturn(true);
+
+        var method = KafkaPaymentStatusConsumer.class.getDeclaredMethod("processRecord", ConsumerRecord.class);
+        method.setAccessible(true);
+        method.invoke(consumer, record);
+
+        verify(repository).updateIfPending(paymentId, PaymentStatus.REVIEW);
+        verify(kafkaEventPublisher).publishStatusChanged(
+            paymentId.toString(), "PENDING", "REVIEW");
     }
 
     private void invokeStartConsumerThread() throws Exception {
@@ -312,7 +334,7 @@ class KafkaPaymentStatusConsumerTest {
 
         Payment updatedPayment = testPayment.withStatus(PaymentStatus.APPROVED);
         when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
-        when(repository.update(paymentId, PaymentStatus.APPROVED)).thenReturn(updatedPayment);
+        when(repository.updateIfPending(paymentId, PaymentStatus.APPROVED)).thenReturn(Optional.of(updatedPayment));
         doThrow(new RuntimeException("kafka down")).when(kafkaEventPublisher)
             .publishStatusChanged(anyString(), anyString(), anyString());
 
@@ -320,7 +342,7 @@ class KafkaPaymentStatusConsumerTest {
         method.setAccessible(true);
         assertThrows(Exception.class, () -> method.invoke(consumer, record));
 
-        verify(repository).update(paymentId, PaymentStatus.APPROVED);
+        verify(repository).updateIfPending(paymentId, PaymentStatus.APPROVED);
     }
 
     @Test
@@ -332,7 +354,7 @@ class KafkaPaymentStatusConsumerTest {
 
         Payment updatedPayment = testPayment.withStatus(PaymentStatus.FAILED);
         when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
-        when(repository.update(paymentId, PaymentStatus.FAILED)).thenReturn(updatedPayment);
+        when(repository.updateIfPending(paymentId, PaymentStatus.FAILED)).thenReturn(Optional.of(updatedPayment));
         doThrow(new RuntimeException("kafka down")).when(kafkaEventPublisher)
             .publishStatusChanged(anyString(), anyString(), anyString());
 
@@ -340,7 +362,7 @@ class KafkaPaymentStatusConsumerTest {
         method.setAccessible(true);
         assertThrows(Exception.class, () -> method.invoke(consumer, record));
 
-        verify(repository).update(paymentId, PaymentStatus.FAILED);
+        verify(repository).updateIfPending(paymentId, PaymentStatus.FAILED);
     }
 
     @Test
@@ -351,14 +373,14 @@ class KafkaPaymentStatusConsumerTest {
             "payments.processed", paymentId.toString(), "{}");
 
         when(repository.findById(paymentId)).thenReturn(Optional.of(testPayment));
-        when(repository.update(paymentId, PaymentStatus.APPROVED))
+        when(repository.updateIfPending(paymentId, PaymentStatus.APPROVED))
             .thenThrow(new RuntimeException("db error"));
 
         var method = KafkaPaymentStatusConsumer.class.getDeclaredMethod("processRecord", ConsumerRecord.class);
         method.setAccessible(true);
         assertThrows(Exception.class, () -> method.invoke(consumer, record));
 
-        verify(repository).update(paymentId, PaymentStatus.APPROVED);
+        verify(repository).updateIfPending(paymentId, PaymentStatus.APPROVED);
         verify(kafkaEventPublisher, never()).publishStatusChanged(anyString(), anyString(), anyString());
     }
 

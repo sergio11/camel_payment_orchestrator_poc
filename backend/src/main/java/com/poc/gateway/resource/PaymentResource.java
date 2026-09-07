@@ -28,6 +28,12 @@ public class PaymentResource {
     @POST
     @Blocking
     public Response createPayment(@Valid PaymentRequest request, @HeaderParam("Idempotency-Key") String idempotencyKey) {
+        if (request == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(ErrorResponse.from("VALIDATION_ERROR", "Invalid request",
+                    List.of(new ErrorResponse.ErrorDetail("body", "Request body is required"))))
+                .build();
+        }
         String effectiveKey = idempotencyKey;
         if (effectiveKey == null || effectiveKey.isBlank()) {
             effectiveKey = java.util.UUID.randomUUID().toString();

@@ -28,17 +28,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:provider-selection")
             .routeId("provider-selection")
-            .process(exchange -> {
-                PaymentMessage orig = exchange.getMessage().getHeader("OriginalPaymentMessage", PaymentMessage.class);
-                if (orig != null) {
-                    if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
-                        exchange.getMessage().setHeader("OriginalPaymentId", orig.paymentId());
-                    }
-                    if (exchange.getMessage().getHeader("OriginalEventId") == null) {
-                        exchange.getMessage().setHeader("OriginalEventId", orig.eventId());
-                    }
-                }
-            })
+            .bean(ProviderRouterBean.class, "restoreOriginalHeaders")
             .log("Selecting provider for payment: ${header.OriginalPaymentId}")
             .dynamicRouter(method(ProviderRouterBean.class, "routeToProvider"))
             .end();
@@ -72,19 +62,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .routeId("call-provider-a")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
-            .process(exchange -> {
-                exchange.setProperty("CamelFraudResult", exchange.getMessage().getBody());
-                PaymentMessage orig = exchange.getMessage().getHeader("OriginalPaymentMessage", PaymentMessage.class);
-                if (orig != null) {
-                    exchange.getMessage().setBody(orig);
-                    if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
-                        exchange.getMessage().setHeader("OriginalPaymentId", orig.paymentId());
-                    }
-                    if (exchange.getMessage().getHeader("OriginalEventId") == null) {
-                        exchange.getMessage().setHeader("OriginalEventId", orig.eventId());
-                    }
-                }
-            })
+            .bean(ProviderRouterBean.class, "prepareProviderCall")
             .choice()
                 .when(header("OriginalPaymentMessage").isNull())
                     .log("Missing OriginalPaymentMessage, routing to dead letter")
@@ -105,7 +83,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                             .log("Provider A returned error: ${body.errorCode}")
                             .process(exchange -> {
                                 ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
-                                throw new RuntimeException("Provider A error: " + (resp != null ? resp.errorMessage() : "unknown"));
+                                throw new RuntimeException("Provider A error: " + resp.errorMessage());
                             })
                     .end()
             .end();
@@ -139,19 +117,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
             .routeId("call-provider-b")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
-            .process(exchange -> {
-                exchange.setProperty("CamelFraudResult", exchange.getMessage().getBody());
-                PaymentMessage orig = exchange.getMessage().getHeader("OriginalPaymentMessage", PaymentMessage.class);
-                if (orig != null) {
-                    exchange.getMessage().setBody(orig);
-                    if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
-                        exchange.getMessage().setHeader("OriginalPaymentId", orig.paymentId());
-                    }
-                    if (exchange.getMessage().getHeader("OriginalEventId") == null) {
-                        exchange.getMessage().setHeader("OriginalEventId", orig.eventId());
-                    }
-                }
-            })
+            .bean(ProviderRouterBean.class, "prepareProviderCall")
             .choice()
                 .when(header("OriginalPaymentMessage").isNull())
                     .log("Missing OriginalPaymentMessage, routing to dead letter")
@@ -172,25 +138,14 @@ public class ProviderSelectionRoute extends RouteBuilder {
                             .log("Provider B returned error: ${body.errorCode}")
                             .process(exchange -> {
                                 ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
-                                throw new RuntimeException("Provider B error: " + (resp != null ? resp.errorMessage() : "unknown"));
+                                throw new RuntimeException("Provider B error: " + resp.errorMessage());
                             })
                     .end()
             .end();
 
         from("direct:dead-letter")
             .routeId("dead-letter")
-            .process(exchange -> {
-                PaymentMessage orig = exchange.getIn().getHeader("OriginalPaymentMessage", PaymentMessage.class);
-                if (orig != null) {
-                    exchange.getIn().setBody(orig);
-                    if (exchange.getIn().getHeader("OriginalPaymentId") == null) {
-                        exchange.getIn().setHeader("OriginalPaymentId", orig.paymentId());
-                    }
-                    if (exchange.getIn().getHeader("OriginalEventId") == null) {
-                        exchange.getIn().setHeader("OriginalEventId", orig.eventId());
-                    }
-                }
-            })
+            .bean(ProviderRouterBean.class, "restoreDeadLetter")
             .choice()
                 .when(simple("${body} == null"))
                     .log("Missing body and OriginalPaymentMessage, dropping message: ${header.OriginalPaymentId}")

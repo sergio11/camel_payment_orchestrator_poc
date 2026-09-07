@@ -55,10 +55,8 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .unmarshal(paymentJson)
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
-                if (msg != null) {
-                    exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
-                    exchange.getIn().setHeader("OriginalEventId", msg.eventId());
-                }
+                exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
+                exchange.getIn().setHeader("OriginalEventId", msg.eventId());
             })
             .log("Received payment: ${header.OriginalPaymentId}")
             .wireTap("direct:audit-pipeline")

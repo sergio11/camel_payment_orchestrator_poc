@@ -186,6 +186,23 @@ class FraudEvaluationProcessorTest {
     }
 
     @Test
+    @DisplayName("UNUSUAL_HOUR does NOT fire when local hour is below range (hour 1)")
+    void unusualHour_belowRange_noFire() {
+        int currentHour = LocalTime.now(ZoneId.of("UTC")).getHour();
+        int targetHour = 1; // below unusual range [2,5]
+        int desiredOffset = ((targetHour - currentHour) % 24 + 24) % 24;
+        String zoneId = desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+
+        PaymentMessage msg = new PaymentMessage(
+            "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
+            "CREDIT_CARD", "US", 0, false, 0, zoneId, Map.of(), LocalDateTime.now()
+        );
+        FraudResult result = processAndReturn(msg);
+        assertFalse(result.triggeredRules().contains("UNUSUAL_HOUR"),
+            "Expected UNUSUAL_HOUR not to fire at hour 1 with timezone " + zoneId);
+    }
+
+    @Test
     @DisplayName("UNUSUAL_HOUR uses UTC fallback when timeZone is null")
     void unusualHour_nullTimezone_fallsBackToUtc() {
         PaymentMessage msg = new PaymentMessage(
@@ -548,5 +565,19 @@ class FraudEvaluationProcessorTest {
         FraudResult result = processAndReturn(msg);
         assertNotNull(result);
         assertEquals("APPROVE", result.action());
+    }
+
+    @Test
+    @DisplayName("Processor handles truly null metadata map")
+    void handlesTrulyNullMetadata() {
+        PaymentMessage msg = new PaymentMessage(
+            "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
+            "CREDIT_CARD", "US", 0, false, 0, "UTC", null, LocalDateTime.now()
+        );
+        FraudResult result = processAndReturn(msg);
+        assertNotNull(result);
+        assertEquals("APPROVE", result.action());
+        assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
+        assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
     }
 }

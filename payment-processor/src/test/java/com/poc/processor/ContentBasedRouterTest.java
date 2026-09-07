@@ -103,4 +103,25 @@ class ContentBasedRouterTest {
         String route = routerBean.routeToFraudCheck(new BigDecimal("100"), "CREDIT_CARD", "XX");
         assertEquals("direct:fraud-review", route, "High-risk country should override low amount");
     }
+
+    @Test
+    @DisplayName("Verify null amount routes to fraud-check")
+    void testNullAmountRoutesToFraudCheck() {
+        String route = routerBean.routeToFraudCheck(null, "CREDIT_CARD", "US");
+        assertEquals("direct:fraud-check", route, "Null amount should route to fraud-check");
+    }
+
+    @Test
+    @DisplayName("Verify null country routes to fraud-check")
+    void testNullCountryRoutesToFraudCheck() {
+        String route = routerBean.routeToFraudCheck(new BigDecimal("100"), "CREDIT_CARD", null);
+        assertEquals("direct:fraud-check", route, "Null country should route to fraud-check");
+    }
+
+    @Test
+    @DisplayName("Verify null payment method routes to fraud-check")
+    void testNullPaymentMethodRoutesToFraudCheck() {
+        String route = routerBean.routeToFraudCheck(new BigDecimal("6000"), null, "US");
+        assertEquals("direct:fraud-check", route, "Null payment method should route to fraud-check");
+    }
 }

@@ -44,23 +44,19 @@ public class KafkaEventPublisher {
 
     private volatile KafkaProducer<String, String> producer;
 
-    private KafkaProducer<String, String> getProducer() {
+    private synchronized KafkaProducer<String, String> getProducer() {
         if (producer == null) {
-            synchronized (this) {
-                if (producer == null) {
-                    producer = new KafkaProducer<>(Map.of(
-                        ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
-                        ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
-                        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
-                        ProducerConfig.ACKS_CONFIG, "all",
-                        ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true,
-                        ProducerConfig.RETRIES_CONFIG, 3,
-                        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 15000,
-                        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000,
-                        ProducerConfig.MAX_BLOCK_MS_CONFIG, 5000
-                    ));
-                }
-            }
+            producer = new KafkaProducer<>(Map.of(
+                ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(),
+                ProducerConfig.ACKS_CONFIG, "all",
+                ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true,
+                ProducerConfig.RETRIES_CONFIG, 3,
+                ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 15000,
+                ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000,
+                ProducerConfig.MAX_BLOCK_MS_CONFIG, 5000
+            ));
         }
         return producer;
     }

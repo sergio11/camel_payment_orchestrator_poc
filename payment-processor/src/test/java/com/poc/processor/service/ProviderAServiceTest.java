@@ -164,6 +164,25 @@ class ProviderAServiceTest {
     }
 
     @Test
+    @DisplayName("providerId is provider-a")
+    void providerId_isProviderA() {
+        assertEquals("provider-a", providerAService.providerId());
+    }
+
+    @Test
+    @DisplayName("processPayment handles null amount without throwing")
+    void processPayment_nullAmount_noException() {
+        PaymentMessage msg = new PaymentMessage(
+                "event-null", "payment-null", null, "USD",
+                "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
+                Map.of(), LocalDateTime.now()
+        );
+        jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
+        assertNotNull(response);
+        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
+    }
+
+    @Test
     @DisplayName("processPayment success response has transactionId and processedAt")
     void processPayment_success_hasTransactionIdAndTimestamp() {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
