@@ -22,7 +22,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 @QuarkusTest
 @QuarkusTestResource(KafkaTestResource.class)
@@ -82,10 +83,11 @@ class WireTapTest {
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
-            String auditEvent = consumeAuditEvent(consumer, paymentId, 30);
-
-            assertNotNull(auditEvent, "Should receive audit event on payments.events.audit topic");
-            assertTrue(auditEvent.contains(paymentId), "Audit event should contain paymentId");
+            await().atMost(30, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).untilAsserted(() -> {
+                String auditEvent = consumeAuditEvent(consumer, paymentId, 5);
+                assertThat(auditEvent).isNotNull();
+                assertThat(auditEvent).contains(paymentId);
+            });
         } finally {
             consumer.close();
         }

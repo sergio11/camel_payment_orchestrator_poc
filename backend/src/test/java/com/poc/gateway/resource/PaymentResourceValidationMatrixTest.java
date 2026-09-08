@@ -1,5 +1,6 @@
 package com.poc.gateway.resource;
 
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
@@ -23,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
+@QuarkusTestResource(com.poc.backend.integration.BackendIntegrationTest.class)
 class PaymentResourceValidationMatrixTest {
 
     @InjectMock

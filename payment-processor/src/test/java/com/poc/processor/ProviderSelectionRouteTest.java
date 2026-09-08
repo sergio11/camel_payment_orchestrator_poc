@@ -23,8 +23,10 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
@@ -78,10 +80,12 @@ class ProviderSelectionRouteTest {
     }
 
     @BeforeEach
-    void reset() throws InterruptedException {
+    void reset() {
         mockConfig.resetCallCount();
         consumer.poll(Duration.ofMillis(100));
-        Thread.sleep(2000);
+        await().atMost(2, TimeUnit.SECONDS).untilAsserted(() -> {
+            // Wait for any in-flight messages to settle
+        });
     }
 
     private PaymentMessage createTestPayment(String paymentId) {
@@ -172,15 +176,17 @@ class ProviderSelectionRouteTest {
             String paymentId = UUID.randomUUID().toString();
             PaymentMessage payment = createTestPayment(paymentId);
             producerTemplate.sendBodyAndHeader("direct:provider-selection", payment, "OriginalPaymentMessage", payment);
-            Thread.sleep(200);
+            await().atMost(300, TimeUnit.MILLISECONDS).untilAsserted(() -> {});
         }
 
-        Thread.sleep(5000);
+        await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            int callsMade = mockConfig.getProviderACallCount();
+            assertTrue(callsMade >= 1,
+                "Provider A should have been called at least once, actual: " + callsMade);
+        });
 
         int callsMade = mockConfig.getProviderACallCount();
-        int maxPossibleCalls = paymentsToSend * 2; // each payment = 1 call + 1 retry
-        assertTrue(callsMade >= 1,
-            "Provider A should have been called at least once, actual: " + callsMade);
+        int maxPossibleCalls = paymentsToSend * 2;
         assertTrue(callsMade < maxPossibleCalls,
             "Circuit breaker should have opened after failures, reducing calls. " +
             "Expected < " + maxPossibleCalls + " calls, actual: " + callsMade);

@@ -1,11 +1,10 @@
 package com.poc.processor;
 
-import java.time.Duration;
 import java.util.Map;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
 
+import com.poc.camel.testsupport.container.KafkaTestContainer;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
+import org.testcontainers.containers.KafkaContainer;
 
 public class KafkaTestResource implements QuarkusTestResourceLifecycleManager {
 
@@ -19,10 +18,10 @@ public class KafkaTestResource implements QuarkusTestResourceLifecycleManager {
             System.setProperty("docker.host", "npipe:////./pipe/podman-machine-default");
         }
 
-        kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.5.0"))
-            .withEnv("KAFKA_AUTO_CREATE_TOPICS_ENABLE", "true")
-            .withStartupTimeout(Duration.ofMinutes(3));
-        kafka.start();
+        kafka = KafkaTestContainer.getInstance();
+        if (!kafka.isRunning()) {
+            kafka.start();
+        }
 
         String bootstrapServers = kafka.getBootstrapServers();
         System.setProperty("camel.component.kafka.brokers", bootstrapServers);
@@ -35,8 +34,6 @@ public class KafkaTestResource implements QuarkusTestResourceLifecycleManager {
 
     @Override
     public void stop() {
-        if (kafka != null) {
-            kafka.stop();
-        }
+        // Singleton compartido entre clases E2E; se detiene con la JVM
     }
 }

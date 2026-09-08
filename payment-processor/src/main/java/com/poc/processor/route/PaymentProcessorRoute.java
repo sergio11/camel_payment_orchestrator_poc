@@ -25,6 +25,15 @@ public class PaymentProcessorRoute extends RouteBuilder {
     @Inject
     ContentBasedRouterBean contentBasedRouterBean;
 
+    static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
+        if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
+            Object key = exchange.getMessage().getHeader("kafka.KEY");
+            if (key != null) {
+                exchange.getMessage().setHeader("OriginalPaymentId", key.toString());
+            }
+        }
+    }
+
     @Override
     public void configure() {
         // Transient failures: 3 redeliveries with exponential back-off, then retry topic (re-drivable, A4).
@@ -57,6 +66,11 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
                 exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
                 exchange.getIn().setHeader("OriginalEventId", msg.eventId());
+                if (msg.paymentId() == null || msg.amount() == null || msg.currency() == null
+                    || msg.customerId() == null || msg.paymentMethod() == null) {
+                    throw new IllegalArgumentException(
+                        "Invalid payment fields: required fields missing for payment " + msg.paymentId());
+                }
             })
             .log("Received payment: ${header.OriginalPaymentId}")
             .wireTap("direct:audit-pipeline")
@@ -110,6 +124,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
         // Transient-exhausted handler: re-drivable retry topic (consumed by A4 reviewer, not auto-replayed).
         from(DIRECT_RETRY_HANDLER)
             .routeId("retry-handler")
+            .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Exhausted retries for payment ${header.OriginalPaymentId}: ${exception.message}")
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
             .to(RETRY_TOPIC_URI)
@@ -118,6 +133,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
         // Poison handler: terminal dead-letter, no retry.
         from(DIRECT_POISON_DLQ)
             .routeId("poison-dlq-handler")
+            .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Poison payment ${header.OriginalPaymentId}: ${exception.message}")
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
             .to(DEAD_LETTER_TOPIC_URI)
@@ -126,6 +142,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
         // Legacy alias kept for backward compatibility (other routes/tests may reference it).
         from(DIRECT_DLQ_HANDLER)
             .routeId("error-dlq-handler")
+            .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Error processing payment ${header.OriginalPaymentId}: ${exception.message}")
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
             .to(DEAD_LETTER_TOPIC_URI)
