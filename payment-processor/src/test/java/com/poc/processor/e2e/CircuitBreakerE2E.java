@@ -51,6 +51,12 @@ class CircuitBreakerE2E {
 
     @AfterAll
     void teardown() {
+        try {
+            mockConfig.setProviderASucceeds(true);
+            mockConfig.setProviderBSucceeds(true);
+            closeCircuitBreaker();
+        } catch (Exception ignored) {
+        }
         if (producer != null) {
             producer.close();
         }
@@ -102,10 +108,11 @@ class CircuitBreakerE2E {
             assertThat(mockConfig.getProviderACallCount()).isGreaterThanOrEqualTo(1);
         });
 
-        int callsAfterOpen = mockConfig.getProviderACallCount();
-
+        // Re-enable providers and reset the call counter so any new successful call
+        // through the recovering circuit is unambiguously counted from zero.
         mockConfig.setProviderASucceeds(true);
         mockConfig.setProviderBSucceeds(true);
+        mockConfig.resetCallCount();
 
         await().atMost(60, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
             PaymentMessage payment = buildPayment();
@@ -113,7 +120,7 @@ class CircuitBreakerE2E {
                 producerTemplate.sendBodyAndHeader("direct:provider-selection", payment, "OriginalPaymentMessage", payment);
             } catch (Exception ignored) {
             }
-            assertThat(mockConfig.getProviderACallCount()).isGreaterThan(callsAfterOpen);
+            assertThat(mockConfig.getProviderACallCount()).isGreaterThan(0);
         });
     }
 
@@ -133,10 +140,11 @@ class CircuitBreakerE2E {
             assertThat(mockConfig.getProviderACallCount()).isGreaterThanOrEqualTo(1);
         });
 
-        int callsDuringFailure = mockConfig.getProviderACallCount();
-
+        // Re-enable providers and reset the call counter so the recovery assertion
+        // starts from a clean baseline of 0.
         mockConfig.setProviderASucceeds(true);
         mockConfig.setProviderBSucceeds(true);
+        mockConfig.resetCallCount();
 
         await().atMost(60, TimeUnit.SECONDS).pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
             PaymentMessage payment = buildPayment();
@@ -144,7 +152,7 @@ class CircuitBreakerE2E {
                 producerTemplate.sendBodyAndHeader("direct:provider-selection", payment, "OriginalPaymentMessage", payment);
             } catch (Exception ignored) {
             }
-            assertThat(mockConfig.getProviderACallCount()).isGreaterThan(callsDuringFailure);
+            assertThat(mockConfig.getProviderACallCount()).isGreaterThan(0);
         });
     }
 

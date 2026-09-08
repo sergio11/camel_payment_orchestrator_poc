@@ -5,6 +5,10 @@ import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
+import org.apache.camel.CamelContext;
+import org.apache.camel.Exchange;
+import org.apache.camel.support.DefaultExchange;
+import com.poc.processor.route.PaymentProcessorRoute;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -30,6 +34,9 @@ import static org.junit.jupiter.api.Assertions.*;
 @QuarkusTestResource(KafkaTestResource.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PaymentProcessorRouteTest {
+
+    @Inject
+    CamelContext camelContext;
 
     @Inject
     @ConfigProperty(name = "kafka.bootstrap.servers")
@@ -272,5 +279,42 @@ class PaymentProcessorRouteTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Test
+    @DisplayName("Verify restorePaymentIdFromKafkaKey covers all branches")
+    void testRestorePaymentIdFromKafkaKey() {
+        Exchange exchange = new DefaultExchange(camelContext);
+        exchange.getMessage().setHeader("OriginalPaymentId", "pid-1");
+        exchange.getMessage().setHeader("kafka.KEY", "key-1");
+        PaymentProcessorRoute.restorePaymentIdFromKafkaKey(exchange);
+        assertEquals("pid-1", exchange.getMessage().getHeader("OriginalPaymentId"));
+
+        Exchange exchange2 = new DefaultExchange(camelContext);
+        PaymentProcessorRoute.restorePaymentIdFromKafkaKey(exchange2);
+        assertNull(exchange2.getMessage().getHeader("OriginalPaymentId"));
+
+        Exchange exchange3 = new DefaultExchange(camelContext);
+        exchange3.getMessage().setHeader("kafka.KEY", "key-3");
+        PaymentProcessorRoute.restorePaymentIdFromKafkaKey(exchange3);
+        assertEquals("key-3", exchange3.getMessage().getHeader("OriginalPaymentId"));
+    }
+
+    @Test
+    @DisplayName("Verify validatePaymentMessage covers all null checks")
+    void testValidatePaymentMessage() {
+        PaymentMessage valid = new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now());
+        PaymentProcessorRoute.validatePaymentMessage(valid);
+
+        assertThrows(IllegalArgumentException.class, () ->
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", null, BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+        assertThrows(IllegalArgumentException.class, () ->
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", null, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+        assertThrows(IllegalArgumentException.class, () ->
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, null, "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+        assertThrows(IllegalArgumentException.class, () ->
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", null, "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+        assertThrows(IllegalArgumentException.class, () ->
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", null, "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
     }
 }

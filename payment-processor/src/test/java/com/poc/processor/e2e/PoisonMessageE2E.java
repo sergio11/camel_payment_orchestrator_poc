@@ -99,11 +99,11 @@ class PoisonMessageE2E {
         mockConfig.setProviderASucceeds(false);
         mockConfig.setProviderBSucceeds(false);
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             "payments.events.retry", TOPIC_DEAD_LETTER);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             String retryOrDlq = consumer.consumeUntilPredicate(
                 "payments.events.retry",
                 msg -> msg.contains(paymentId),
@@ -119,6 +119,8 @@ class PoisonMessageE2E {
             assertThat(retryOrDlq).isNotNull();
         } finally {
             consumer.close();
+            mockConfig.setProviderASucceeds(true);
+            mockConfig.setProviderBSucceeds(true);
         }
     }
 

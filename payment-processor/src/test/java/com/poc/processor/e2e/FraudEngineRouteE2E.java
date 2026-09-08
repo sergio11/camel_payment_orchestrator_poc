@@ -84,11 +84,11 @@ class FraudEngineRouteE2E {
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "CREDIT_CARD", 0,
             Map.of());
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_FRAUD_DETECTED, TOPIC_REVIEW);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             FraudResult fraudResult = consumer.consumeUntil(TOPIC_FRAUD_DETECTED, paymentId, FraudResult.class, 30);
             assertThat(fraudResult).isNotNull();
             assertThat(fraudResult.action()).isEqualTo("REVIEW");
@@ -108,11 +108,11 @@ class FraudEngineRouteE2E {
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0,
             Map.of());
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_PROCESSED);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             ProviderResponse result = consumer.consumeUntil(TOPIC_PROCESSED, paymentId, ProviderResponse.class, 30);
             assertThat(result).isNotNull();
             assertThat(result.success()).isTrue();

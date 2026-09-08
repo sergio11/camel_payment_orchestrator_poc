@@ -63,11 +63,11 @@ class TopicVerificationE2E {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0);
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_PROCESSED, TOPIC_AUDIT);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             ProviderResponse processed = consumer.consumeUntil(TOPIC_PROCESSED, paymentId, ProviderResponse.class, 30);
             assertThat(processed).isNotNull();
             assertThat(processed.success()).isTrue();
@@ -85,11 +85,11 @@ class TopicVerificationE2E {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1);
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_FRAUD_DETECTED, TOPIC_FAILED, TOPIC_AUDIT);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             FraudResult fraud = consumer.consumeUntil(TOPIC_FRAUD_DETECTED, paymentId, FraudResult.class, 30);
             assertThat(fraud).isNotNull();
             assertThat(fraud.action()).isEqualTo("REJECT");
@@ -110,11 +110,11 @@ class TopicVerificationE2E {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "CREDIT_CARD", 0);
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_FRAUD_DETECTED, TOPIC_REVIEW, TOPIC_AUDIT);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             FraudResult fraud = consumer.consumeUntil(TOPIC_FRAUD_DETECTED, paymentId, FraudResult.class, 30);
             assertThat(fraud).isNotNull();
             assertThat(fraud.action()).isEqualTo("REVIEW");
@@ -132,12 +132,12 @@ class TopicVerificationE2E {
         String paymentId = UUID.randomUUID().toString();
         String malformed = "{ bad json {{{ ";
 
-        producer.sendRaw(TOPIC_RECEIVED, paymentId, malformed);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_DEAD_LETTER);
         try {
-            String dlq = consumer.consumeUntilPredicate(TOPIC_DEAD_LETTER, msg -> msg.contains(paymentId), 30);
+            producer.sendRaw(TOPIC_RECEIVED, paymentId, malformed);
+
+            String dlq = consumer.consumeUntil(TOPIC_DEAD_LETTER, paymentId, 30);
             assertThat(dlq).isNotNull();
         } finally {
             consumer.close();
@@ -153,17 +153,19 @@ class TopicVerificationE2E {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0);
 
-        producer.send(TOPIC_RECEIVED, paymentId, payment);
-
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_PROCESSED);
         try {
+            producer.send(TOPIC_RECEIVED, paymentId, payment);
+
             ProviderResponse result = consumer.consumeUntil(TOPIC_PROCESSED, paymentId, ProviderResponse.class, 45);
             assertThat(result).isNotNull();
             assertThat(result.success()).isTrue();
             assertThat(result.providerId()).isEqualTo("provider-b");
         } finally {
             consumer.close();
+            mockConfig.setProviderASucceeds(true);
+            mockConfig.setProviderBSucceeds(true);
         }
     }
 

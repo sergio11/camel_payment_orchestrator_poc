@@ -25,12 +25,20 @@ public class PaymentProcessorRoute extends RouteBuilder {
     @Inject
     ContentBasedRouterBean contentBasedRouterBean;
 
-    static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
+    public static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
         if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
             Object key = exchange.getMessage().getHeader("kafka.KEY");
             if (key != null) {
                 exchange.getMessage().setHeader("OriginalPaymentId", key.toString());
             }
+        }
+    }
+
+    public static void validatePaymentMessage(PaymentMessage msg) {
+        if (msg.paymentId() == null || msg.amount() == null || msg.currency() == null
+            || msg.customerId() == null || msg.paymentMethod() == null) {
+            throw new IllegalArgumentException(
+                "Invalid payment fields: required fields missing for payment " + (msg != null ? msg.paymentId() : "null"));
         }
     }
 
@@ -66,11 +74,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
                 exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
                 exchange.getIn().setHeader("OriginalEventId", msg.eventId());
-                if (msg.paymentId() == null || msg.amount() == null || msg.currency() == null
-                    || msg.customerId() == null || msg.paymentMethod() == null) {
-                    throw new IllegalArgumentException(
-                        "Invalid payment fields: required fields missing for payment " + msg.paymentId());
-                }
+                validatePaymentMessage(msg);
             })
             .log("Received payment: ${header.OriginalPaymentId}")
             .wireTap("direct:audit-pipeline")
@@ -126,6 +130,10 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("retry-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Exhausted retries for payment ${header.OriginalPaymentId}: ${exception.message}")
+            .choice()
+                .when(body().isInstanceOf(PaymentMessage.class))
+                    .marshal(paymentJson)
+            .end()
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
             .to(RETRY_TOPIC_URI)
             .log("Published to retry topic");

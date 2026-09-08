@@ -54,15 +54,17 @@ public class KafkaTestConsumer {
         long deadline = System.currentTimeMillis() + (timeoutSeconds * 1000L);
         while (System.currentTimeMillis() < deadline) {
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-            List<ConsumerRecord<String, String>> pending = new ArrayList<>();
+            ConsumerRecord<String, String> matched = null;
             for (ConsumerRecord<String, String> record : records) {
-                if (topic.equals(record.topic()) && predicate.test(record.value())) {
-                    buffer.addAll(pending);
-                    return record.value();
+                if (matched == null && topic.equals(record.topic()) && predicate.test(record.value())) {
+                    matched = record;
+                } else {
+                    buffer.add(record);
                 }
-                pending.add(record);
             }
-            buffer.addAll(pending);
+            if (matched != null) {
+                return matched.value();
+            }
         }
         return null;
     }
@@ -80,15 +82,17 @@ public class KafkaTestConsumer {
         long deadline = System.currentTimeMillis() + (timeoutSeconds * 1000L);
         while (System.currentTimeMillis() < deadline) {
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-            List<ConsumerRecord<String, String>> pending = new ArrayList<>();
+            ConsumerRecord<String, String> matched = null;
             for (ConsumerRecord<String, String> record : records) {
-                if (topic.equals(record.topic()) && key.equals(record.key())) {
-                    buffer.addAll(pending);
-                    return record.value();
+                if (matched == null && topic.equals(record.topic()) && key.equals(record.key())) {
+                    matched = record;
+                } else {
+                    buffer.add(record);
                 }
-                pending.add(record);
             }
-            buffer.addAll(pending);
+            if (matched != null) {
+                return matched.value();
+            }
         }
         return null;
     }
@@ -101,15 +105,17 @@ public class KafkaTestConsumer {
         long deadline = System.currentTimeMillis() + (timeoutSeconds * 1000L);
         while (System.currentTimeMillis() < deadline) {
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
-            List<ConsumerRecord<String, String>> pending = new ArrayList<>();
+            ConsumerRecord<String, String> matched = null;
             for (ConsumerRecord<String, String> record : records) {
-                if (topic.equals(record.topic())) {
-                    buffer.addAll(pending);
-                    return record.value();
+                if (matched == null && topic.equals(record.topic())) {
+                    matched = record;
+                } else {
+                    buffer.add(record);
                 }
-                pending.add(record);
             }
-            buffer.addAll(pending);
+            if (matched != null) {
+                return matched.value();
+            }
         }
         return null;
     }
