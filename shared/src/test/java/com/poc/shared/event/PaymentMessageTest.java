@@ -1,11 +1,11 @@
 package com.poc.shared.event;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,7 +15,7 @@ class PaymentMessageTest {
     @DisplayName("Record construction with all fields should work correctly")
     void testRecordConstructionWithAllFields() {
         LocalDateTime now = LocalDateTime.now();
-        Map<String, Object> metadata = Map.of("channel", "api");
+        PaymentMetadataDTO metadata = new PaymentMetadataDTO(null, 1, true, 30, "LOW", null, 10, 5);
 
         PaymentMessage message = new PaymentMessage(
             "evt-001",
@@ -65,7 +65,7 @@ class PaymentMessageTest {
             false,
             180,
             "Europe/Berlin",
-            null,
+            PaymentMetadataDTO.empty(),
             timestamp
         );
 
@@ -80,7 +80,7 @@ class PaymentMessageTest {
         assertFalse(message.isNewPaymentMethod());
         assertEquals(180, message.customerAgeDays());
         assertEquals("Europe/Berlin", message.timeZone());
-        assertNull(message.metadata());
+        assertEquals(PaymentMetadataDTO.empty(), message.metadata());
         assertEquals(timestamp, message.timestamp());
     }
 
@@ -90,10 +90,10 @@ class PaymentMessageTest {
         LocalDateTime now = LocalDateTime.now();
 
         PaymentMessage msg1 = new PaymentMessage(
-            "e1", "p1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", 1, false, 30, "UTC", null, now
+            "e1", "p1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", 1, false, 30, "UTC", PaymentMetadataDTO.empty(), now
         );
         PaymentMessage msg2 = new PaymentMessage(
-            "e1", "p1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", 1, false, 30, "UTC", null, now
+            "e1", "p1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", 1, false, 30, "UTC", PaymentMetadataDTO.empty(), now
         );
 
         assertEquals(msg1, msg2);

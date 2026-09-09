@@ -1,13 +1,13 @@
 package com.poc.gateway.entity;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,7 +19,7 @@ class PaymentTest {
     void create_generatesUuidAndSetsPendingStatus() {
         Payment payment = Payment.create(
             new BigDecimal("50.00"), "EUR", "cust-42",
-            "DEBIT_CARD", "DE", Map.of("key", "value")
+            "DEBIT_CARD", "DE", PaymentMetadata.empty()
         );
 
         assertNotNull(payment.id());
@@ -31,7 +31,7 @@ class PaymentTest {
         assertEquals("DE", payment.country());
         assertNull(payment.provider());
         assertNull(payment.failureReason());
-        assertEquals(Map.of("key", "value"), payment.metadata());
+        assertEquals(PaymentMetadata.empty(), payment.metadata());
         assertNotNull(payment.createdAt());
         assertNotNull(payment.updatedAt());
     }
@@ -39,8 +39,8 @@ class PaymentTest {
     @Test
     @DisplayName("create() generates unique ids")
     void create_generatesUniqueIds() {
-        Payment p1 = Payment.create(new BigDecimal("1"), "USD", "c", "m", "US", Map.of());
-        Payment p2 = Payment.create(new BigDecimal("1"), "USD", "c", "m", "US", Map.of());
+        Payment p1 = Payment.create(new BigDecimal("1"), "USD", "c", "m", "US", PaymentMetadata.empty());
+        Payment p2 = Payment.create(new BigDecimal("1"), "USD", "c", "m", "US", PaymentMetadata.empty());
 
         assertNotEquals(p1.id(), p2.id());
     }
@@ -48,7 +48,7 @@ class PaymentTest {
     @Test
     @DisplayName("withStatus returns new payment with updated status")
     void withStatus_returnsNewPaymentWithUpdatedStatus() {
-        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", Map.of());
+        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", PaymentMetadata.empty());
         Payment updated = original.withStatus(PaymentStatus.APPROVED);
 
         assertEquals(PaymentStatus.APPROVED, updated.status());
@@ -63,7 +63,7 @@ class PaymentTest {
     @Test
     @DisplayName("withProvider returns new payment with provider set")
     void withProvider_returnsNewPaymentWithProvider() {
-        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", Map.of());
+        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", PaymentMetadata.empty());
         Payment updated = original.withProvider("STRIPE");
 
         assertEquals("STRIPE", updated.provider());
@@ -74,7 +74,7 @@ class PaymentTest {
     @Test
     @DisplayName("withFailure returns new payment with FAILED status and reason")
     void withFailure_returnsNewPaymentWithFailedStatus() {
-        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", Map.of());
+        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", PaymentMetadata.empty());
         Payment updated = original.withFailure("insufficient funds");
 
         assertEquals(PaymentStatus.FAILED, updated.status());
@@ -85,7 +85,7 @@ class PaymentTest {
     @Test
     @DisplayName("withUpdatedAt returns new payment with updated timestamp")
     void withUpdatedAt_returnsNewPaymentWithUpdatedTimestamp() {
-        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", Map.of());
+        Payment original = Payment.create(new BigDecimal("10"), "USD", "c", "m", "US", PaymentMetadata.empty());
         LocalDateTime newTime = LocalDateTime.of(2025, 6, 15, 12, 0);
         Payment updated = original.withUpdatedAt(newTime);
 
@@ -100,10 +100,13 @@ class PaymentTest {
     void getters_returnCorrectValues() {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
+        PaymentMetadata metadata = new PaymentMetadata(
+            "order-123", 3, true, 10, "LOW", "2025-01-01T00:00:00", 5, 2
+        );
         Payment payment = new Payment(
             id, new BigDecimal("99.99"), "GBP", "cust-99",
             "APPLE_PAY", "UK", PaymentStatus.PROCESSING, "PAYPAL",
-            "timeout", Map.of("x", 1), now, now
+            "timeout", metadata, now, now
         );
 
         assertEquals(id, payment.id());
@@ -115,7 +118,15 @@ class PaymentTest {
         assertEquals(PaymentStatus.PROCESSING, payment.status());
         assertEquals("PAYPAL", payment.provider());
         assertEquals("timeout", payment.failureReason());
-        assertEquals(Map.of("x", 1), payment.metadata());
+        assertEquals(metadata, payment.metadata());
+        assertEquals("order-123", payment.metadata().orderId());
+        assertEquals(3, payment.metadata().attempts());
+        assertEquals(true, payment.metadata().isNewPaymentMethod());
+        assertEquals(10, payment.metadata().paymentMethodAgeDays());
+        assertEquals("LOW", payment.metadata().customerRiskTier());
+        assertEquals("2025-01-01T00:00:00", payment.metadata().enrichedAt());
+        assertEquals(5, payment.metadata().velocityScore());
+        assertEquals(2, payment.metadata().geoRiskScore());
         assertEquals(now, payment.createdAt());
         assertEquals(now, payment.updatedAt());
     }

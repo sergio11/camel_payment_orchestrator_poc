@@ -1,5 +1,6 @@
 package com.poc.processor.processor;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Named;
@@ -14,11 +15,8 @@ public class PaymentEnrichProcessor implements Processor {
     public void process(Exchange exchange) {
         PaymentMessage message = exchange.getIn().getBody(PaymentMessage.class);
         
-        // Enrich with additional risk data (simulated)
-        // In production, this would call external risk services
-        var enrichedMetadata = enrichWithRiskData(message);
+        PaymentMetadataDTO enrichedMetadata = enrichWithRiskData(message);
         
-        // Create enriched message
         PaymentMessage enriched = new PaymentMessage(
             message.eventId(),
             message.paymentId(),
@@ -38,20 +36,22 @@ public class PaymentEnrichProcessor implements Processor {
         exchange.getIn().setBody(enriched);
     }
 
-    private java.util.Map<String, Object> enrichWithRiskData(PaymentMessage message) {
-        var metadata = new java.util.HashMap<>(message.metadata() != null ? message.metadata() : new java.util.HashMap<>());
+    private PaymentMetadataDTO enrichWithRiskData(PaymentMessage message) {
+        PaymentMetadataDTO source = message.metadata() != null ? message.metadata() : PaymentMetadataDTO.empty();
         
-        // Simulate risk data enrichment
-        metadata.put("enrichedAt", java.time.LocalDateTime.now().toString());
-        metadata.put("customerRiskTier", determineCustomerRiskTier(message.customerId()));
-        metadata.put("velocityScore", calculateVelocityScore(message.customerId()));
-        metadata.put("geoRiskScore", calculateGeoRiskScore(message.country()));
-        
-        return metadata;
+        return new PaymentMetadataDTO(
+            source.orderId(),
+            source.attempts(),
+            source.isNewPaymentMethod(),
+            source.paymentMethodAgeDays(),
+            determineCustomerRiskTier(message.customerId()),
+            java.time.LocalDateTime.now().toString(),
+            calculateVelocityScore(message.customerId()),
+            calculateGeoRiskScore(message.country())
+        );
     }
 
     private String determineCustomerRiskTier(String customerId) {
-        // Simulated: hash customerId to get consistent tier
         int hash = Math.floorMod(customerId.hashCode(), 3);
         return switch (hash) {
             case 0 -> "LOW";
@@ -61,13 +61,11 @@ public class PaymentEnrichProcessor implements Processor {
     }
 
     private int calculateVelocityScore(String customerId) {
-        // Simulated: consistent pseudo-random based on customerId
         return Math.floorMod(customerId.hashCode(), 100);
     }
 
     private int calculateGeoRiskScore(String country) {
         if (country == null) return 0;
-        // High risk countries
         return switch (country) {
             case "XX", "YY" -> 80;
             case "ZZ", "WW" -> 50;

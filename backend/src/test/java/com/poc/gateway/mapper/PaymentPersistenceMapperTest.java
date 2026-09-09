@@ -11,7 +11,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,7 +21,7 @@ class PaymentPersistenceMapperTest {
 
     @BeforeEach
     void setUp() {
-        mapper = new PaymentPersistenceMapper();
+        mapper = MapperTestHelper.persistenceMapper();
     }
 
     @Test
@@ -39,7 +38,7 @@ class PaymentPersistenceMapperTest {
             PaymentStatus.PENDING,
             "stripe",
             null,
-            Map.of("orderId", "ord-123", "attempts", 2, "customerRiskTier", "LOW"),
+            new PaymentMetadata("ord-123", 2, null, null, "LOW", null, null, null),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -85,9 +84,9 @@ class PaymentPersistenceMapperTest {
         assertNotNull(domain);
         assertEquals(id, domain.id());
         assertEquals(PaymentStatus.APPROVED, domain.status());
-        assertEquals("ord-999", domain.metadata().get("orderId"));
-        assertEquals(1, domain.metadata().get("attempts"));
-        assertEquals("HIGH", domain.metadata().get("customerRiskTier"));
+        assertEquals("ord-999", domain.metadata().orderId());
+        assertEquals(1, domain.metadata().attempts());
+        assertEquals("HIGH", domain.metadata().customerRiskTier());
     }
 
     @Test
@@ -98,7 +97,7 @@ class PaymentPersistenceMapperTest {
     }
 
     @Test
-    @DisplayName("toEntity with empty metadata map creates entity without metadata")
+    @DisplayName("toEntity with empty metadata creates entity without metadata")
     void testToEntityWithEmptyMetadata() {
         Payment payment = new Payment(
             UUID.randomUUID(),
@@ -110,7 +109,7 @@ class PaymentPersistenceMapperTest {
             PaymentStatus.PENDING,
             null,
             null,
-            Map.of(),
+            PaymentMetadata.empty(),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -118,11 +117,11 @@ class PaymentPersistenceMapperTest {
         PaymentEntity entity = mapper.toEntity(payment);
 
         assertNotNull(entity);
-        assertNull(entity.metadata);
+        assertNotNull(entity.metadata);
     }
 
     @Test
-    @DisplayName("toDomain with entity without metadata returns empty metadata map")
+    @DisplayName("toDomain with entity without metadata returns null metadata")
     void testToDomainWithoutMetadata() {
         PaymentEntity entity = new PaymentEntity();
         entity.id = UUID.randomUUID();
@@ -137,13 +136,12 @@ class PaymentPersistenceMapperTest {
         Payment domain = mapper.toDomain(entity);
 
         assertNotNull(domain);
-        assertNotNull(domain.metadata());
-        assertTrue(domain.metadata().isEmpty());
+        assertNull(domain.metadata());
     }
 
     @Test
-    @DisplayName("toEntity with metadata without additional properties creates entity without additionalProperties JSON")
-    void testToEntityMetadataWithoutAdditional() {
+    @DisplayName("toEntity with metadata creates entity with metadata fields")
+    void testToEntityMetadata() {
         UUID id = UUID.randomUUID();
         Payment payment = new Payment(
             id,
@@ -155,7 +153,7 @@ class PaymentPersistenceMapperTest {
             PaymentStatus.PENDING,
             null,
             null,
-            Map.of("orderId", "ord-1", "attempts", 1),
+            new PaymentMetadata("ord-1", 1, null, null, null, null, null, null),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -197,8 +195,8 @@ class PaymentPersistenceMapperTest {
     }
 
     @Test
-    @DisplayName("toEntity with extra metadata keys serializes additionalProperties to JSON")
-    void testToEntityWithExtraMetadataKeys() {
+    @DisplayName("toEntity with full metadata maps all fields")
+    void testToEntityWithFullMetadata() {
         UUID id = UUID.randomUUID();
         Payment payment = new Payment(
             id,
@@ -210,7 +208,7 @@ class PaymentPersistenceMapperTest {
             PaymentStatus.PENDING,
             null,
             null,
-            Map.of("orderId", "ord-1", "customField", "customValue", "anotherKey", 42),
+            new PaymentMetadata("ord-1", 3, true, 30, "LOW", "2024-01-01T00:00:00", 10, 5),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -220,14 +218,13 @@ class PaymentPersistenceMapperTest {
         assertNotNull(entity);
         assertNotNull(entity.metadata);
         assertEquals("ord-1", entity.metadata.orderId);
-        assertNotNull(entity.metadata.additionalProperties);
-        assertTrue(entity.metadata.additionalProperties.contains("customField"));
-        assertTrue(entity.metadata.additionalProperties.contains("customValue"));
+        assertEquals(3, entity.metadata.attempts);
+        assertEquals("LOW", entity.metadata.customerRiskTier);
     }
 
     @Test
-    @DisplayName("toDomain with metadata entity containing additionalProperties JSON deserializes correctly")
-    void testToDomainWithAdditionalPropertiesJson() {
+    @DisplayName("toDomain with metadata entity containing all fields maps correctly")
+    void testToDomainWithFullMetadata() {
         UUID id = UUID.randomUUID();
         PaymentEntity entity = new PaymentEntity();
         entity.id = id;
@@ -241,19 +238,25 @@ class PaymentPersistenceMapperTest {
         PaymentMetadataEntity meta = new PaymentMetadataEntity();
         meta.paymentId = id;
         meta.orderId = "ord-1";
-        meta.additionalProperties = "{\"custom\":\"value\"}";
+        meta.attempts = 2;
+        meta.isNewPaymentMethod = true;
+        meta.paymentMethodAgeDays = 15;
+        meta.customerRiskTier = "MEDIUM";
         entity.metadata = meta;
 
         Payment domain = mapper.toDomain(entity);
 
         assertNotNull(domain);
-        assertEquals("ord-1", domain.metadata().get("orderId"));
-        assertEquals("value", domain.metadata().get("custom"));
+        assertEquals("ord-1", domain.metadata().orderId());
+        assertEquals(2, domain.metadata().attempts());
+        assertEquals(true, domain.metadata().isNewPaymentMethod());
+        assertEquals(15, domain.metadata().paymentMethodAgeDays());
+        assertEquals("MEDIUM", domain.metadata().customerRiskTier());
     }
 
     @Test
-    @DisplayName("toEntity with empty additionalProperties does not serialize extra JSON")
-    void testToEntity_emptyAdditionalProperties() {
+    @DisplayName("toEntity with empty metadata does not create metadata entity")
+    void testToEntity_emptyMetadata() {
         UUID id = UUID.randomUUID();
         Payment payment = new Payment(
             id,
@@ -265,7 +268,7 @@ class PaymentPersistenceMapperTest {
             PaymentStatus.PENDING,
             null,
             null,
-            Map.of("orderId", "ord-test"),
+            new PaymentMetadata(null, null, null, null, null, null, null, null),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -274,6 +277,5 @@ class PaymentPersistenceMapperTest {
 
         assertNotNull(entity);
         assertNotNull(entity.metadata);
-        assertNull(entity.metadata.additionalProperties);
     }
 }

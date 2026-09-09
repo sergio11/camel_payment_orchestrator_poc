@@ -1,5 +1,6 @@
 package com.poc.processor;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -24,7 +25,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
@@ -101,7 +101,7 @@ class ProviderSelectionRouteTest {
             false,
             0,
             "UTC",
-            Map.of(),
+            PaymentMetadataDTO.empty(),
             LocalDateTime.now()
         );
     }

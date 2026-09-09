@@ -2,6 +2,7 @@ package com.poc.gateway.resource;
 
 import com.poc.gateway.service.PaymentService;
 import com.poc.gateway.resource.presenter.PaymentResponsePresenter;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import jakarta.ws.rs.core.Response;
@@ -13,7 +14,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,7 +43,7 @@ class PaymentResourcePrecheckTest {
 
     private PaymentResponseDTO response(String id) {
         return new PaymentResponseDTO(id, new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD",
-            "US", "PENDING", null, null, Map.of(), LocalDateTime.now(), LocalDateTime.now());
+            "US", "PENDING", null, null, PaymentMetadataDTO.empty(), LocalDateTime.now(), LocalDateTime.now());
     }
 
     @Test

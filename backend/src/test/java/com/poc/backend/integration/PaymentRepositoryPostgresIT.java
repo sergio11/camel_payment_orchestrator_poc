@@ -2,6 +2,7 @@ package com.poc.backend.integration;
 
 import com.poc.camel.testsupport.container.PostgresTestContainer;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -10,7 +11,6 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.*;
 
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,7 +35,7 @@ class PaymentRepositoryPostgresIT {
     void testPersistAndRetrievePayment() {
         Payment payment = Payment.create(
             new BigDecimal("150.00"), "USD", "cust-123",
-            "CREDIT_CARD", "US", Map.of()
+            "CREDIT_CARD", "US", PaymentMetadata.empty()
         );
 
         Payment saved = paymentRepository.save(payment);
@@ -52,7 +52,7 @@ class PaymentRepositoryPostgresIT {
     void testUpdatePaymentStatus() {
         Payment payment = Payment.create(
             new BigDecimal("200.00"), "EUR", "cust-456",
-            "WALLET", "ES", Map.of()
+            "WALLET", "ES", PaymentMetadata.empty()
         );
 
         Payment saved = paymentRepository.save(payment);
@@ -71,7 +71,7 @@ class PaymentRepositoryPostgresIT {
     void testUpdateStatusIdempotency() {
         Payment payment = Payment.create(
             new BigDecimal("50.00"), "GBP", "cust-789",
-            "CREDIT_CARD", "GB", Map.of()
+            "CREDIT_CARD", "GB", PaymentMetadata.empty()
         );
 
         Payment saved = paymentRepository.save(payment);
@@ -91,7 +91,7 @@ class PaymentRepositoryPostgresIT {
         for (int i = 0; i < 3; i++) {
             paymentRepository.save(Payment.create(
                 new BigDecimal("10.00"), "USD", "cust-list-test",
-                "CREDIT_CARD", "US", Map.of()
+                "CREDIT_CARD", "US", PaymentMetadata.empty()
             ));
         }
 
@@ -104,11 +104,11 @@ class PaymentRepositoryPostgresIT {
     void testCountPayments() {
         paymentRepository.save(Payment.create(
             new BigDecimal("100.00"), "USD", "cust-count",
-            "CREDIT_CARD", "US", Map.of()
+            "CREDIT_CARD", "US", PaymentMetadata.empty()
         ));
         paymentRepository.save(Payment.create(
             new BigDecimal("200.00"), "USD", "cust-count",
-            "WALLET", "US", Map.of()
+            "WALLET", "US", PaymentMetadata.empty()
         ));
 
         long count = paymentRepository.count("cust-count", null);
@@ -120,7 +120,7 @@ class PaymentRepositoryPostgresIT {
     void testDeletePayment() {
         Payment payment = Payment.create(
             new BigDecimal("99.99"), "USD", "cust-delete",
-            "CREDIT_CARD", "US", Map.of()
+            "CREDIT_CARD", "US", PaymentMetadata.empty()
         );
         Payment saved = paymentRepository.save(payment);
 

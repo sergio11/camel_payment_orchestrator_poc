@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.poc.shared.validator.SupportedCurrency;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
-import java.util.Map;
 
 public record PaymentRequestDTO(
     @NotNull(message = "Amount is required")
@@ -32,7 +31,6 @@ public record PaymentRequestDTO(
     @JsonProperty("country")
     String country,
 
-    @Size(max = 20, message = "Metadata max 20 entries")
     @JsonProperty("metadata")
-    Map<String, Object> metadata
+    PaymentMetadataDTO metadata
 ) {}

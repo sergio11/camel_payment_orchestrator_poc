@@ -2,6 +2,7 @@ package com.poc.gateway.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -18,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -72,7 +72,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertTrue(result);
@@ -89,7 +89,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertFalse(result);
@@ -110,7 +110,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertFalse(result);
@@ -126,7 +126,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertFalse(result);
@@ -140,7 +140,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertFalse(result);
@@ -157,7 +157,7 @@ class KafkaEventPublisherTest {
 
         publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         ArgumentCaptor<Callback> callbackCaptor = ArgumentCaptor.forClass(Callback.class);
@@ -176,7 +176,7 @@ class KafkaEventPublisherTest {
 
         publisher.publishPaymentReceived(
             "pay-123", new BigDecimal("100.00"), "USD",
-            "cust-1", "CREDIT_CARD", "US", Map.of()
+            "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         ArgumentCaptor<Callback> callbackCaptor = ArgumentCaptor.forClass(Callback.class);
@@ -268,7 +268,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-456", new BigDecimal("250.00"), "EUR",
-            "cust-2", "CREDIT_CARD", "DE", Map.of()
+            "cust-2", "CREDIT_CARD", "DE", PaymentMetadataDTO.empty()
         );
 
         assertFalse(result);
@@ -284,7 +284,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-abc", new BigDecimal("10.00"), "USD",
-            "cust-x", "CREDIT_CARD", "US", Map.of()
+            "cust-x", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertTrue(result);
@@ -305,7 +305,7 @@ class KafkaEventPublisherTest {
 
         boolean result = publisher.publishPaymentReceived(
             "pay-xyz", new BigDecimal("50.00"), "USD",
-            "cust-3", "DEBIT_CARD", "US", Map.of()
+            "cust-3", "DEBIT_CARD", "US", PaymentMetadataDTO.empty()
         );
 
         assertFalse(result);
@@ -363,7 +363,7 @@ class KafkaEventPublisherTest {
 
         realPublisher.publishPaymentReceived(
             "pay-abc", new BigDecimal("10.00"), "USD",
-            "cust-x", "CARD", "US", Map.of()
+            "cust-x", "CARD", "US", PaymentMetadataDTO.empty()
         );
 
         verify(existingProducer).send(any(ProducerRecord.class), any());

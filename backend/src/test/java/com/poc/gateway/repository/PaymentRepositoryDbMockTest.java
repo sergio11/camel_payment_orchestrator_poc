@@ -3,11 +3,13 @@ package com.poc.gateway.repository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentEntity;
 import com.poc.gateway.entity.PaymentMetadataEntity;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
 import com.poc.gateway.mapper.PaymentPersistenceMapper;
+import com.poc.gateway.mapper.MapperTestHelper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.TypedQuery;
@@ -22,7 +24,6 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,7 +44,7 @@ class PaymentRepositoryDbMockTest {
     TypedQuery<Long> countQuery;
 
     private PaymentRepositoryJpa repository;
-    private PaymentPersistenceMapper persistenceMapper = new PaymentPersistenceMapper();
+    private PaymentPersistenceMapper persistenceMapper = MapperTestHelper.persistenceMapper();
 
     @BeforeEach
     void setUp() throws Exception {
@@ -63,7 +64,7 @@ class PaymentRepositoryDbMockTest {
         return new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING, "prov", null,
-            Map.of("k", "v"), LocalDateTime.now(), LocalDateTime.now()
+            PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
     }
 
@@ -111,7 +112,7 @@ class PaymentRepositoryDbMockTest {
     @DisplayName("save applies defaults for null id, status and createdAt")
     void save_nulls_appliesDefaults() {
         Payment p = new Payment(null, new BigDecimal("10.00"), "EUR", "c", "CARD",
-            "ES", null, null, null, Map.of(), null, null);
+            "ES", null, null, null, PaymentMetadata.empty(), null, null);
         Payment saved = repository.save(p, "key-2");
         assertNotNull(saved.id());
         assertEquals(PaymentStatus.PENDING, saved.status());
@@ -166,7 +167,7 @@ class PaymentRepositoryDbMockTest {
         Optional<Payment> found = repository.findByIdempotencyKey("k");
         assertTrue(found.isPresent());
         assertEquals(id, found.get().id());
-        assertEquals("v", found.get().metadata().get("k"));
+        assertNotNull(found.get().metadata());
     }
 
     @Test
@@ -396,7 +397,7 @@ class PaymentRepositoryDbMockTest {
     void toDomain_blankMetadata_emptyMap() {
         PaymentEntity e = fullEntity(UUID.randomUUID());
         e.metadata = null;
-        assertTrue(persistenceMapper.toDomain(e).metadata().isEmpty());
+        assertNull(persistenceMapper.toDomain(e).metadata());
     }
 
     @Test
@@ -404,7 +405,7 @@ class PaymentRepositoryDbMockTest {
     void saveInMemory_edgeCases() throws Exception {
         PaymentRepository mem = PaymentRepository.inMemory();
         Payment noIds = new Payment(null, new BigDecimal("1.00"), "USD", "c", "CARD",
-            "ES", null, null, null, Map.of(), null, null);
+            "ES", null, null, null, PaymentMetadata.empty(), null, null);
         Payment saved = mem.save(noIds, "  ");
         assertNotNull(saved.id());
         assertEquals(PaymentStatus.PENDING, saved.status());

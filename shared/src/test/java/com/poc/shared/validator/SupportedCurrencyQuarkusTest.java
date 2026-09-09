@@ -1,5 +1,6 @@
 package com.poc.shared.validator;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -38,7 +39,7 @@ class SupportedCurrencyQuarkusTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
-            null
+            PaymentMetadataDTO.empty()
         );
     }
 

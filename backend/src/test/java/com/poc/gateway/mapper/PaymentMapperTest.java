@@ -1,14 +1,15 @@
 package com.poc.gateway.mapper;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,30 +20,66 @@ class PaymentMapperTest {
 
     @Test
     void toDomain_mapsAllFieldsFromRequest() {
+        PaymentMetadataDTO metadata = new PaymentMetadataDTO(
+            "order-1",
+            3,
+            true,
+            120,
+            "LOW",
+            "2026-01-01T00:00:00",
+            45,
+            22
+        );
         PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("150.00"),
             "USD",
             "cust-42",
             "CREDIT_CARD",
             "US",
-            Map.of("key", "value")
+            metadata
         );
 
         Payment entity = mapper.toDomain(request);
 
+        assertNotNull(entity);
+        assertNotNull(entity.id());
+        assertInstanceOf(UUID.class, entity.id());
+        assertEquals(PaymentStatus.PENDING, entity.status());
         assertEquals(request.amount(), entity.amount());
         assertEquals(request.currency(), entity.currency());
         assertEquals(request.customerId(), entity.customerId());
         assertEquals(request.paymentMethod(), entity.paymentMethod());
         assertEquals(request.country(), entity.country());
-        assertEquals(request.metadata(), entity.metadata());
-        assertNotNull(entity.id());
-        assertInstanceOf(UUID.class, entity.id());
-        assertEquals(PaymentStatus.PENDING, entity.status());
+        assertEquals(metadata.orderId(), entity.metadata().orderId());
+        assertEquals(metadata.attempts(), entity.metadata().attempts());
+        assertEquals(metadata.isNewPaymentMethod(), entity.metadata().isNewPaymentMethod());
+        assertEquals(metadata.paymentMethodAgeDays(), entity.metadata().paymentMethodAgeDays());
+        assertEquals(metadata.customerRiskTier(), entity.metadata().customerRiskTier());
+        assertEquals(metadata.enrichedAt(), entity.metadata().enrichedAt());
+        assertEquals(metadata.velocityScore(), entity.metadata().velocityScore());
+        assertEquals(metadata.geoRiskScore(), entity.metadata().geoRiskScore());
         assertNull(entity.provider());
         assertNull(entity.failureReason());
         assertNotNull(entity.createdAt());
         assertNotNull(entity.updatedAt());
+    }
+
+    @Test
+    void toDomain_emptyMetadata_mapsCorrectly() {
+        PaymentRequestDTO request = new PaymentRequestDTO(
+            new BigDecimal("10.00"),
+            "EUR",
+            "cust-1",
+            "WALLET",
+            "DE",
+            PaymentMetadataDTO.empty()
+        );
+
+        Payment entity = mapper.toDomain(request);
+
+        assertNotNull(entity);
+        assertNotNull(entity.metadata());
+        assertEquals(new BigDecimal("10.00"), entity.amount());
     }
 
     @Test
@@ -66,6 +103,16 @@ class PaymentMapperTest {
     void toResponseDTO_mapsAllFieldsFromEntity() {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
+        PaymentMetadata metadata = new PaymentMetadata(
+            "order-99",
+            5,
+            false,
+            30,
+            "MEDIUM",
+            "2026-06-15T12:00:00",
+            70,
+            55
+        );
         Payment entity = new Payment(
             id,
             new BigDecimal("250.50"),
@@ -76,7 +123,7 @@ class PaymentMapperTest {
             PaymentStatus.APPROVED,
             "provider-a",
             null,
-            Map.of("foo", "bar"),
+            metadata,
             now,
             now
         );
@@ -92,7 +139,15 @@ class PaymentMapperTest {
         assertEquals("APPROVED", response.status());
         assertEquals("provider-a", response.provider());
         assertNull(response.failureReason());
-        assertEquals(Map.of("foo", "bar"), response.metadata());
+        assertNotNull(response.metadata());
+        assertEquals("order-99", response.metadata().orderId());
+        assertEquals(5, response.metadata().attempts());
+        assertEquals(false, response.metadata().isNewPaymentMethod());
+        assertEquals(30, response.metadata().paymentMethodAgeDays());
+        assertEquals("MEDIUM", response.metadata().customerRiskTier());
+        assertEquals("2026-06-15T12:00:00", response.metadata().enrichedAt());
+        assertEquals(70, response.metadata().velocityScore());
+        assertEquals(55, response.metadata().geoRiskScore());
         assertEquals(now, response.createdAt());
         assertEquals(now, response.updatedAt());
     }
@@ -109,7 +164,7 @@ class PaymentMapperTest {
             PaymentStatus.PENDING,
             null,
             null,
-            null,
+            PaymentMetadata.empty(),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -118,7 +173,7 @@ class PaymentMapperTest {
 
         assertNull(response.provider());
         assertNull(response.failureReason());
-        assertNull(response.metadata());
+        assertNotNull(response.metadata());
     }
 
     @Test
@@ -133,7 +188,7 @@ class PaymentMapperTest {
             PaymentStatus.FAILED,
             "provider-b",
             "Timeout after 30s",
-            Map.of(),
+            PaymentMetadata.empty(),
             LocalDateTime.now(),
             LocalDateTime.now()
         );

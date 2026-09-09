@@ -2,6 +2,7 @@ package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import io.micrometer.core.instrument.Counter;
@@ -74,7 +75,7 @@ class KafkaPaymentStatusConsumerBranchesTest {
         testPayment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING, null, null,
-            Map.of(), LocalDateTime.now(), LocalDateTime.now()
+            PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
     }
 
@@ -315,7 +316,7 @@ class KafkaPaymentStatusConsumerBranchesTest {
         UUID goodId = testPayment.id();
         UUID badId = UUID.randomUUID();
         Payment other = new Payment(badId, new BigDecimal("5.00"), "USD", "c", "CARD",
-            "US", PaymentStatus.PENDING, null, null, Map.of(), LocalDateTime.now(), LocalDateTime.now());
+            "US", PaymentStatus.PENDING, null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now());
         when(repository.findById(goodId)).thenReturn(Optional.of(testPayment));
         when(repository.updateIfPending(eq(goodId), any())).thenReturn(Optional.of(testPayment));
         when(repository.findById(badId)).thenReturn(Optional.of(other));

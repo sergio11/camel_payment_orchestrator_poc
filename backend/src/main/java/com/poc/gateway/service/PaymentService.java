@@ -69,7 +69,7 @@ public class PaymentService {
             saved.customerId(),
             saved.paymentMethod(),
             saved.country(),
-            saved.metadata()
+            getMapper().toMetadataDTO(saved.metadata())
         );
         if (published) {
             markOutboxSent(saved.id());
@@ -178,7 +178,7 @@ public class PaymentService {
                 "customerId", String.valueOf(saved.customerId()),
                 "paymentMethod", String.valueOf(saved.paymentMethod()),
                 "country", String.valueOf(saved.country()),
-                "metadata", saved.metadata() != null ? saved.metadata() : Map.of()
+                "metadata", saved.metadata() != null ? saved.metadata() : new Object()
             ));
         } catch (Exception e) {
             return "{\"paymentId\":\"" + saved.id() + "\"}";

@@ -1,5 +1,6 @@
 package com.poc.processor;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
@@ -92,7 +93,7 @@ class PaymentProcessorRouteTest {
         KafkaConsumer<String, String> consumer = createConsumer("test-approach-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();
-            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0, Map.of());
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0, PaymentMetadataDTO.empty());
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
@@ -112,7 +113,7 @@ class PaymentProcessorRouteTest {
         KafkaConsumer<String, String> consumer = createConsumer("test-success-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();
-            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0, Map.of());
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0, PaymentMetadataDTO.empty());
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
@@ -131,7 +132,7 @@ class PaymentProcessorRouteTest {
         KafkaConsumer<String, String> consumer = createConsumer("test-reject-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();
-            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1, Map.of("attempts", 1));
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1, new PaymentMetadataDTO(null, 1, null, null, null, null, null, null));
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
@@ -155,7 +156,7 @@ class PaymentProcessorRouteTest {
             PaymentMessage payment = new PaymentMessage(
                 UUID.randomUUID().toString(), paymentId, new BigDecimal("100.00"), "USD",
                 customerId, "CREDIT_CARD", "US", 0, false, 0, hour12Zone(),
-                Map.of("attempts", 4, "isNewPaymentMethod", true, "paymentMethodAgeDays", 10),
+                new PaymentMetadataDTO(null, 4, true, 10, null, null, null, null),
                 LocalDateTime.now()
             );
 
@@ -193,7 +194,7 @@ class PaymentProcessorRouteTest {
         KafkaConsumer<String, String> consumer = createConsumer("test-country-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();
-            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1, Map.of());
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1, PaymentMetadataDTO.empty());
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
@@ -212,7 +213,7 @@ class PaymentProcessorRouteTest {
         KafkaConsumer<String, String> consumer = createConsumer("test-review-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();
-            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "CREDIT_CARD", 0, Map.of());
+            PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "CREDIT_CARD", 0, PaymentMetadataDTO.empty());
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);
 
@@ -225,7 +226,7 @@ class PaymentProcessorRouteTest {
         }
     }
 
-    private PaymentMessage buildPayment(String paymentId, BigDecimal amount, String currency, String country, String method, int attempts, Map<String, Object> metadata) {
+    private PaymentMessage buildPayment(String paymentId, BigDecimal amount, String currency, String country, String method, int attempts, PaymentMetadataDTO metadata) {
         return new PaymentMessage(
             UUID.randomUUID().toString(), paymentId, amount, currency,
             "customer-123", method, country,
@@ -304,18 +305,18 @@ class PaymentProcessorRouteTest {
     @Test
     @DisplayName("Verify validatePaymentMessage covers all null checks")
     void testValidatePaymentMessage() {
-        PaymentMessage valid = new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now());
+        PaymentMessage valid = new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now());
         PaymentProcessorRoute.validatePaymentMessage(valid);
 
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", null, BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", null, BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", null, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", null, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, null, "c1", "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, null, "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", null, "CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", null, "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", null, "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now())));
+            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", null, "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
     }
 }

@@ -1,5 +1,6 @@
 package com.poc.processor.processor;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -25,7 +26,7 @@ class ProviderRouterBeanTest {
     private PaymentMessage payment(String paymentId) {
         return new PaymentMessage(
             "event-1", paymentId, new BigDecimal("100.00"), "USD", "customer-1",
-            "CREDIT_CARD", "US", 0, false, 0, "UTC", Map.of(), LocalDateTime.now()
+            "CREDIT_CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
     }
 

@@ -1,12 +1,12 @@
 package com.poc.gateway.repository;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,7 +23,7 @@ class PaymentRepositoryUpdateIfPendingTest {
     @Test
     void updateIfPending_transitionsPendingToApproved() {
         Payment saved = repository.save(Payment.create(
-            new BigDecimal("10.00"), "USD", "c1", "CREDIT_CARD", "US", Map.of()));
+            new BigDecimal("10.00"), "USD", "c1", "CREDIT_CARD", "US", PaymentMetadata.empty()));
 
         Optional<Payment> updated = repository.updateIfPending(saved.id(), PaymentStatus.APPROVED);
 
@@ -34,7 +34,7 @@ class PaymentRepositoryUpdateIfPendingTest {
     @Test
     void updateIfPending_secondTransitionReturnsEmpty() {
         Payment saved = repository.save(Payment.create(
-            new BigDecimal("10.00"), "USD", "c1", "CREDIT_CARD", "US", Map.of()));
+            new BigDecimal("10.00"), "USD", "c1", "CREDIT_CARD", "US", PaymentMetadata.empty()));
 
         assertTrue(repository.updateIfPending(saved.id(), PaymentStatus.APPROVED).isPresent());
         assertTrue(repository.updateIfPending(saved.id(), PaymentStatus.FAILED).isEmpty());

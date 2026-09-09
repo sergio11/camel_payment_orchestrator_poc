@@ -1,13 +1,15 @@
 package com.poc.gateway.mapper;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
-@Mapper(componentModel = "cdi")
+@Mapper(componentModel = "cdi", uses = PaymentMetadataMapper.class)
 public interface PaymentMapper {
 
     PaymentMapper INSTANCE = Mappers.getMapper(PaymentMapper.class);
@@ -23,4 +25,8 @@ public interface PaymentMapper {
     @Mapping(target = "id", expression = "java(payment.id() != null ? payment.id().toString() : null)")
     @Mapping(target = "status", expression = "java(payment.status() != null ? payment.status().name() : null)")
     PaymentResponseDTO toResponseDTO(Payment payment);
+
+    PaymentMetadataDTO toMetadataDTO(PaymentMetadata metadata);
+
+    PaymentMetadata toMetadataDomain(PaymentMetadataDTO dto);
 }

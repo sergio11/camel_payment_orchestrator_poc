@@ -2,6 +2,7 @@ package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -68,7 +69,7 @@ class KafkaPaymentStatusConsumerTest {
             PaymentStatus.PENDING,
             null,
             null,
-            Map.of(),
+            PaymentMetadata.empty(),
             LocalDateTime.now(),
             LocalDateTime.now()
         );

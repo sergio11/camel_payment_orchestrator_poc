@@ -1,5 +1,6 @@
 package com.poc.processor;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -78,7 +79,7 @@ class WireTapTest {
                 UUID.randomUUID().toString(), paymentId,
                 new BigDecimal("100.00"), "USD", "customer-123",
                 "CREDIT_CARD", "US", 0, false, 0, "UTC",
-                Map.of(), LocalDateTime.now()
+                PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
 
             producer.send(new ProducerRecord<>("payments.events.received", paymentId, toJson(payment))).get(5, TimeUnit.SECONDS);

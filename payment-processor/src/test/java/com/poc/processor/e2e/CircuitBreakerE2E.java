@@ -4,6 +4,7 @@ import com.poc.camel.testsupport.KafkaTestConsumer;
 import com.poc.camel.testsupport.KafkaTestProducer;
 import com.poc.processor.KafkaTestResource;
 import com.poc.processor.ProviderMockConfig;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -15,7 +16,6 @@ import org.junit.jupiter.api.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -162,7 +162,7 @@ class CircuitBreakerE2E {
             UUID.randomUUID().toString(), paymentId, new BigDecimal("100.00"), "USD",
             "customer-123", "CREDIT_CARD", "US",
             0, false, 0, "UTC",
-            Map.of(), LocalDateTime.now()
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
     }
 }

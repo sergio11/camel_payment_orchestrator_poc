@@ -4,6 +4,7 @@ import com.poc.camel.testsupport.KafkaTestConsumer;
 import com.poc.camel.testsupport.KafkaTestProducer;
 import com.poc.processor.KafkaTestResource;
 import com.poc.processor.ProviderMockConfig;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
@@ -15,7 +16,6 @@ import org.junit.jupiter.api.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,7 +58,7 @@ class FraudEngineRouteE2E {
     void testFraudRejectPublishesToBothTopics() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "XX", "CREDIT_CARD", 1,
-            Map.of("attempts", 1));
+            new PaymentMetadataDTO(null, 1, null, null, null, null, null, null));
 
         producer.send(TOPIC_RECEIVED, paymentId, payment);
 
@@ -82,7 +82,7 @@ class FraudEngineRouteE2E {
     void testFraudReviewPublishesToReviewTopic() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "CREDIT_CARD", 0,
-            Map.of());
+            PaymentMetadataDTO.empty());
 
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_FRAUD_DETECTED, TOPIC_REVIEW);
@@ -106,7 +106,7 @@ class FraudEngineRouteE2E {
     void testFraudApproveGoesToProviderSelection() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("100.00"), "USD", "US", "CREDIT_CARD", 0,
-            Map.of());
+            PaymentMetadataDTO.empty());
 
         KafkaTestConsumer consumer = new KafkaTestConsumer(bootstrapServers, KafkaTestConsumer.randomGroupId(),
             TOPIC_PROCESSED);
@@ -127,7 +127,7 @@ class FraudEngineRouteE2E {
     void testWalletPaymentRoutesToFraudReview() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = buildPayment(paymentId, new BigDecimal("20000.00"), "USD", "US", "WALLET", 0,
-            Map.of());
+            PaymentMetadataDTO.empty());
 
         producer.send(TOPIC_RECEIVED, paymentId, payment);
 
@@ -143,7 +143,7 @@ class FraudEngineRouteE2E {
     }
 
     private PaymentMessage buildPayment(String paymentId, BigDecimal amount, String currency, String country,
-        String method, int attempts, Map<String, Object> metadata) {
+        String method, int attempts, PaymentMetadataDTO metadata) {
         return new PaymentMessage(
             UUID.randomUUID().toString(), paymentId, amount, currency,
             "customer-123", method, country,

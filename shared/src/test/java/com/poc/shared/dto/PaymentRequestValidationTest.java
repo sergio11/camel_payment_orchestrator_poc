@@ -38,7 +38,7 @@ class PaymentRequestValidationTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
-            null
+            PaymentMetadataDTO.empty()
         );
     }
 
@@ -59,7 +59,7 @@ class PaymentRequestValidationTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
-            null
+            PaymentMetadataDTO.empty()
         );
         Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertFalse(violations.isEmpty(), "Invalid currency should have violations");
@@ -74,7 +74,7 @@ class PaymentRequestValidationTest {
             "customer-123",
             "CREDIT_CARD",
             "MX",
-            null
+            PaymentMetadataDTO.empty()
         );
         Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertTrue(violations.isEmpty(), "MXN should be valid");
@@ -89,7 +89,7 @@ class PaymentRequestValidationTest {
             "customer-123",
             "BITCOIN",
             "US",
-            null
+            PaymentMetadataDTO.empty()
         );
         Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertTrue(violations.isEmpty(), "Payment method is validated at resource layer, not via bean validation");
@@ -104,7 +104,7 @@ class PaymentRequestValidationTest {
             "customer-123",
             "CREDIT_CARD",
             "US",
-            null
+            PaymentMetadataDTO.empty()
         );
         Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertFalse(violations.isEmpty(), "Amount below 0.01 should have violations");

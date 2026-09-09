@@ -3,6 +3,7 @@ package com.poc.gateway.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.gateway.entity.OutboxEventEntity;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.mapper.PaymentMapper;
 import com.poc.gateway.repository.OutboxEventRepository;
 import com.poc.gateway.repository.PaymentRepository;
 import io.quarkus.scheduler.Scheduled;
@@ -25,6 +26,9 @@ public class OutboxRelayService {
 
     @Inject
     KafkaEventPublisher kafkaEventPublisher;
+
+    @Inject
+    PaymentMapper paymentMapper;
 
     @Inject
     ObjectMapper objectMapper;
@@ -63,7 +67,7 @@ public class OutboxRelayService {
             }
             return kafkaEventPublisher.publishPaymentReceived(
                 paymentId, p.amount(), p.currency(), p.customerId(),
-                p.paymentMethod(), p.country(), p.metadata()
+                p.paymentMethod(), p.country(), paymentMapper.toMetadataDTO(p.metadata())
             );
         } catch (Exception e) {
             LOG.warnf(e, "Outbox relay republish failed for %s", event.id);

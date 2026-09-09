@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 
 public record PaymentResponseDTO(
     @JsonProperty("id")
@@ -35,7 +34,7 @@ public record PaymentResponseDTO(
     String failureReason,
 
     @JsonProperty("metadata")
-    Map<String, Object> metadata,
+    PaymentMetadataDTO metadata,
 
     @JsonProperty("created_at")
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "UTC")

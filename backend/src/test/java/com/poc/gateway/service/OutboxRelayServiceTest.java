@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.gateway.entity.OutboxEventEntity;
 import com.poc.gateway.entity.OutboxStatus;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
+import com.poc.gateway.mapper.PaymentMapper;
 import com.poc.gateway.repository.OutboxEventRepository;
 import com.poc.gateway.repository.PaymentRepository;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,6 +43,9 @@ class OutboxRelayServiceTest {
     KafkaEventPublisher kafkaEventPublisher;
 
     @Mock
+    PaymentMapper paymentMapper;
+
+    @Mock
     ObjectMapper objectMapper;
 
     @InjectMocks
@@ -50,10 +56,12 @@ class OutboxRelayServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(paymentMapper.toMetadataDTO(any())).thenReturn(PaymentMetadataDTO.empty());
+
         payment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING, null, null,
-            Map.of(), LocalDateTime.now(), LocalDateTime.now()
+            PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
         pendingEvent = new OutboxEventEntity();
         pendingEvent.id = UUID.randomUUID();

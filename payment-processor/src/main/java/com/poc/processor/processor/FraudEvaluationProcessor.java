@@ -1,5 +1,6 @@
 package com.poc.processor.processor;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.processor.config.FraudRulesConfig;
@@ -10,7 +11,6 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 
@@ -25,7 +25,6 @@ public class FraudEvaluationProcessor implements Processor {
     public void process(Exchange exchange) {
         PaymentMessage message = exchange.getIn().getBody(PaymentMessage.class);
         
-        // Store original PaymentMessage in header for use by downstream routes
         exchange.getIn().setHeader("OriginalPaymentMessage", message);
         
         List<String> triggeredRules = new ArrayList<>();
@@ -63,22 +62,22 @@ public class FraudEvaluationProcessor implements Processor {
             triggeredRules.add("UNUSUAL_HOUR");
         }
         
-        Map<String, Object> metadata = message.metadata();
+        PaymentMetadataDTO metadata = message.metadata();
         if (metadata != null) {
-            int attempts = getIntMetadata(metadata, "attempts", 0);
+            int attempts = metadata.attempts() != null ? metadata.attempts() : 0;
             if (attempts > config.rapidRetryThreshold()) {
                 score += 25;
                 triggeredRules.add("RAPID_RETRY");
             }
             
-            boolean isNewMethod = getBooleanMetadata(metadata, "isNewPaymentMethod");
-            int methodAge = getIntMetadata(metadata, "paymentMethodAgeDays", Integer.MAX_VALUE);
+            boolean isNewMethod = metadata.isNewPaymentMethod() != null && metadata.isNewPaymentMethod();
+            int methodAge = metadata.paymentMethodAgeDays() != null ? metadata.paymentMethodAgeDays() : Integer.MAX_VALUE;
             if (isNewMethod && methodAge < config.newMethodDaysThreshold()) {
                 score += 20;
                 triggeredRules.add("NEW_PAYMENT_METHOD");
             }
 
-            String riskTier = getStringMetadata(metadata, "customerRiskTier");
+            String riskTier = metadata.customerRiskTier();
             if ("HIGH".equalsIgnoreCase(riskTier)) {
                 score += 10;
                 triggeredRules.add("HIGH_RISK_TIER");
@@ -86,44 +85,6 @@ public class FraudEvaluationProcessor implements Processor {
         }
         
         return score;
-    }
-
-    private int getIntMetadata(Map<String, Object> metadata, String key, int defaultValue) {
-        if (!metadata.containsKey(key)) {
-            return defaultValue;
-        }
-        Object val = metadata.get(key);
-        if (val instanceof Number n) {
-            return n.intValue();
-        }
-        if (val instanceof String s) {
-            try {
-                return Integer.parseInt(s.trim());
-            } catch (NumberFormatException ignored) {}
-        }
-        return defaultValue;
-    }
-
-    private boolean getBooleanMetadata(Map<String, Object> metadata, String key) {
-        if (!metadata.containsKey(key)) {
-            return false;
-        }
-        Object val = metadata.get(key);
-        if (val instanceof Boolean b) {
-            return b;
-        }
-        if (val instanceof String s) {
-            return Boolean.parseBoolean(s.trim());
-        }
-        return false;
-    }
-
-    private String getStringMetadata(Map<String, Object> metadata, String key) {
-        if (!metadata.containsKey(key)) {
-            return null;
-        }
-        Object val = metadata.get(key);
-        return val != null ? val.toString() : null;
     }
 
     private FraudResult determineAction(PaymentMessage message, int riskScore, List<String> triggeredRules) {

@@ -1,6 +1,8 @@
 package com.poc.gateway.service;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
 import com.poc.gateway.repository.OutboxEventRepository;
@@ -17,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,7 +52,7 @@ class PaymentServiceTest {
             status,
             null,
             null,
-            Map.of(),
+            PaymentMetadata.empty(),
             LocalDateTime.now(),
             LocalDateTime.now()
         );
@@ -65,7 +66,7 @@ class PaymentServiceTest {
             "cust-1",
             "CREDIT_CARD",
             "DE",
-            Map.of()
+            PaymentMetadataDTO.empty()
         );
 
         when(outbox.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
@@ -75,7 +76,7 @@ class PaymentServiceTest {
             return p.withStatus(PaymentStatus.PENDING);
         });
         when(kafkaEventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any(PaymentMetadataDTO.class)
         )).thenReturn(true);
 
         PaymentResponseDTO response = service.createPayment(request);
@@ -87,7 +88,7 @@ class PaymentServiceTest {
         assertEquals("PENDING", response.status());
         verify(repository, times(1)).save(any(Payment.class), anyString());
         verify(kafkaEventPublisher, times(1)).publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any(PaymentMetadataDTO.class)
         );
     }
 
@@ -99,7 +100,7 @@ class PaymentServiceTest {
             "cust-idem",
             "CREDIT_CARD",
             "US",
-            Map.of()
+            PaymentMetadataDTO.empty()
         );
         String key = UUID.randomUUID().toString();
 
@@ -110,7 +111,7 @@ class PaymentServiceTest {
             return p.withStatus(PaymentStatus.PENDING);
         });
         when(kafkaEventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any(PaymentMetadataDTO.class)
         )).thenReturn(true);
 
         PaymentResponseDTO first = service.createPayment(request, key);
@@ -119,7 +120,7 @@ class PaymentServiceTest {
         assertEquals(first.id(), second.id());
         verify(repository, times(1)).save(any(Payment.class), eq(key));
         verify(kafkaEventPublisher, times(1)).publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any(PaymentMetadataDTO.class)
         );
     }
 
@@ -133,7 +134,7 @@ class PaymentServiceTest {
             "cust-replay",
             "CREDIT_CARD",
             "US",
-            Map.of()
+            PaymentMetadataDTO.empty()
         );
 
         when(outbox.findByIdempotencyKey(eq(key))).thenReturn(Optional.empty());
@@ -144,7 +145,7 @@ class PaymentServiceTest {
         assertEquals(stored.id().toString(), response.id());
         verify(repository, never()).save(any(), anyString());
         verify(kafkaEventPublisher, never()).publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), anyMap()
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any(PaymentMetadataDTO.class)
         );
     }
 

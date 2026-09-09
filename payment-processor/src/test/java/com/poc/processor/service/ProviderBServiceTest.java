@@ -1,5 +1,6 @@
 package com.poc.processor.service;
 
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
 import io.quarkus.test.junit.QuarkusTest;
@@ -9,7 +10,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -25,7 +25,7 @@ class ProviderBServiceTest {
         return new PaymentMessage(
                 "event-1", "payment-1", new BigDecimal("100.00"), "USD",
                 "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
-                Map.of(), LocalDateTime.now()
+                PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
     }
 
@@ -33,7 +33,7 @@ class ProviderBServiceTest {
         return new PaymentMessage(
                 "event-1", paymentId, new BigDecimal("250.50"), currency,
                 "customer-2", "DEBIT_CARD", country, 1, false, 60, "UTC",
-                Map.of(), LocalDateTime.now()
+                PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
     }
 
@@ -85,7 +85,7 @@ class ProviderBServiceTest {
             PaymentMessage msg = new PaymentMessage(
                     "event-" + i, "payment-" + i, new BigDecimal("100.00"), "USD",
                     "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
-                    Map.of(), LocalDateTime.now()
+                    PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
             jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
             if (response.getStatus() == 500) {
@@ -148,7 +148,7 @@ class ProviderBServiceTest {
             PaymentMessage msg = new PaymentMessage(
                     "event-" + i, "payment-" + i, new BigDecimal("50.00"), "USD",
                     "customer-" + i, "CREDIT_CARD", "US", 1, false, 30, "UTC",
-                    Map.of(), LocalDateTime.now()
+                    PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
             jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
             assertNotNull(response);
@@ -175,7 +175,7 @@ class ProviderBServiceTest {
         PaymentMessage msg = new PaymentMessage(
                 "event-null", "payment-null", null, "USD",
                 "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
-                Map.of(), LocalDateTime.now()
+                PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
         jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
         assertNotNull(response);

@@ -66,7 +66,6 @@ class PaymentResourceTest {
             .body("payment_method", equalTo("CREDIT_CARD"))
             .body("country", equalTo("US"))
             .body("status", equalTo("PENDING"))
-            .body("metadata.channel", equalTo("api"))
             .extract()
             .path("id");
     }

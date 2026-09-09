@@ -16,7 +16,7 @@ class PaymentPageResponseTest {
     @DisplayName("Record construction with all fields should work correctly")
     void testRecordConstruction() {
         PaymentResponseDTO payment = new PaymentResponseDTO(
-            "id-1", new BigDecimal("100.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, null,
+            "id-1", new BigDecimal("100.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, PaymentMetadataDTO.empty(),
             LocalDateTime.now(), LocalDateTime.now()
         );
         List<PaymentResponseDTO> payments = List.of(payment);

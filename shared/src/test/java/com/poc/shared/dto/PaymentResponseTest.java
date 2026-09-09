@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,7 +14,7 @@ class PaymentResponseTest {
     @DisplayName("Record construction with all fields should work correctly")
     void testRecordConstructionWithAllFields() {
         LocalDateTime now = LocalDateTime.now();
-        Map<String, Object> metadata = Map.of("key1", "value1");
+        PaymentMetadataDTO metadata = new PaymentMetadataDTO("order-1", 1, true, 30, "LOW", null, 10, 5);
 
         PaymentResponseDTO response = new PaymentResponseDTO(
             "id-123",
@@ -61,7 +60,7 @@ class PaymentResponseTest {
             "PENDING",
             null,
             "Timeout",
-            null,
+            PaymentMetadataDTO.empty(),
             now,
             now
         );
@@ -69,7 +68,7 @@ class PaymentResponseTest {
         assertEquals("id-789", response.id());
         assertNull(response.provider());
         assertEquals("Timeout", response.failureReason());
-        assertNull(response.metadata());
+        assertEquals(PaymentMetadataDTO.empty(), response.metadata());
     }
 
     @Test
@@ -78,10 +77,10 @@ class PaymentResponseTest {
         LocalDateTime now = LocalDateTime.now();
 
         PaymentResponseDTO response1 = new PaymentResponseDTO(
-            "id-1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, null, now, now
+            "id-1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, PaymentMetadataDTO.empty(), now, now
         );
         PaymentResponseDTO response2 = new PaymentResponseDTO(
-            "id-1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, null, now, now
+            "id-1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, PaymentMetadataDTO.empty(), now, now
         );
 
         assertEquals(response1, response2);

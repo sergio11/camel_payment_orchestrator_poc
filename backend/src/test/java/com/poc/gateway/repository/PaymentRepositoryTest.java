@@ -1,14 +1,13 @@
 package com.poc.gateway.repository;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -35,7 +34,7 @@ class PaymentRepositoryTest {
             customerId,
             "CREDIT_CARD",
             "US",
-            Map.of()
+            PaymentMetadata.empty()
         );
         Payment saved = repository.save(payment);
         if (status != PaymentStatus.PENDING) {
@@ -47,7 +46,7 @@ class PaymentRepositoryTest {
     @Test
     void save_returnsPaymentWithGeneratedId() {
         Payment payment = Payment.create(
-            new BigDecimal("50.00"), "USD", "cust-1", "CREDIT_CARD", "US", Map.of()
+            new BigDecimal("50.00"), "USD", "cust-1", "CREDIT_CARD", "US", PaymentMetadata.empty()
         );
 
         Payment saved = repository.save(payment);
@@ -201,7 +200,7 @@ class PaymentRepositoryTest {
     @Test
     void update_throwsNotFoundExceptionForNonexistentPayment() {
         Payment nonexistent = Payment.create(
-            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", Map.of()
+            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", PaymentMetadata.empty()
         );
 
         assertThrows(
@@ -254,7 +253,7 @@ class PaymentRepositoryTest {
     @Test
     void save_idempotencyKeyStoreEvicted_createsNewPayment() throws Exception {
         Payment saved = repository.save(
-            Payment.create(new BigDecimal("10.00"), "USD", "c1", "CARD", "US", Map.of()),
+            Payment.create(new BigDecimal("10.00"), "USD", "c1", "CARD", "US", PaymentMetadata.empty()),
             "key1"
         );
         java.lang.reflect.Field storeField = PaymentRepositoryInMemory.class.getDeclaredField("store");
@@ -265,7 +264,7 @@ class PaymentRepositoryTest {
         store.remove(saved.id());
 
         Payment second = repository.save(
-            Payment.create(new BigDecimal("20.00"), "EUR", "c2", "CARD", "DE", Map.of()),
+            Payment.create(new BigDecimal("20.00"), "EUR", "c2", "CARD", "DE", PaymentMetadata.empty()),
             "key1"
         );
         assertNotEquals(saved.id(), second.id());

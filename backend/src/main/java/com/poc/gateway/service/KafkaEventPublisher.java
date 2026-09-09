@@ -1,6 +1,7 @@
 package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -70,13 +71,13 @@ public class KafkaEventPublisher {
 
     public boolean publishPaymentReceived(String paymentId, BigDecimal amount, String currency,
                                     String customerId, String paymentMethod, String country,
-                                    Map<String, Object> metadata) {
+                                    PaymentMetadataDTO metadata) {
         try {
             PaymentMessage message = new PaymentMessage(
                 UUID.randomUUID().toString(),
                 paymentId, amount, currency, customerId, paymentMethod, country,
                 0, false, 0, "UTC",
-                metadata,
+                metadata != null ? metadata : PaymentMetadataDTO.empty(),
                 LocalDateTime.now(ZoneOffset.UTC)
             );
             String json = objectMapper.writeValueAsString(message);
