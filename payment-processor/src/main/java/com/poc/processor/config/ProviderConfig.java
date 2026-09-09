@@ -19,12 +19,6 @@ public class ProviderConfig {
     @ConfigProperty(name = "provider.circuit-breaker.wait-duration")
     Duration circuitBreakerWaitDuration;
 
-    @ConfigProperty(name = "provider.max-retries")
-    int maxRetries;
-
-    @ConfigProperty(name = "provider.retry-backoff")
-    Duration retryBackoff;
-
     @ConfigProperty(name = "provider.circuit-breaker.sliding-window-size", defaultValue = "100")
     int circuitBreakerSlidingWindowSize;
 
@@ -33,6 +27,4 @@ public class ProviderConfig {
     public int circuitBreakerFailureThreshold() { return circuitBreakerFailureThreshold; }
     public Duration circuitBreakerWaitDuration() { return circuitBreakerWaitDuration; }
     public int circuitBreakerSlidingWindowSize() { return circuitBreakerSlidingWindowSize; }
-    public int maxRetries() { return maxRetries; }
-    public Duration retryBackoff() { return retryBackoff; }
 }

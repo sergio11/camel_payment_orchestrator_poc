@@ -21,10 +21,10 @@ public class ContentBasedRouterBean {
         if (amount.compareTo(config.cbrHighAmountThreshold()) > 0) {
             return DESTINATION_FRAUD_REVIEW;
         }
-        if ("WALLET".equals(paymentMethod) && amount.compareTo(config.cbrWalletAmountThreshold()) > 0) {
+        if (country != null && config.highRiskCountries().contains(country)) {
             return DESTINATION_FRAUD_REVIEW;
         }
-        if (config.highRiskCountries().contains(country)) {
+        if ("WALLET".equals(paymentMethod) && amount.compareTo(config.cbrWalletAmountThreshold()) > 0) {
             return DESTINATION_FRAUD_REVIEW;
         }
         return DESTINATION_FRAUD_CHECK;

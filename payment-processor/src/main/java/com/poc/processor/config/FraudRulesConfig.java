@@ -1,5 +1,6 @@
 package com.poc.processor.config;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.math.BigDecimal;
@@ -41,8 +42,26 @@ public class FraudRulesConfig {
     @ConfigProperty(name = "fraud.rules.cbr-wallet-amount-threshold")
     private BigDecimal cbrWalletAmountThreshold;
 
+    @PostConstruct
+    void validate() {
+        if (unusualHourStart < 0 || unusualHourStart > 23) {
+            throw new IllegalStateException("fraud.rules.unusual-hour-start must be 0-23, got: " + unusualHourStart);
+        }
+        if (unusualHourEnd < 0 || unusualHourEnd > 23) {
+            throw new IllegalStateException("fraud.rules.unusual-hour-end must be 0-23, got: " + unusualHourEnd);
+        }
+        if (riskScoreThresholdHigh <= riskScoreThresholdMedium) {
+            throw new IllegalStateException("risk-score-threshold-high must be > risk-score-threshold-medium");
+        }
+        if (cbrHighAmountThreshold.compareTo(cbrWalletAmountThreshold) <= 0) {
+            throw new IllegalStateException("cbr-high-amount-threshold must be > cbr-wallet-amount-threshold");
+        }
+    }
+
     public BigDecimal highAmountThreshold() { return highAmountThreshold; }
-    public List<String> highRiskCountries() { return highRiskCountries; }
+    public List<String> highRiskCountries() {
+        return highRiskCountries != null ? List.copyOf(highRiskCountries) : List.of();
+    }
     public int rapidRetryThreshold() { return rapidRetryThreshold; }
     public int newMethodDaysThreshold() { return newMethodDaysThreshold; }
     public int unusualHourStart() { return unusualHourStart; }

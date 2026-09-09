@@ -77,8 +77,8 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 validatePaymentMessage(msg);
             })
             .log("Received payment: ${header.OriginalPaymentId}")
-            .wireTap("direct:audit-pipeline")
             .process("paymentEnrichProcessor")
+            .wireTap("direct:audit-pipeline")
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
                 String target = contentBasedRouterBean.routeToFraudCheck(msg.amount(), msg.paymentMethod(), msg.country());

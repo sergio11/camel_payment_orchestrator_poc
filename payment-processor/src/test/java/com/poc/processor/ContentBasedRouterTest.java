@@ -105,6 +105,13 @@ class ContentBasedRouterTest {
     }
 
     @Test
+    @DisplayName("Verify WALLET + high-risk country + low amount routes to fraud-review")
+    void testWalletHighRiskCountryLowAmountRoutesToReview() {
+        String route = routerBean.routeToFraudCheck(new BigDecimal("100"), "WALLET", "XX");
+        assertEquals("direct:fraud-review", route, "WALLET from high-risk country should route to fraud-review regardless of amount");
+    }
+
+    @Test
     @DisplayName("Verify null amount routes to fraud-check")
     void testNullAmountRoutesToFraudCheck() {
         String route = routerBean.routeToFraudCheck(null, "CREDIT_CARD", "US");

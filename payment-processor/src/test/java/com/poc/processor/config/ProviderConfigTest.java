@@ -43,19 +43,6 @@ class ProviderConfigTest {
     }
 
     @Test
-    @DisplayName("maxRetries returns configured value")
-    void maxRetries() {
-        assertEquals(1, config.maxRetries());
-    }
-
-    @Test
-    @DisplayName("retryBackoff returns configured duration")
-    void retryBackoff() {
-        assertNotNull(config.retryBackoff());
-        assertEquals(Duration.ofMillis(100), config.retryBackoff());
-    }
-
-    @Test
     @DisplayName("circuitBreakerSlidingWindowSize returns configured value")
     void circuitBreakerSlidingWindowSize() {
         assertEquals(10, config.circuitBreakerSlidingWindowSize());
