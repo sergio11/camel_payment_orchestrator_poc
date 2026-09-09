@@ -1,6 +1,6 @@
 package com.poc.gateway.exception;
 
-import com.poc.shared.dto.ErrorResponse;
+import com.poc.shared.dto.ErrorResponseDTO;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.ws.rs.core.Response;
@@ -27,7 +27,7 @@ class GlobalExceptionMapperTest {
     void testPaymentNotFoundExceptionReturns404() {
         Response response = mapper.toResponse(new PaymentNotFoundException("123"));
         assertEquals(404, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("NOT_FOUND", error.error());
         assertTrue(error.message().contains("123"));
     }
@@ -37,7 +37,7 @@ class GlobalExceptionMapperTest {
     void testGenericExceptionReturns500() {
         Response response = mapper.toResponse(new RuntimeException("Something went wrong"));
         assertEquals(500, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("INTERNAL_ERROR", error.error());
     }
 
@@ -65,7 +65,7 @@ class GlobalExceptionMapperTest {
         Response response = mapper.toResponse(cve);
 
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("VALIDATION_ERROR", error.error());
         assertEquals("Invalid request", error.message());
         assertNotNull(error.details());
@@ -78,7 +78,7 @@ class GlobalExceptionMapperTest {
         Response response = mapper.toResponse(new IllegalArgumentException("bad argument"));
 
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("INVALID_ARGUMENT", error.error());
         assertEquals("bad argument", error.message());
     }
@@ -100,7 +100,7 @@ class GlobalExceptionMapperTest {
         Response response = mapper.toResponse(cve);
 
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("VALIDATION_ERROR", error.error());
         assertEquals(1, error.details().size());
         assertEquals("name", error.details().get(0).field());
@@ -111,7 +111,7 @@ class GlobalExceptionMapperTest {
     @DisplayName("PaymentNotFoundException has correct error code and message")
     void testPaymentNotFoundExceptionErrorDetails() {
         Response response = mapper.toResponse(new PaymentNotFoundException("pay-xyz"));
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
 
         assertEquals("NOT_FOUND", error.error());
         assertEquals("Payment not found: pay-xyz", error.message());
@@ -125,7 +125,7 @@ class GlobalExceptionMapperTest {
             new com.fasterxml.jackson.core.JsonParseException(null, "Unexpected character");
         Response response = mapper.toResponse(ex);
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("VALIDATION_ERROR", error.error());
     }
 
@@ -137,7 +137,7 @@ class GlobalExceptionMapperTest {
         RuntimeException wrapper = new RuntimeException("deserialization failed", cause);
         Response response = mapper.toResponse(wrapper);
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("VALIDATION_ERROR", error.error());
     }
 
@@ -146,7 +146,7 @@ class GlobalExceptionMapperTest {
     void testBadRequestExceptionReturns400() {
         Response response = mapper.toResponse(new jakarta.ws.rs.BadRequestException("bad body"));
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("VALIDATION_ERROR", error.error());
     }
 
@@ -161,7 +161,7 @@ class GlobalExceptionMapperTest {
     void testJacksonExceptionNullMessageUsesFallback() {
         Response response = mapper.toResponse(new FakeJsonParseException());
         assertEquals(400, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("VALIDATION_ERROR", error.error());
         assertEquals(1, error.details().size());
         assertEquals("Malformed request body", error.details().get(0).message());
@@ -181,7 +181,7 @@ class GlobalExceptionMapperTest {
             new jakarta.persistence.PersistenceException("duplicate key value violates unique constraint \"uq_payments_idempotency\"");
         Response response = mapper.toResponse(ex);
         assertEquals(409, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("CONFLICT", error.error());
     }
 
@@ -212,7 +212,7 @@ class GlobalExceptionMapperTest {
     void testIdempotencyMessageReturns409() {
         Response response = mapper.toResponse(new RuntimeException("violates uq_outbox_idempotency"));
         assertEquals(409, response.getStatus());
-        ErrorResponse error = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
         assertEquals("CONFLICT", error.error());
     }
 

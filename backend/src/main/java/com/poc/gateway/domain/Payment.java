@@ -1,5 +1,6 @@
-package com.poc.gateway.entity;
+package com.poc.gateway.domain;
 
+import com.poc.gateway.entity.PaymentStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Map;

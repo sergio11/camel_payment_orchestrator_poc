@@ -8,22 +8,25 @@ import java.math.BigDecimal;
 @ApplicationScoped
 public class ContentBasedRouterBean {
 
+    public static final String DESTINATION_FRAUD_CHECK = "direct:fraud-check";
+    public static final String DESTINATION_FRAUD_REVIEW = "direct:fraud-review";
+
     @Inject
     FraudRulesConfig config;
 
     public String routeToFraudCheck(BigDecimal amount, String paymentMethod, String country) {
         if (amount == null) {
-            return "direct:fraud-check";
+            return DESTINATION_FRAUD_CHECK;
         }
         if (amount.compareTo(config.cbrHighAmountThreshold()) > 0) {
-            return "direct:fraud-review";
+            return DESTINATION_FRAUD_REVIEW;
         }
         if ("WALLET".equals(paymentMethod) && amount.compareTo(config.cbrWalletAmountThreshold()) > 0) {
-            return "direct:fraud-review";
+            return DESTINATION_FRAUD_REVIEW;
         }
         if (config.highRiskCountries().contains(country)) {
-            return "direct:fraud-review";
+            return DESTINATION_FRAUD_REVIEW;
         }
-        return "direct:fraud-check";
+        return DESTINATION_FRAUD_CHECK;
     }
 }

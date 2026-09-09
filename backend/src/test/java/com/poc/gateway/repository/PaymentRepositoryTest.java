@@ -1,6 +1,6 @@
 package com.poc.gateway.repository;
 
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +25,7 @@ class PaymentRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        repository = new PaymentRepository();
+        repository = PaymentRepository.inMemory();
     }
 
     private Payment createAndStorePayment(String customerId, PaymentStatus status) {
@@ -249,5 +249,32 @@ class PaymentRepositoryTest {
         assertEquals(threadCount, successCount.get() + errorCount.get());
         
         executor.shutdown();
+    }
+
+    @Test
+    void save_idempotencyKeyStoreEvicted_createsNewPayment() throws Exception {
+        Payment saved = repository.save(
+            Payment.create(new BigDecimal("10.00"), "USD", "c1", "CARD", "US", Map.of()),
+            "key1"
+        );
+        java.lang.reflect.Field storeField = PaymentRepositoryInMemory.class.getDeclaredField("store");
+        storeField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        java.util.concurrent.ConcurrentHashMap<UUID, Payment> store =
+            (java.util.concurrent.ConcurrentHashMap<UUID, Payment>) storeField.get(repository);
+        store.remove(saved.id());
+
+        Payment second = repository.save(
+            Payment.create(new BigDecimal("20.00"), "EUR", "c2", "CARD", "DE", Map.of()),
+            "key1"
+        );
+        assertNotEquals(saved.id(), second.id());
+        assertEquals(new BigDecimal("20.00"), second.amount());
+    }
+
+    @Test
+    void findById_nullId_returnsEmpty() {
+        createAndStorePayment("c1", PaymentStatus.PENDING);
+        assertEquals(Optional.empty(), repository.findById(null));
     }
 }

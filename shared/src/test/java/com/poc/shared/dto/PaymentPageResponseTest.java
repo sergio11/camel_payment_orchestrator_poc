@@ -15,13 +15,13 @@ class PaymentPageResponseTest {
     @Test
     @DisplayName("Record construction with all fields should work correctly")
     void testRecordConstruction() {
-        PaymentResponse payment = new PaymentResponse(
+        PaymentResponseDTO payment = new PaymentResponseDTO(
             "id-1", new BigDecimal("100.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, null,
             LocalDateTime.now(), LocalDateTime.now()
         );
-        List<PaymentResponse> payments = List.of(payment);
+        List<PaymentResponseDTO> payments = List.of(payment);
 
-        PaymentPageResponse response = new PaymentPageResponse(payments, 1L, 10, 0);
+        PaymentPageResponseDTO response = new PaymentPageResponseDTO(payments, 1L, 10, 0);
 
         assertEquals(payments, response.payments());
         assertEquals(1L, response.total());
@@ -32,7 +32,7 @@ class PaymentPageResponseTest {
     @Test
     @DisplayName("Record construction with empty list should work")
     void testRecordConstructionWithEmptyList() {
-        PaymentPageResponse response = new PaymentPageResponse(Collections.emptyList(), 0L, 10, 0);
+        PaymentPageResponseDTO response = new PaymentPageResponseDTO(Collections.emptyList(), 0L, 10, 0);
 
         assertTrue(response.payments().isEmpty());
         assertEquals(0L, response.total());
@@ -41,7 +41,7 @@ class PaymentPageResponseTest {
     @Test
     @DisplayName("Record construction with large values should work")
     void testRecordConstructionWithLargeValues() {
-        PaymentPageResponse response = new PaymentPageResponse(null, Long.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        PaymentPageResponseDTO response = new PaymentPageResponseDTO(null, Long.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
 
         assertNull(response.payments());
         assertEquals(Long.MAX_VALUE, response.total());

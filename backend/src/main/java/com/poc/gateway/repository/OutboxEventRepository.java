@@ -18,7 +18,7 @@ public class OutboxEventRepository {
     @Inject
     public EntityManager em;
 
-    private final ConcurrentHashMap<String, OutboxEventEntity> memByKey = new ConcurrentHashMap<>();
+    private final Map<String, OutboxEventEntity> inMemoryStore = new ConcurrentHashMap<>();
 
     public boolean isDbAvailable() {
         return em != null;
@@ -26,9 +26,9 @@ public class OutboxEventRepository {
 
     @Transactional
     public void persist(OutboxEventEntity event) {
-        if (em == null) {
+        if (!isDbAvailable()) {
             if (event.idempotencyKey != null) {
-                memByKey.putIfAbsent(event.idempotencyKey, event);
+                inMemoryStore.put(event.idempotencyKey, event);
             }
             return;
         }
@@ -40,12 +40,8 @@ public class OutboxEventRepository {
         if (key == null || key.isBlank()) {
             return Optional.empty();
         }
-        OutboxEventEntity mem = memByKey.get(key);
-        if (mem != null) {
-            return Optional.of(mem);
-        }
-        if (em == null) {
-            return Optional.empty();
+        if (!isDbAvailable()) {
+            return Optional.ofNullable(inMemoryStore.get(key));
         }
         List<OutboxEventEntity> list = em.createQuery(
                 "FROM OutboxEventEntity WHERE idempotencyKey = :k", OutboxEventEntity.class)

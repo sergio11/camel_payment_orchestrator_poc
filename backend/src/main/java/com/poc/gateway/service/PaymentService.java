@@ -1,11 +1,11 @@
 package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.poc.shared.dto.PaymentRequest;
-import com.poc.shared.dto.PaymentResponse;
+import com.poc.shared.dto.PaymentRequestDTO;
+import com.poc.shared.dto.PaymentResponseDTO;
 import com.poc.gateway.entity.OutboxEventEntity;
 import com.poc.gateway.entity.OutboxStatus;
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
 import com.poc.gateway.mapper.PaymentMapper;
@@ -37,22 +37,29 @@ public class PaymentService {
     KafkaEventPublisher kafkaEventPublisher;
 
     @Inject
+    PaymentMapper paymentMapper;
+
+    @Inject
     ObjectMapper objectMapper;
 
     private final ConcurrentHashMap<String, Payment> idempotencyCache = new ConcurrentHashMap<>();
 
-    public PaymentResponse createPayment(PaymentRequest request) {
+    private PaymentMapper getMapper() {
+        return paymentMapper != null ? paymentMapper : PaymentMapper.INSTANCE;
+    }
+
+    public PaymentResponseDTO createPayment(PaymentRequestDTO request) {
         return createPayment(request, UUID.randomUUID().toString());
     }
 
-    public PaymentResponse createPayment(PaymentRequest request, String idempotencyKey) {
+    public PaymentResponseDTO createPayment(PaymentRequestDTO request, String idempotencyKey) {
         String key = normalizeKey(idempotencyKey);
         Optional<Payment> existing = findExistingPayment(key);
         if (existing.isPresent()) {
             LOG.infof("Idempotent replay for key %s -> payment %s (no Kafka republish)", key, existing.get().id());
-            return PaymentMapper.toResponse(existing.get());
+            return getMapper().toResponseDTO(existing.get());
         }
-        Payment payment = PaymentMapper.toEntity(request);
+        Payment payment = getMapper().toDomain(request);
         Payment saved = persistWithOutbox(payment, key);
         idempotencyCache.putIfAbsent(key, saved);
         boolean published = kafkaEventPublisher.publishPaymentReceived(
@@ -70,11 +77,11 @@ public class PaymentService {
             LOG.errorf("Kafka publish failed for payment %s, left as PENDING for OutboxRelay retry", saved.id());
             throw new RuntimeException("Failed to publish payment event to Kafka. Payment " + saved.id() + " left as PENDING.");
         }
-        return PaymentMapper.toResponse(saved);
+        return getMapper().toResponseDTO(saved);
     }
 
-    public Optional<PaymentResponse> getByIdempotencyKey(String idempotencyKey) {
-        return findExistingPayment(normalizeKey(idempotencyKey)).map(PaymentMapper::toResponse);
+    public Optional<PaymentResponseDTO> getByIdempotencyKey(String idempotencyKey) {
+        return findExistingPayment(normalizeKey(idempotencyKey)).map(getMapper()::toResponseDTO);
     }
 
     Optional<Payment> findExistingPayment(String key) {
@@ -178,7 +185,7 @@ public class PaymentService {
         }
     }
 
-    public PaymentResponse getPayment(String id) {
+    public PaymentResponseDTO getPayment(String id) {
         if (id == null) {
             throw new PaymentNotFoundException("null");
         }
@@ -190,10 +197,10 @@ public class PaymentService {
         }
         Payment payment = repository.findById(uuid)
             .orElseThrow(() -> new PaymentNotFoundException(id));
-        return PaymentMapper.toResponse(payment);
+        return getMapper().toResponseDTO(payment);
     }
 
-    public List<PaymentResponse> listPayments(String customerId, String status, int limit, int offset) {
+    public List<PaymentResponseDTO> listPayments(String customerId, String status, int limit, int offset) {
         PaymentStatus paymentStatus = null;
         if (status != null) {
             try {
@@ -204,7 +211,7 @@ public class PaymentService {
         }
         return repository.findAll(customerId, paymentStatus, limit, offset)
             .stream()
-            .map(PaymentMapper::toResponse)
+            .map(getMapper()::toResponseDTO)
             .toList();
     }
 

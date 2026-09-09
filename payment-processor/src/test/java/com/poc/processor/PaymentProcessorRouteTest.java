@@ -183,7 +183,8 @@ class PaymentProcessorRouteTest {
     private static String hour12Zone() {
         int currentHour = java.time.LocalTime.now(java.time.ZoneId.of("UTC")).getHour();
         int desiredOffset = ((12 - currentHour) % 24 + 24) % 24;
-        return desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+        if (desiredOffset > 14) desiredOffset -= 24;
+        return desiredOffset == 0 ? "UTC" : desiredOffset > 0 ? "Etc/GMT-" + desiredOffset : "Etc/GMT+" + (-desiredOffset);
     }
 
     @Test

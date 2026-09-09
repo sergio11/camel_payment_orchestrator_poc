@@ -1,40 +1,26 @@
 package com.poc.gateway.mapper;
 
-import com.poc.shared.dto.PaymentRequest;
-import com.poc.shared.dto.PaymentResponse;
-import com.poc.gateway.entity.Payment;
-import java.time.LocalDateTime;
+import com.poc.gateway.domain.Payment;
+import com.poc.shared.dto.PaymentRequestDTO;
+import com.poc.shared.dto.PaymentResponseDTO;
+import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.factory.Mappers;
 
-public class PaymentMapper {
-    
-    private PaymentMapper() {
-    }
-    
-    public static Payment toEntity(PaymentRequest request) {
-        return Payment.create(
-            request.amount(),
-            request.currency(),
-            request.customerId(),
-            request.paymentMethod(),
-            request.country(),
-            request.metadata()
-        );
-    }
-    
-    public static PaymentResponse toResponse(Payment payment) {
-        return new PaymentResponse(
-            payment.id().toString(),
-            payment.amount(),
-            payment.currency(),
-            payment.customerId(),
-            payment.paymentMethod(),
-            payment.country(),
-            payment.status() != null ? payment.status().name() : null,
-            payment.provider(),
-            payment.failureReason(),
-            payment.metadata(),
-            payment.createdAt(),
-            payment.updatedAt()
-        );
-    }
+@Mapper(componentModel = "cdi")
+public interface PaymentMapper {
+
+    PaymentMapper INSTANCE = Mappers.getMapper(PaymentMapper.class);
+
+    @Mapping(target = "id", expression = "java(java.util.UUID.randomUUID())")
+    @Mapping(target = "status", constant = "PENDING")
+    @Mapping(target = "provider", ignore = true)
+    @Mapping(target = "failureReason", ignore = true)
+    @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
+    @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
+    Payment toDomain(PaymentRequestDTO request);
+
+    @Mapping(target = "id", expression = "java(payment.id() != null ? payment.id().toString() : null)")
+    @Mapping(target = "status", expression = "java(payment.status() != null ? payment.status().name() : null)")
+    PaymentResponseDTO toResponseDTO(Payment payment);
 }

@@ -1,7 +1,7 @@
 package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

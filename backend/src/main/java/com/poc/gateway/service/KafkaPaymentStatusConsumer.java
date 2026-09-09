@@ -176,7 +176,7 @@ public class KafkaPaymentStatusConsumer {
             return;
         }
 
-        Optional<com.poc.gateway.entity.Payment> paymentOpt;
+        Optional<com.poc.gateway.domain.Payment> paymentOpt;
         try {
             paymentOpt = repository.findById(uuid);
         } catch (Exception e) {
@@ -187,7 +187,7 @@ public class KafkaPaymentStatusConsumer {
             return;
         }
 
-        Optional<com.poc.gateway.entity.Payment> updated;
+        Optional<com.poc.gateway.domain.Payment> updated;
         try {
             updated = repository.updateIfPending(uuid, newStatus);
         } catch (Exception e) {

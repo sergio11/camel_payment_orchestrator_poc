@@ -1,7 +1,7 @@
 package com.poc.gateway.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import io.micrometer.core.instrument.Counter;
@@ -190,6 +190,20 @@ class KafkaPaymentStatusConsumerBranchesTest {
             .publishDeadLetter(any(), any(), any(), any());
 
         assertDoesNotThrow(() -> invokePoison(record("payments.processed", "k"), "boom"));
+    }
+
+    @Test
+    @DisplayName("routePoisonToDlq increments dlqFailed counter when DLQ publish returns false")
+    void routePoison_dlqReturnsFalse_incrementsDlqFailed() throws Exception {
+        when(meterRegistries.isUnsatisfied()).thenReturn(false);
+        when(meterRegistries.get()).thenReturn(meterRegistry);
+        when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(counter);
+        when(kafkaEventPublisher.publishDeadLetter(any(), any(), any(), any())).thenReturn(false);
+
+        invokePoison(record("payments.processed", "k"), "boom");
+
+        verify(kafkaEventPublisher).publishDeadLetter(eq("k"), eq("payments.processed"), eq("boom"), eq("{}"));
+        verify(counter, times(2)).increment();
     }
 
     // ========== incrementCounter branches ==========

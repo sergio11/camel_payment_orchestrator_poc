@@ -43,8 +43,8 @@ class PaymentResourceValidationMatrixTest {
             {
                 "amount": %s,
                 "currency": "%s",
-                "customerId": "%s",
-                "paymentMethod": "%s"%s
+                "customer_id": "%s",
+                "payment_method": "%s"%s
             }
             """.formatted(amount, currency, customerId, paymentMethod, countryJson);
     }
@@ -107,8 +107,8 @@ class PaymentResourceValidationMatrixTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "cust-matrix-null-c",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-matrix-null-c",
+                "payment_method": "CREDIT_CARD"
             }
             """;
         given()
@@ -126,8 +126,8 @@ class PaymentResourceValidationMatrixTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "cust-matrix-null-c2",
-                "paymentMethod": "CREDIT_CARD",
+                "customer_id": "cust-matrix-null-c2",
+                "payment_method": "CREDIT_CARD",
                 "country": null
             }
             """;

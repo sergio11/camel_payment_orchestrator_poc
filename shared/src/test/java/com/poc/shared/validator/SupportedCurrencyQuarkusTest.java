@@ -1,6 +1,6 @@
 package com.poc.shared.validator;
 
-import com.poc.shared.dto.PaymentRequest;
+import com.poc.shared.dto.PaymentRequestDTO;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.validation.Validator;
@@ -31,8 +31,8 @@ class SupportedCurrencyQuarkusTest {
     @Inject
     Validator validator;
 
-    private static PaymentRequest requestWith(String currency) {
-        return new PaymentRequest(
+    private static PaymentRequestDTO requestWith(String currency) {
+        return new PaymentRequestDTO(
             new BigDecimal("100.00"),
             currency,
             "customer-123",
@@ -45,25 +45,25 @@ class SupportedCurrencyQuarkusTest {
     @Test
     @DisplayName("Valid USD currency has no violations via Arc-managed Validator")
     void validUsdHasNoViolations() {
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(requestWith("USD"));
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(requestWith("USD"));
         assertTrue(violations.isEmpty(), "USD should be valid: " + describe(violations));
     }
 
     @Test
     @DisplayName("Valid MXN currency has no violations via Arc-managed Validator")
     void validMxnHasNoViolations() {
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(requestWith("MXN"));
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(requestWith("MXN"));
         assertTrue(violations.isEmpty(), "MXN should be valid: " + describe(violations));
     }
 
     @Test
     @DisplayName("Invalid BTC currency has violations via Arc-managed Validator")
     void invalidBtcHasViolations() {
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(requestWith("BTC"));
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(requestWith("BTC"));
         assertFalse(violations.isEmpty(), "BTC should be rejected");
     }
 
-    private static String describe(Set<ConstraintViolation<PaymentRequest>> violations) {
+    private static String describe(Set<ConstraintViolation<PaymentRequestDTO>> violations) {
         return violations.stream()
             .map(v -> v.getPropertyPath() + "=" + v.getMessage())
             .collect(Collectors.joining(", "));

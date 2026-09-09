@@ -14,7 +14,7 @@ class PaymentStatusResponseTest {
     void testRecordConstruction() {
         LocalDateTime now = LocalDateTime.now();
 
-        PaymentStatusResponse response = new PaymentStatusResponse("pay-123", "COMPLETED", now);
+        PaymentStatusResponseDTO response = new PaymentStatusResponseDTO("pay-123", "COMPLETED", now);
 
         assertEquals("pay-123", response.id());
         assertEquals("COMPLETED", response.status());
@@ -26,8 +26,8 @@ class PaymentStatusResponseTest {
     void testRecordEquality() {
         LocalDateTime now = LocalDateTime.now();
 
-        PaymentStatusResponse response1 = new PaymentStatusResponse("id", "PENDING", now);
-        PaymentStatusResponse response2 = new PaymentStatusResponse("id", "PENDING", now);
+        PaymentStatusResponseDTO response1 = new PaymentStatusResponseDTO("id", "PENDING", now);
+        PaymentStatusResponseDTO response2 = new PaymentStatusResponseDTO("id", "PENDING", now);
 
         assertEquals(response1, response2);
     }
@@ -35,7 +35,7 @@ class PaymentStatusResponseTest {
     @Test
     @DisplayName("Record with null fields should work")
     void testRecordWithNulls() {
-        PaymentStatusResponse response = new PaymentStatusResponse(null, null, null);
+        PaymentStatusResponseDTO response = new PaymentStatusResponseDTO(null, null, null);
 
         assertNull(response.id());
         assertNull(response.status());

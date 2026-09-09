@@ -38,7 +38,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
         if (msg.paymentId() == null || msg.amount() == null || msg.currency() == null
             || msg.customerId() == null || msg.paymentMethod() == null) {
             throw new IllegalArgumentException(
-                "Invalid payment fields: required fields missing for payment " + (msg != null ? msg.paymentId() : "null"));
+                "Invalid payment fields: required fields missing for payment " + msg.paymentId());
         }
     }
 
@@ -86,16 +86,16 @@ public class PaymentProcessorRoute extends RouteBuilder {
             })
             .log("Fraud route target: ${header.FraudRouteTarget} for ${body.paymentId}")
             .choice()
-                .when(header("FraudRouteTarget").isEqualTo("direct:fraud-review"))
+                .when(header("FraudRouteTarget").isEqualTo(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW))
                     .log("High amount or WALLET payment, routing to fraud review: ${body.paymentId}")
-                    .to("direct:fraud-review")
+                    .to(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW)
                 .otherwise()
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
-                    .to("direct:fraud-check")
+                    .to(ContentBasedRouterBean.DESTINATION_FRAUD_CHECK)
             .end()
             .log("Payment processed: ${header.OriginalPaymentId} -> ${header.CamelFraudAction}");
 
-        from("direct:fraud-review")
+        from(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW)
             .routeId("fraud-review-high-value")
             .process("fraudEvaluationProcessor")
             .choice()
@@ -110,7 +110,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .to("direct:provider-selection")
             .end();
 
-        from("direct:fraud-check")
+        from(ContentBasedRouterBean.DESTINATION_FRAUD_CHECK)
             .routeId("fraud-check-standard")
             .process("fraudEvaluationProcessor")
             .choice()

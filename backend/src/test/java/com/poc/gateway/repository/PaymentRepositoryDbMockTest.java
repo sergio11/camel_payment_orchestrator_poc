@@ -2,10 +2,12 @@ package com.poc.gateway.repository;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentEntity;
+import com.poc.gateway.entity.PaymentMetadataEntity;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.exception.PaymentNotFoundException;
+import com.poc.gateway.mapper.PaymentPersistenceMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.TypedQuery;
@@ -40,17 +42,19 @@ class PaymentRepositoryDbMockTest {
     @Mock
     TypedQuery<Long> countQuery;
 
-    private PaymentRepository repository;
+    private PaymentRepositoryJpa repository;
+    private PaymentPersistenceMapper persistenceMapper = new PaymentPersistenceMapper();
 
     @BeforeEach
     void setUp() throws Exception {
-        repository = new PaymentRepository();
+        repository = new PaymentRepositoryJpa();
         setField("em", em);
-        setField("objectMapper", new ObjectMapper());
+        setField("persistenceMapper", persistenceMapper);
+        lenient().when(em.merge(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     private void setField(String name, Object value) throws Exception {
-        Field f = PaymentRepository.class.getDeclaredField(name);
+        Field f = PaymentRepositoryJpa.class.getDeclaredField(name);
         f.setAccessible(true);
         f.set(repository, value);
     }
@@ -74,9 +78,12 @@ class PaymentRepositoryDbMockTest {
         e.status = PaymentStatus.PENDING;
         e.provider = "prov";
         e.failureReason = null;
-        e.metadataJson = "{\"k\":\"v\"}";
         e.createdAt = LocalDateTime.now();
         e.updatedAt = LocalDateTime.now();
+        PaymentMetadataEntity meta = new PaymentMetadataEntity();
+        meta.paymentId = id;
+        meta.additionalProperties = "{\"k\":\"v\"}";
+        e.metadata = meta;
         return e;
     }
 
@@ -117,7 +124,7 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("saveInMemory second save with same key returns existing")
     void saveInMemory_sameKey_returnsExisting() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         Payment first = mem.save(fullPayment(), "idem-1");
         Payment second = mem.save(fullPayment(), "idem-1");
         assertEquals(first.id(), second.id());
@@ -126,7 +133,7 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("saveInMemory stores key index")
     void saveInMemory_withKey_indexed() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         Payment saved = mem.save(fullPayment(), "idem-2");
         assertTrue(mem.findByIdempotencyKey("idem-2").isPresent());
         assertEquals(saved.id(), mem.findByIdempotencyKey("idem-2").orElseThrow().id());
@@ -135,7 +142,7 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("findByIdempotencyKey blank and miss return empty")
     void findByIdempotencyKey_blankAndMiss_empty() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         assertTrue(mem.findByIdempotencyKey(null).isEmpty());
         assertTrue(mem.findByIdempotencyKey("  ").isEmpty());
         assertTrue(mem.findByIdempotencyKey("nope").isEmpty());
@@ -268,7 +275,7 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("count in-memory filters correctly")
     void count_inMemory() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         mem.save(fullPayment());
         assertEquals(1L, mem.count(null, null));
         assertEquals(1L, mem.count("cust-1", PaymentStatus.PENDING));
@@ -359,88 +366,43 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("deleteById in-memory removes")
     void deleteById_inMemory() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         Payment saved = mem.save(fullPayment());
         mem.deleteById(saved.id());
         assertTrue(mem.findById(saved.id()).isEmpty());
     }
 
-    // ========== toEntity / toDomain / toJson / fromJson ==========
+    // ========== toEntity / toDomain via PaymentPersistenceMapper ==========
 
     @Test
     @DisplayName("toEntity maps all fields")
     void toEntity_fullMapping() {
-        PaymentEntity e = repository.toEntity(fullPayment());
+        PaymentEntity e = persistenceMapper.toEntity(fullPayment());
         assertEquals("USD", e.currency);
         assertEquals("cust-1", e.customerId);
         assertEquals(PaymentStatus.PENDING, e.status);
-        assertNotNull(e.metadataJson);
     }
 
     @Test
     @DisplayName("toDomain maps all fields including metadata")
     void toDomain_fullMapping() {
         UUID id = UUID.randomUUID();
-        Payment p = repository.toDomain(fullEntity(id));
+        Payment p = persistenceMapper.toDomain(fullEntity(id));
         assertEquals(id, p.id());
-        assertEquals("v", p.metadata().get("k"));
     }
 
     @Test
-    @DisplayName("toDomain handles blank metadataJson")
+    @DisplayName("toDomain handles null metadata gracefully")
     void toDomain_blankMetadata_emptyMap() {
         PaymentEntity e = fullEntity(UUID.randomUUID());
-        e.metadataJson = "  ";
-        assertTrue(repository.toDomain(e).metadata().isEmpty());
-        e.metadataJson = null;
-        assertTrue(repository.toDomain(e).metadata().isEmpty());
-    }
-
-    @Test
-    @DisplayName("toDomain handles invalid metadataJson with raw fallback")
-    void toDomain_invalidMetadata_rawMap() {
-        PaymentEntity e = fullEntity(UUID.randomUUID());
-        e.metadataJson = "{invalid";
-        Map<String, Object> meta = repository.toDomain(e).metadata();
-        assertEquals("{invalid", meta.get("raw"));
-    }
-
-    @Test
-    @DisplayName("toJson handles null and empty metadata")
-    void toJson_nullAndEmpty_null() {
-        assertNull(repository.toJson(null));
-        assertNull(repository.toJson(Map.of()));
-    }
-
-    @Test
-    @DisplayName("toJson throws IllegalStateException on serialization failure")
-    void toJson_failure_throws() throws Exception {
-        ObjectMapper failing = mock(ObjectMapper.class);
-        when(failing.writeValueAsString(any())).thenThrow(new JsonProcessingException("bad") {});
-        setField("objectMapper", failing);
-        assertThrows(IllegalStateException.class, () -> repository.toJson(Map.of("k", "v")));
-    }
-
-    @Test
-    @DisplayName("fromJson parses valid JSON")
-    void fromJson_valid_parses() {
-        Map<String, Object> meta = repository.fromJson("{\"a\":1}");
-        assertEquals(1, meta.get("a"));
-    }
-
-    @Test
-    @DisplayName("toJson and fromJson fall back to default mapper when field is null")
-    void json_defaultMapper_used() throws Exception {
-        setField("objectMapper", null);
-        String json = repository.toJson(Map.of("k", "v"));
-        assertNotNull(json);
-        assertEquals("v", repository.fromJson(json).get("k"));
+        e.metadata = null;
+        assertTrue(persistenceMapper.toDomain(e).metadata().isEmpty());
     }
 
     @Test
     @DisplayName("saveInMemory handles blank key, null id, status and timestamps")
     void saveInMemory_edgeCases() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         Payment noIds = new Payment(null, new BigDecimal("1.00"), "USD", "c", "CARD",
             "ES", null, null, null, Map.of(), null, null);
         Payment saved = mem.save(noIds, "  ");
@@ -453,7 +415,7 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("saveInMemory recreates when index points to deleted payment")
     void saveInMemory_staleIndex_recreates() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         Payment first = mem.save(fullPayment(), "stale-1");
         mem.deleteById(first.id());
         Payment second = mem.save(fullPayment(), "stale-1");
@@ -463,7 +425,7 @@ class PaymentRepositoryDbMockTest {
     @Test
     @DisplayName("update in-memory throws for unknown id")
     void update_inMemory_unknown_throws() throws Exception {
-        PaymentRepository mem = new PaymentRepository();
+        PaymentRepository mem = PaymentRepository.inMemory();
         assertThrows(com.poc.gateway.exception.PaymentNotFoundException.class,
             () -> mem.update(UUID.randomUUID(), PaymentStatus.APPROVED));
     }

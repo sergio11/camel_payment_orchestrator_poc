@@ -1,11 +1,16 @@
 package com.poc.gateway.exception;
 
-import com.poc.shared.dto.ErrorResponse;
-import com.poc.shared.dto.ErrorResponse.ErrorDetail;
+import com.poc.shared.dto.ErrorDetailDTO;
+import com.poc.shared.dto.ErrorResponseDTO;
+import jakarta.persistence.EntityExistsException;
+import jakarta.persistence.PersistenceException;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
 import java.util.UUID;
 import org.jboss.logging.Logger;
@@ -15,135 +20,120 @@ public class GlobalExceptionMapper implements ExceptionMapper<Exception> {
 
     private static final Logger LOG = Logger.getLogger(GlobalExceptionMapper.class);
 
+    private static final List<String> BAD_REQUEST_MARKERS = List.of(
+        "JsonParseException", "JsonMappingException", "MismatchedInputException",
+        "InvalidFormatException", "UnrecognizedPropertyException"
+    );
+
+    private static final List<String> CONSTRAINT_MARKERS = List.of(
+        "duplicate", "unique", "constraint", "uq_", "uq "
+    );
+
+    private final PaymentNotFoundExceptionMapper notFoundMapper = new PaymentNotFoundExceptionMapper();
+    private final ConstraintViolationExceptionMapper validationMapper = new ConstraintViolationExceptionMapper();
+    private final PersistenceConflictExceptionMapper conflictMapper = new PersistenceConflictExceptionMapper();
+    private final IllegalArgumentExceptionMapper illegalArgumentMapper = new IllegalArgumentExceptionMapper();
+
     @Override
     public Response toResponse(Exception exception) {
+        if (exception instanceof PaymentNotFoundException pnfe) {
+            return notFoundMapper.toResponse(pnfe);
+        }
         if (exception instanceof ConstraintViolationException cve) {
-            return handleValidationException(cve);
+            return validationMapper.toResponse(cve);
         }
         if (exception instanceof IllegalArgumentException iae) {
-            return handleIllegalArgument(iae);
+            return illegalArgumentMapper.toResponse(iae);
         }
-        if (exception instanceof PaymentNotFoundException pnfe) {
-            return handleNotFound(pnfe);
+        if (exception instanceof EntityExistsException eee) {
+            return conflictMapper.toResponse(eee);
+        }
+        if (exception instanceof PersistenceException pe) {
+            if (isConstraintViolation(pe)) {
+                return conflictMapper.toResponse(pe);
+            }
+        }
+        if (exception instanceof SQLIntegrityConstraintViolationException sql) {
+            return buildConflictResponse();
+        }
+        if (exception instanceof org.hibernate.exception.ConstraintViolationException hcve) {
+            return buildConflictResponse();
+        }
+        if (exception instanceof BadRequestException bae) {
+            return buildBadRequestResponse("Bad request", null);
+        }
+        if (exception instanceof WebApplicationException wae) {
+            return wae.getResponse();
         }
         if (isBadRequest(exception)) {
-            return handleBadRequest(exception);
+            String msg = exception.getMessage();
+            List<ErrorDetailDTO> details = (msg != null && !msg.isBlank())
+                ? List.of(new ErrorDetailDTO("body", msg))
+                : List.of(new ErrorDetailDTO("body", "Malformed request body"));
+            return buildBadRequestResponse("Invalid request body", details);
         }
         if (isConstraintViolation(exception)) {
-            return handleConflict(exception);
+            return buildConflictResponse();
         }
-        return handleGeneric(exception);
-    }
 
-    private Response handleBadRequest(Exception e) {
-        String msg = e.getMessage() != null ? e.getMessage() : "Malformed request body";
-        return Response.status(Response.Status.BAD_REQUEST)
-            .entity(ErrorResponse.from("VALIDATION_ERROR", "Invalid request",
-                List.of(new ErrorResponse.ErrorDetail("body", msg))))
-            .build();
-    }
-
-    private static final List<String> BAD_REQUEST_MARKERS = List.of(
-        "JsonProcessingException", "JsonMappingException", "JsonParseException",
-        "MismatchedInputException", "InvalidFormatException", "UnrecognizedPropertyException",
-        "NotNullConstraintViolationException", "ResteasyReactive",
-        "MessageBodyProviderNotFoundException", "BadRequestException", "ClientErrorException"
-    );
-
-    boolean isBadRequest(Throwable t) {
-        while (t != null) {
-            String cls = t.getClass().getName();
-            if (t instanceof jakarta.ws.rs.BadRequestException || matchesAny(cls, BAD_REQUEST_MARKERS)) {
-                return true;
-            }
-            if (t instanceof NullPointerException && cls.contains("gateway")) {
-                return false;
-            }
-            t = t.getCause();
-        }
-        return false;
-    }
-
-    static boolean matchesAny(String value, List<String> markers) {
-        for (String marker : markers) {
-            if (value.contains(marker)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Response handleIllegalArgument(IllegalArgumentException e) {
-        return Response.status(Response.Status.BAD_REQUEST)
-            .entity(ErrorResponse.from("INVALID_ARGUMENT", e.getMessage()))
-            .build();
-    }
-
-    private Response handleValidationException(ConstraintViolationException e) {
-        List<ErrorDetail> details = e.getConstraintViolations().stream()
-            .map(v -> new ErrorDetail(v.getPropertyPath().toString(), v.getMessage()))
-            .toList();
-        return Response.status(Response.Status.BAD_REQUEST)
-            .entity(ErrorResponse.from("VALIDATION_ERROR", "Invalid request", details))
-            .build();
-    }
-
-    private Response handleNotFound(PaymentNotFoundException e) {
-        return Response.status(Response.Status.NOT_FOUND)
-            .entity(ErrorResponse.from("NOT_FOUND", e.getMessage()))
-            .build();
-    }
-
-    private Response handleConflict(Exception e) {
         String errorId = UUID.randomUUID().toString().substring(0, 8);
-        LOG.errorf(e, "[%s] Duplicate constraint violation: %s", errorId, e.getMessage());
-        return Response.status(Response.Status.CONFLICT)
-            .entity(ErrorResponse.from("CONFLICT", "Duplicate request [errorId=" + errorId + "]",
-                List.of(new ErrorDetail("idempotencyKey", "Duplicate key or constraint violation"))))
-            .build();
-    }
-
-    private Response handleGeneric(Exception e) {
-        String errorId = UUID.randomUUID().toString().substring(0, 8);
-        LOG.errorf(e, "[%s] Unhandled exception: %s", errorId, e.getMessage());
+        LOG.errorf(exception, "[%s] Unhandled exception: %s", errorId, exception.getMessage());
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-            .entity(ErrorResponse.from("INTERNAL_ERROR", "An unexpected error occurred [errorId=" + errorId + "]"))
+            .entity(ErrorResponseDTO.from("INTERNAL_ERROR", "An unexpected error occurred [errorId=" + errorId + "]"))
             .build();
     }
 
-    private static final List<String> CONSTRAINT_CLASS_MARKERS = List.of(
-        "ConstraintViolationException", "EntityExistsException"
-    );
-    private static final List<String> CONSTRAINT_MESSAGE_MARKERS = List.of(
-        "constraint", "unique", "duplicate"
-    );
-    private static final List<String> IDEMPOTENCY_MESSAGE_MARKERS = List.of(
-        "uq_payments_idempotency", "uq_outbox_idempotency", "unique constraint", "unique index"
-    );
+    public boolean isBadRequest(Exception ex) {
+        if (ex == null) return false;
+        String name = ex.getClass().getName();
+        if (matchesAny(name, BAD_REQUEST_MARKERS)) return true;
+        Throwable cause = ex.getCause();
+        if (cause != null && matchesAny(cause.getClass().getName(), BAD_REQUEST_MARKERS)) return true;
+        return false;
+    }
 
-    boolean isConstraintViolation(Throwable t) {
-        while (t != null) {
-            String cls = t.getClass().getName();
-            if (t instanceof jakarta.persistence.PersistenceException
-                || t instanceof java.sql.SQLIntegrityConstraintViolationException
-                || matchesAny(cls, CONSTRAINT_CLASS_MARKERS)) {
-                String msg = String.valueOf(t.getMessage()).toLowerCase();
-                if (matchesAny(msg, CONSTRAINT_MESSAGE_MARKERS)
-                    || cls.contains("ConstraintViolation")
-                    || t instanceof jakarta.persistence.EntityExistsException) {
-                    return true;
-                }
-            }
-            String msg = String.valueOf(t.getMessage()).toLowerCase();
-            if (matchesAny(msg, IDEMPOTENCY_MESSAGE_MARKERS) || isDuplicateKey(msg)) {
-                return true;
-            }
-            t = t.getCause();
+    public boolean isConstraintViolation(Exception ex) {
+        if (ex == null) return false;
+        String msg = ex.getMessage();
+        if (msg != null && containsConstraintKeyword(msg)) return true;
+        Throwable cause = ex.getCause();
+        if (cause != null) {
+            String causeMsg = cause.getMessage();
+            if (causeMsg != null && containsConstraintKeyword(causeMsg)) return true;
         }
         return false;
     }
 
-    static boolean isDuplicateKey(String msg) {
-        return msg.contains("duplicate") && msg.contains("key");
+    private boolean containsConstraintKeyword(String msg) {
+        String lower = msg.toLowerCase();
+        return isDuplicateKey(lower) || lower.contains("uq_") || lower.contains("uq ");
+    }
+
+    public static boolean matchesAny(String text, List<String> markers) {
+        if (text == null || markers == null || markers.isEmpty()) return false;
+        for (String marker : markers) {
+            if (text.contains(marker)) return true;
+        }
+        return false;
+    }
+
+    public static boolean isDuplicateKey(String msg) {
+        if (msg == null) return false;
+        String lower = msg.toLowerCase();
+        return lower.contains("duplicate") && lower.contains("key");
+    }
+
+    private Response buildBadRequestResponse(String message, List<ErrorDetailDTO> details) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity(details != null
+                ? ErrorResponseDTO.from("VALIDATION_ERROR", message, details)
+                : ErrorResponseDTO.from("VALIDATION_ERROR", message))
+            .build();
+    }
+
+    private Response buildConflictResponse() {
+        return Response.status(Response.Status.CONFLICT)
+            .entity(ErrorResponseDTO.from("CONFLICT", "Duplicate request or constraint violation"))
+            .build();
     }
 }

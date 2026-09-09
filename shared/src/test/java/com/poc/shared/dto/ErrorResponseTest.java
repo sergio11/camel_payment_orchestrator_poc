@@ -12,7 +12,7 @@ class ErrorResponseTest {
     @Test
     @DisplayName("from(error, message) should return correct error, message, null details, and non-null timestamp")
     void testFromWithTwoArgs() {
-        ErrorResponse response = ErrorResponse.from("NOT_FOUND", "Resource not found");
+        ErrorResponseDTO response = ErrorResponseDTO.from("NOT_FOUND", "Resource not found");
 
         assertEquals("NOT_FOUND", response.error());
         assertEquals("Resource not found", response.message());
@@ -23,11 +23,11 @@ class ErrorResponseTest {
     @Test
     @DisplayName("from(error, message, details) should return correct details list")
     void testFromWithThreeArgs() {
-        ErrorResponse.ErrorDetail detail1 = new ErrorResponse.ErrorDetail("field1", "message1");
-        ErrorResponse.ErrorDetail detail2 = new ErrorResponse.ErrorDetail("field2", "message2");
-        List<ErrorResponse.ErrorDetail> details = List.of(detail1, detail2);
+        ErrorDetailDTO detail1 = new ErrorDetailDTO("field1", "message1");
+        ErrorDetailDTO detail2 = new ErrorDetailDTO("field2", "message2");
+        List<ErrorDetailDTO> details = List.of(detail1, detail2);
 
-        ErrorResponse response = ErrorResponse.from("VALIDATION_ERROR", "Validation failed", details);
+        ErrorResponseDTO response = ErrorResponseDTO.from("VALIDATION_ERROR", "Validation failed", details);
 
         assertEquals("VALIDATION_ERROR", response.error());
         assertEquals("Validation failed", response.message());
@@ -41,9 +41,9 @@ class ErrorResponseTest {
     }
 
     @Test
-    @DisplayName("ErrorDetail record should expose field and message")
+    @DisplayName("ErrorDetailDTO record should expose field and message")
     void testErrorDetailRecord() {
-        ErrorResponse.ErrorDetail detail = new ErrorResponse.ErrorDetail("amount", "must be positive");
+        ErrorDetailDTO detail = new ErrorDetailDTO("amount", "must be positive");
 
         assertEquals("amount", detail.field());
         assertEquals("must be positive", detail.message());
@@ -52,8 +52,8 @@ class ErrorResponseTest {
     @Test
     @DisplayName("Record construction with all parameters should work")
     void testRecordConstruction() {
-        ErrorResponse.ErrorDetail detail = new ErrorResponse.ErrorDetail("id", "invalid");
-        ErrorResponse response = new ErrorResponse("ERROR", "msg", List.of(detail), null);
+        ErrorDetailDTO detail = new ErrorDetailDTO("id", "invalid");
+        ErrorResponseDTO response = new ErrorResponseDTO("ERROR", "msg", List.of(detail), null);
 
         assertEquals("ERROR", response.error());
         assertEquals("msg", response.message());

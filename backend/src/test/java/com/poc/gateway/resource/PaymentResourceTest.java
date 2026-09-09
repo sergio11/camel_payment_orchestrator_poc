@@ -31,8 +31,8 @@ class PaymentResourceTest {
         {
             "amount": 150.00,
             "currency": "USD",
-            "customerId": "cust-test-001",
-            "paymentMethod": "CREDIT_CARD",
+            "customer_id": "cust-test-001",
+            "payment_method": "CREDIT_CARD",
             "country": "US",
             "metadata": {"channel": "api"}
         }
@@ -62,8 +62,8 @@ class PaymentResourceTest {
             .body("id", notNullValue())
             .body("amount", equalTo(150.00f))
             .body("currency", equalTo("USD"))
-            .body("customerId", equalTo("cust-test-001"))
-            .body("paymentMethod", equalTo("CREDIT_CARD"))
+            .body("customer_id", equalTo("cust-test-001"))
+            .body("payment_method", equalTo("CREDIT_CARD"))
             .body("country", equalTo("US"))
             .body("status", equalTo("PENDING"))
             .body("metadata.channel", equalTo("api"))
@@ -110,7 +110,7 @@ class PaymentResourceTest {
             .statusCode(200)
             .body("id", equalTo(createdPaymentId))
             .body("status", equalTo("PENDING"))
-            .body("lastUpdated", notNullValue());
+            .body("last_updated", notNullValue());
     }
 
     @Test
@@ -137,7 +137,7 @@ class PaymentResourceTest {
         .then()
             .statusCode(200)
             .body("payments", hasSize(greaterThanOrEqualTo(1)))
-            .body("payments.customerId", everyItem(equalTo("cust-test-001")));
+            .body("payments.customer_id", everyItem(equalTo("cust-test-001")));
     }
 
     @Test
@@ -157,8 +157,8 @@ class PaymentResourceTest {
         String body = """
             {
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -177,8 +177,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": "INVALID_METHOD"
+                "customer_id": "cust-1",
+                "payment_method": "INVALID_METHOD"
             }
             """;
 
@@ -196,8 +196,8 @@ class PaymentResourceTest {
         String body = """
             {
                 "amount": 100.00,
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -260,8 +260,8 @@ class PaymentResourceTest {
             {
                 "amount": -10.00,
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -306,8 +306,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -326,8 +326,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "BTC",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -346,8 +346,8 @@ class PaymentResourceTest {
             {
                 "amount": 1000000.00,
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -366,8 +366,8 @@ class PaymentResourceTest {
             {
                 "amount": 0.00,
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -386,8 +386,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "",
-                "paymentMethod": "CREDIT_CARD"
+                "customer_id": "",
+                "payment_method": "CREDIT_CARD"
             }
             """;
 
@@ -406,8 +406,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": "CREDIT_CARD",
+                "customer_id": "cust-1",
+                "payment_method": "CREDIT_CARD",
                 "country": "USA"
             }
             """;
@@ -428,8 +428,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "%s",
-                "paymentMethod": "CREDIT_CARD",
+                "customer_id": "%s",
+                "payment_method": "CREDIT_CARD",
                 "country": "US"
             }
             """.formatted(longCustomerId);
@@ -473,8 +473,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": null,
-                "paymentMethod": "CREDIT_CARD",
+                "customer_id": null,
+                "payment_method": "CREDIT_CARD",
                 "country": "US"
             }
             """;
@@ -494,8 +494,8 @@ class PaymentResourceTest {
             {
                 "amount": 100.00,
                 "currency": "USD",
-                "customerId": "cust-1",
-                "paymentMethod": null,
+                "customer_id": "cust-1",
+                "payment_method": null,
                 "country": "US"
             }
             """;

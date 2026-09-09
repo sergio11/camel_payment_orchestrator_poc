@@ -148,7 +148,8 @@ class FraudEvaluationProcessorTest {
         // We need a timezone where the local hour is 3
         // For example, UTC+X where (currentHour + X) mod 24 = 3
         int desiredOffset = ((targetHour - currentHour) % 24 + 24) % 24;
-        String zoneId = desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+        if (desiredOffset > 14) desiredOffset -= 24;
+        String zoneId = desiredOffset == 0 ? "UTC" : desiredOffset > 0 ? "Etc/GMT-" + desiredOffset : "Etc/GMT+" + (-desiredOffset);
 
         PaymentMessage msg = new PaymentMessage(
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
@@ -171,7 +172,8 @@ class FraudEvaluationProcessorTest {
         if (currentIsUnusual) {
             // Shift to hour 12 (definitely outside [2,5])
             int desiredOffset = ((12 - currentHour) % 24 + 24) % 24;
-            zoneId = desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+            if (desiredOffset > 14) desiredOffset -= 24;
+            zoneId = desiredOffset == 0 ? "UTC" : desiredOffset > 0 ? "Etc/GMT-" + desiredOffset : "Etc/GMT+" + (-desiredOffset);
         } else {
             zoneId = "UTC";
         }
@@ -191,7 +193,8 @@ class FraudEvaluationProcessorTest {
         int currentHour = LocalTime.now(ZoneId.of("UTC")).getHour();
         int targetHour = 1; // below unusual range [2,5]
         int desiredOffset = ((targetHour - currentHour) % 24 + 24) % 24;
-        String zoneId = desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+        if (desiredOffset > 14) desiredOffset -= 24;
+        String zoneId = desiredOffset == 0 ? "UTC" : desiredOffset > 0 ? "Etc/GMT-" + desiredOffset : "Etc/GMT+" + (-desiredOffset);
 
         PaymentMessage msg = new PaymentMessage(
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
@@ -398,7 +401,8 @@ class FraudEvaluationProcessorTest {
         int currentHour = LocalTime.now(ZoneId.of("UTC")).getHour();
         int targetHour = 3;
         int desiredOffset = ((targetHour - currentHour) % 24 + 24) % 24;
-        String zoneId = desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+        if (desiredOffset > 14) desiredOffset -= 24;
+        String zoneId = desiredOffset == 0 ? "UTC" : desiredOffset > 0 ? "Etc/GMT-" + desiredOffset : "Etc/GMT+" + (-desiredOffset);
 
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "XX",
             new BigDecimal("20000"), "USD", "CREDIT_CARD", 4, true, 30, zoneId,
@@ -492,7 +496,8 @@ class FraudEvaluationProcessorTest {
         int currentHour = LocalTime.now(ZoneId.of("UTC")).getHour();
         int targetHour = 3;
         int desiredOffset = ((targetHour - currentHour) % 24 + 24) % 24;
-        String zoneId = desiredOffset == 0 ? "UTC" : "Etc/GMT-" + desiredOffset;
+        if (desiredOffset > 14) desiredOffset -= 24;
+        String zoneId = desiredOffset == 0 ? "UTC" : desiredOffset > 0 ? "Etc/GMT-" + desiredOffset : "Etc/GMT+" + (-desiredOffset);
 
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "XX",
             new BigDecimal("20000"), "USD", "CREDIT_CARD", 4, true, 30, zoneId,
@@ -578,6 +583,37 @@ class FraudEvaluationProcessorTest {
         assertNotNull(result);
         assertEquals("APPROVE", result.action());
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
+        assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
+    }
+
+    // ========== Metadata type coercion ==========
+
+    @Test
+    @DisplayName("String metadata values are coerced (attempts + isNewPaymentMethod as String)")
+    void metadata_stringValues_coerced() {
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"),
+            Map.of("attempts", "5", "isNewPaymentMethod", "true", "paymentMethodAgeDays", 10));
+        FraudResult result = processAndReturn(msg);
+        assertTrue(result.triggeredRules().contains("RAPID_RETRY"));
+        assertTrue(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
+    }
+
+    @Test
+    @DisplayName("Non-Boolean non-String isNewPaymentMethod is treated as false")
+    void metadata_nonBooleanIsNewMethod_treatedAsFalse() {
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"),
+            Map.of("isNewPaymentMethod", 123, "paymentMethodAgeDays", 10));
+        FraudResult result = processAndReturn(msg);
+        assertFalse(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
+    }
+
+    @Test
+    @DisplayName("Explicit null customerRiskTier value does not fire HIGH_RISK_TIER")
+    void metadata_nullRiskTierValue_noFire() {
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("customerRiskTier", null);
+        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), metadata);
+        FraudResult result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
     }
 }

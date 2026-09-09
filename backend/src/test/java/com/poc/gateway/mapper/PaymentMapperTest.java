@@ -1,9 +1,9 @@
 package com.poc.gateway.mapper;
 
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
-import com.poc.shared.dto.PaymentRequest;
-import com.poc.shared.dto.PaymentResponse;
+import com.poc.shared.dto.PaymentRequestDTO;
+import com.poc.shared.dto.PaymentResponseDTO;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -15,9 +15,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PaymentMapperTest {
 
+    private final PaymentMapper mapper = PaymentMapper.INSTANCE;
+
     @Test
-    void toEntity_mapsAllFieldsFromRequest() {
-        PaymentRequest request = new PaymentRequest(
+    void toDomain_mapsAllFieldsFromRequest() {
+        PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("150.00"),
             "USD",
             "cust-42",
@@ -26,7 +28,7 @@ class PaymentMapperTest {
             Map.of("key", "value")
         );
 
-        Payment entity = PaymentMapper.toEntity(request);
+        Payment entity = mapper.toDomain(request);
 
         assertEquals(request.amount(), entity.amount());
         assertEquals(request.currency(), entity.currency());
@@ -44,8 +46,8 @@ class PaymentMapperTest {
     }
 
     @Test
-    void toEntity_nullMetadata_mapsCorrectly() {
-        PaymentRequest request = new PaymentRequest(
+    void toDomain_nullMetadata_mapsCorrectly() {
+        PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("10.00"),
             "EUR",
             "cust-1",
@@ -54,14 +56,14 @@ class PaymentMapperTest {
             null
         );
 
-        Payment entity = PaymentMapper.toEntity(request);
+        Payment entity = mapper.toDomain(request);
 
         assertNull(entity.metadata());
         assertEquals(new BigDecimal("10.00"), entity.amount());
     }
 
     @Test
-    void toResponse_mapsAllFieldsFromEntity() {
+    void toResponseDTO_mapsAllFieldsFromEntity() {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
         Payment entity = new Payment(
@@ -79,7 +81,7 @@ class PaymentMapperTest {
             now
         );
 
-        PaymentResponse response = PaymentMapper.toResponse(entity);
+        PaymentResponseDTO response = mapper.toResponseDTO(entity);
 
         assertEquals(id.toString(), response.id());
         assertEquals(new BigDecimal("250.50"), response.amount());
@@ -96,7 +98,7 @@ class PaymentMapperTest {
     }
 
     @Test
-    void toResponse_nullProviderAndFailureReason_mapsToNull() {
+    void toResponseDTO_nullProviderAndFailureReason_mapsToNull() {
         Payment entity = new Payment(
             UUID.randomUUID(),
             new BigDecimal("1.00"),
@@ -112,7 +114,7 @@ class PaymentMapperTest {
             LocalDateTime.now()
         );
 
-        PaymentResponse response = PaymentMapper.toResponse(entity);
+        PaymentResponseDTO response = mapper.toResponseDTO(entity);
 
         assertNull(response.provider());
         assertNull(response.failureReason());
@@ -120,7 +122,7 @@ class PaymentMapperTest {
     }
 
     @Test
-    void toResponse_failedStatus_mapsCorrectly() {
+    void toResponseDTO_failedStatus_mapsCorrectly() {
         Payment entity = new Payment(
             UUID.randomUUID(),
             new BigDecimal("100.00"),
@@ -136,7 +138,7 @@ class PaymentMapperTest {
             LocalDateTime.now()
         );
 
-        PaymentResponse response = PaymentMapper.toResponse(entity);
+        PaymentResponseDTO response = mapper.toResponseDTO(entity);
 
         assertEquals("FAILED", response.status());
         assertEquals("provider-b", response.provider());
@@ -144,7 +146,7 @@ class PaymentMapperTest {
     }
 
     @Test
-    void toResponse_nullStatus_mapsToNull() {
+    void toResponseDTO_nullStatus_mapsToNull() {
         Payment entity = new Payment(
             UUID.randomUUID(),
             new BigDecimal("100.00"),
@@ -160,8 +162,67 @@ class PaymentMapperTest {
             LocalDateTime.now()
         );
 
-        PaymentResponse response = PaymentMapper.toResponse(entity);
+        PaymentResponseDTO response = mapper.toResponseDTO(entity);
 
         assertNull(response.status());
+    }
+
+    @Test
+    void toResponseDTO_allNullOptionalFields_mapsCorrectly() {
+        Payment entity = new Payment(
+            UUID.randomUUID(),
+            new BigDecimal("1.00"),
+            "USD",
+            "cust-1",
+            "CARD",
+            "US",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+
+        PaymentResponseDTO response = mapper.toResponseDTO(entity);
+
+        assertNull(response.status());
+        assertNull(response.provider());
+        assertNull(response.failureReason());
+        assertNull(response.metadata());
+        assertNull(response.createdAt());
+        assertNull(response.updatedAt());
+    }
+
+    @Test
+    void toDomain_nullRequest_returnsNull() {
+        assertNull(mapper.toDomain(null));
+    }
+
+    @Test
+    void toResponseDTO_nullPayment_returnsNull() {
+        assertNull(mapper.toResponseDTO(null));
+    }
+
+    @Test
+    void toResponseDTO_nullId_mapsToNullId() {
+        Payment entity = new Payment(
+            null,
+            new BigDecimal("1.00"),
+            "USD",
+            "cust-1",
+            "CARD",
+            "US",
+            PaymentStatus.PENDING,
+            null,
+            null,
+            null,
+            LocalDateTime.now(),
+            LocalDateTime.now()
+        );
+
+        PaymentResponseDTO response = mapper.toResponseDTO(entity);
+
+        assertNull(response.id());
     }
 }

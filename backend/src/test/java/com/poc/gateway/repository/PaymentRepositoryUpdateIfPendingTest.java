@@ -1,6 +1,6 @@
 package com.poc.gateway.repository;
 
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,7 @@ class PaymentRepositoryUpdateIfPendingTest {
 
     @BeforeEach
     void setUp() {
-        repository = new PaymentRepository();
+        repository = PaymentRepository.inMemory();
     }
 
     @Test

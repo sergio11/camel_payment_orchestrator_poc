@@ -14,6 +14,10 @@ import java.util.List;
 public sealed interface FraudResult 
     permits FraudResult.Approve, FraudResult.Review, FraudResult.Reject {
     
+    String ACTION_APPROVE = "APPROVE";
+    String ACTION_REVIEW = "REVIEW";
+    String ACTION_REJECT = "REJECT";
+
     String paymentId();
     BigDecimal amount();
     String customerId();
@@ -35,16 +39,16 @@ public sealed interface FraudResult
     
     record Approve(String paymentId, BigDecimal amount, String customerId, int riskScore, List<String> triggeredRules) implements FraudResult {
         @Override
-        public String action() { return "APPROVE"; }
+        public String action() { return ACTION_APPROVE; }
     }
     
     record Review(String paymentId, BigDecimal amount, String customerId, int riskScore, String reason, List<String> triggeredRules) implements FraudResult {
         @Override
-        public String action() { return "REVIEW"; }
+        public String action() { return ACTION_REVIEW; }
     }
     
     record Reject(String paymentId, BigDecimal amount, String customerId, int riskScore, String reason, List<String> triggeredRules) implements FraudResult {
         @Override
-        public String action() { return "REJECT"; }
+        public String action() { return ACTION_REJECT; }
     }
 }

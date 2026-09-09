@@ -17,7 +17,7 @@ class PaymentResponseTest {
         LocalDateTime now = LocalDateTime.now();
         Map<String, Object> metadata = Map.of("key1", "value1");
 
-        PaymentResponse response = new PaymentResponse(
+        PaymentResponseDTO response = new PaymentResponseDTO(
             "id-123",
             new BigDecimal("99.99"),
             "USD",
@@ -51,7 +51,7 @@ class PaymentResponseTest {
     void testRecordConstructionWithNulls() {
         LocalDateTime now = LocalDateTime.now();
 
-        PaymentResponse response = new PaymentResponse(
+        PaymentResponseDTO response = new PaymentResponseDTO(
             "id-789",
             new BigDecimal("50.00"),
             "EUR",
@@ -77,10 +77,10 @@ class PaymentResponseTest {
     void testRecordEquality() {
         LocalDateTime now = LocalDateTime.now();
 
-        PaymentResponse response1 = new PaymentResponse(
+        PaymentResponseDTO response1 = new PaymentResponseDTO(
             "id-1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, null, now, now
         );
-        PaymentResponse response2 = new PaymentResponse(
+        PaymentResponseDTO response2 = new PaymentResponseDTO(
             "id-1", new BigDecimal("10.00"), "USD", "c1", "CARD", "US", "OK", "P1", null, null, now, now
         );
 

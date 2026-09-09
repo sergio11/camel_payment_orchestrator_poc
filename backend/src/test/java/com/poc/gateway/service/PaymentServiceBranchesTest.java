@@ -3,11 +3,12 @@ package com.poc.gateway.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.gateway.entity.OutboxEventEntity;
 import com.poc.gateway.entity.OutboxStatus;
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.OutboxEventRepository;
 import com.poc.gateway.repository.PaymentRepository;
-import com.poc.shared.dto.PaymentRequest;
+import com.poc.shared.dto.PaymentRequestDTO;
+import com.poc.gateway.mapper.PaymentMapper;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +57,7 @@ class PaymentServiceBranchesTest {
         setServiceField("outbox", outbox);
         setServiceField("kafkaEventPublisher", kafkaEventPublisher);
         setServiceField("objectMapper", objectMapper);
+        setServiceField("paymentMapper", PaymentMapper.INSTANCE);
 
         payment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
@@ -70,8 +72,8 @@ class PaymentServiceBranchesTest {
         f.set(service, value);
     }
 
-    private PaymentRequest request() {
-        return new PaymentRequest(new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", Map.of());
+    private PaymentRequestDTO request() {
+        return new PaymentRequestDTO(new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", Map.of());
     }
 
     private void stubHappySave() {

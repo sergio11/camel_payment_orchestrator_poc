@@ -1,7 +1,7 @@
 package com.poc.backend.integration;
 
 import com.poc.camel.testsupport.container.PostgresTestContainer;
-import com.poc.gateway.entity.Payment;
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.entity.PaymentStatus;
 import com.poc.gateway.repository.PaymentRepository;
 import io.quarkus.test.common.QuarkusTestResource;

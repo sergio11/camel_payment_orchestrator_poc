@@ -50,8 +50,8 @@ public class PaymentEntity extends PanacheEntityBase {
     @Column(length = 1024)
     public String failureReason;
 
-    @Column(columnDefinition = "TEXT")
-    public String metadataJson;
+    @jakarta.persistence.OneToOne(mappedBy = "payment", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true, fetch = jakarta.persistence.FetchType.EAGER)
+    public PaymentMetadataEntity metadata;
 
     @Column(nullable = false)
     public LocalDateTime createdAt;

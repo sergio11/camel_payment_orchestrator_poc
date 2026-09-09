@@ -31,8 +31,8 @@ class PaymentRequestValidationTest {
         }
     }
 
-    private PaymentRequest createValidRequest() {
-        return new PaymentRequest(
+    private PaymentRequestDTO createValidRequest() {
+        return new PaymentRequestDTO(
             new BigDecimal("100.00"),
             "USD",
             "customer-123",
@@ -45,15 +45,15 @@ class PaymentRequestValidationTest {
     @Test
     @DisplayName("Valid payment request should have no violations")
     void testValidRequest() {
-        PaymentRequest request = createValidRequest();
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(request);
+        PaymentRequestDTO request = createValidRequest();
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertTrue(violations.isEmpty(), "Valid request should have no violations");
     }
 
     @Test
     @DisplayName("Invalid currency should have violation")
     void testInvalidCurrency() {
-        PaymentRequest request = new PaymentRequest(
+        PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("100.00"),
             "INVALID",
             "customer-123",
@@ -61,14 +61,14 @@ class PaymentRequestValidationTest {
             "US",
             null
         );
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(request);
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertFalse(violations.isEmpty(), "Invalid currency should have violations");
     }
 
     @Test
     @DisplayName("Valid MXN currency should pass")
     void testValidMxnCurrency() {
-        PaymentRequest request = new PaymentRequest(
+        PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("100.00"),
             "MXN",
             "customer-123",
@@ -76,14 +76,14 @@ class PaymentRequestValidationTest {
             "MX",
             null
         );
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(request);
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertTrue(violations.isEmpty(), "MXN should be valid");
     }
 
     @Test
     @DisplayName("Payment method validation is handled at resource layer, not bean validation")
     void testPaymentMethodNotValidatedByBeanValidation() {
-        PaymentRequest request = new PaymentRequest(
+        PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("100.00"),
             "USD",
             "customer-123",
@@ -91,14 +91,14 @@ class PaymentRequestValidationTest {
             "US",
             null
         );
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(request);
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertTrue(violations.isEmpty(), "Payment method is validated at resource layer, not via bean validation");
     }
 
     @Test
     @DisplayName("Amount below minimum should have violation")
     void testAmountBelowMinimum() {
-        PaymentRequest request = new PaymentRequest(
+        PaymentRequestDTO request = new PaymentRequestDTO(
             new BigDecimal("0.001"),
             "USD",
             "customer-123",
@@ -106,7 +106,7 @@ class PaymentRequestValidationTest {
             "US",
             null
         );
-        Set<ConstraintViolation<PaymentRequest>> violations = validator.validate(request);
+        Set<ConstraintViolation<PaymentRequestDTO>> violations = validator.validate(request);
         assertFalse(violations.isEmpty(), "Amount below 0.01 should have violations");
     }
 }

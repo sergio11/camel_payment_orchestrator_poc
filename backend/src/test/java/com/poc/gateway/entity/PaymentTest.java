@@ -1,5 +1,7 @@
 package com.poc.gateway.entity;
 
+import com.poc.gateway.domain.Payment;
+import com.poc.gateway.entity.PaymentStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

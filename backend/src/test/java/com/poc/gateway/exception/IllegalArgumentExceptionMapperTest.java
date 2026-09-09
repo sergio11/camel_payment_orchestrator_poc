@@ -1,6 +1,6 @@
 package com.poc.gateway.exception;
 
-import com.poc.shared.dto.ErrorResponse;
+import com.poc.shared.dto.ErrorResponseDTO;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,7 +30,7 @@ class IllegalArgumentExceptionMapperTest {
     void toResponse_bodyHasInvalidArgumentErrorCode() {
         Response response = mapper.toResponse(new IllegalArgumentException("bad input"));
 
-        ErrorResponse body = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO body = (ErrorResponseDTO) response.getEntity();
         assertNotNull(body);
         assertEquals("INVALID_ARGUMENT", body.error());
     }
@@ -40,7 +40,7 @@ class IllegalArgumentExceptionMapperTest {
     void toResponse_bodyMessageMatchesExceptionMessage() {
         Response response = mapper.toResponse(new IllegalArgumentException("specific error message"));
 
-        ErrorResponse body = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO body = (ErrorResponseDTO) response.getEntity();
         assertNotNull(body);
         assertEquals("specific error message", body.message());
     }
@@ -50,7 +50,7 @@ class IllegalArgumentExceptionMapperTest {
     void toResponse_bodyHasTimestamp() {
         Response response = mapper.toResponse(new IllegalArgumentException("err"));
 
-        ErrorResponse body = (ErrorResponse) response.getEntity();
+        ErrorResponseDTO body = (ErrorResponseDTO) response.getEntity();
         assertNotNull(body);
         assertNotNull(body.timestamp());
     }

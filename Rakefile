@@ -420,6 +420,46 @@ namespace :k8s do
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Architecture Decision Records (ADRs) & Specs Validation
+# ──────────────────────────────────────────────────────────────────────────────
+namespace :adr do
+  desc 'Validate Architecture Decision Records in openspec/adrs'
+  task :validate do
+    adrs_dir = File.join(ROOT, "openspec", "adrs")
+    unless Dir.exist?(adrs_dir)
+      raise "ADR directory not found: #{adrs_dir}"
+    end
+    files = Dir.glob(File.join(adrs_dir, "*.md"))
+    if files.empty?
+      raise "No ADRs found in #{adrs_dir}"
+    end
+    puts "Validating #{files.size} ADR(s)..."
+    required_sections = ["# ADR-", "## Estado", "## Contexto", "## Decisión", "## Consecuencias"]
+    failed = false
+    files.each do |file|
+      content = File.read(file)
+      missing = required_sections.reject { |s| content.include?(s) }
+      if missing.empty?
+        puts "  \e[32m✓\e[0m #{File.basename(file)}"
+      else
+        puts "  \e[31m✗\e[0m #{File.basename(file)} (missing: #{missing.join(', ')})"
+        failed = true
+      end
+    end
+    raise "ADR validation failed" if failed
+    puts "\e[32mAll ADRs valid!\e[0m"
+  end
+end
+
+namespace :spec do
+  desc 'Validate OpenAPI, AsyncAPI and ADR specifications'
+  task :validate => ['adr:validate'] do
+    puts "Validating OpenSpecs..."
+    run_cmd("npx openspec validate --all", fail: false)
+  end
+end
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Help
 # ──────────────────────────────────────────────────────────────────────────────
 desc 'Show all available tasks'
@@ -431,6 +471,8 @@ task :help do
       rake infra:start       Start all infrastructure services
       rake infra:stop        Stop all infrastructure services
       rake test:run          Run all tests (unit + integration + e2e) with coverage gate 98%
+      rake adr:validate      Validate Architecture Decision Records in openspec/adrs
+      rake spec:validate     Validate OpenAPI, AsyncAPI and ADR specifications
       rake k8s:build         Build and load container images (APP=gateway|processor|all)
       rake k8s:deploy        Deploy to Kubernetes (OVERLAY=dev|prod, RESTART_ONLY=1)
       rake k8s:undeploy      Undeploy from Kubernetes (APPS_ONLY=1, CLUSTER_DELETE=1)

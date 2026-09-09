@@ -10,6 +10,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 
@@ -62,31 +63,67 @@ public class FraudEvaluationProcessor implements Processor {
             triggeredRules.add("UNUSUAL_HOUR");
         }
         
-        if (message.metadata() != null) {
-            Object attempts = message.metadata().get("attempts");
-            if (attempts instanceof Number && ((Number) attempts).intValue() > config.rapidRetryThreshold()) {
+        Map<String, Object> metadata = message.metadata();
+        if (metadata != null) {
+            int attempts = getIntMetadata(metadata, "attempts", 0);
+            if (attempts > config.rapidRetryThreshold()) {
                 score += 25;
                 triggeredRules.add("RAPID_RETRY");
             }
             
-            Object isNewMethod = message.metadata().get("isNewPaymentMethod");
-            Object methodAge = message.metadata().get("paymentMethodAgeDays");
-            if (Boolean.TRUE.equals(isNewMethod) && methodAge instanceof Number && ((Number) methodAge).intValue() < config.newMethodDaysThreshold()) {
+            boolean isNewMethod = getBooleanMetadata(metadata, "isNewPaymentMethod");
+            int methodAge = getIntMetadata(metadata, "paymentMethodAgeDays", Integer.MAX_VALUE);
+            if (isNewMethod && methodAge < config.newMethodDaysThreshold()) {
                 score += 20;
                 triggeredRules.add("NEW_PAYMENT_METHOD");
             }
-        }
-        
-        // Use enriched risk tier from PaymentEnrichProcessor
-        if (message.metadata() != null) {
-            Object riskTier = message.metadata().get("customerRiskTier");
-            if ("HIGH".equals(riskTier)) {
+
+            String riskTier = getStringMetadata(metadata, "customerRiskTier");
+            if ("HIGH".equalsIgnoreCase(riskTier)) {
                 score += 10;
                 triggeredRules.add("HIGH_RISK_TIER");
             }
         }
         
         return score;
+    }
+
+    private int getIntMetadata(Map<String, Object> metadata, String key, int defaultValue) {
+        if (!metadata.containsKey(key)) {
+            return defaultValue;
+        }
+        Object val = metadata.get(key);
+        if (val instanceof Number n) {
+            return n.intValue();
+        }
+        if (val instanceof String s) {
+            try {
+                return Integer.parseInt(s.trim());
+            } catch (NumberFormatException ignored) {}
+        }
+        return defaultValue;
+    }
+
+    private boolean getBooleanMetadata(Map<String, Object> metadata, String key) {
+        if (!metadata.containsKey(key)) {
+            return false;
+        }
+        Object val = metadata.get(key);
+        if (val instanceof Boolean b) {
+            return b;
+        }
+        if (val instanceof String s) {
+            return Boolean.parseBoolean(s.trim());
+        }
+        return false;
+    }
+
+    private String getStringMetadata(Map<String, Object> metadata, String key) {
+        if (!metadata.containsKey(key)) {
+            return null;
+        }
+        Object val = metadata.get(key);
+        return val != null ? val.toString() : null;
     }
 
     private FraudResult determineAction(PaymentMessage message, int riskScore, List<String> triggeredRules) {
