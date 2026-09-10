@@ -70,4 +70,16 @@ class PaymentMapperTest {
     void toMetadataDomain_null() {
         assertNull(mapper.toMetadataDomain(null));
     }
+
+    @Test
+    void toDomain_nullRequest_returnsNull() {
+        Payment result = mapper.toDomain(null);
+        assertNull(result);
+    }
+
+    @Test
+    void toResponseDTO_nullPayment_returnsNull() {
+        PaymentResponseDTO result = mapper.toResponseDTO(null);
+        assertNull(result);
+    }
 }

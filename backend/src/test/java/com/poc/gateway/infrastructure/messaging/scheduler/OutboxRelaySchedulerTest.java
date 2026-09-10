@@ -154,4 +154,33 @@ class OutboxRelaySchedulerTest {
         verifyNoInteractions(outboxRepo);
         verifyNoInteractions(eventPublisher);
     }
+
+    @Test
+    void processPendingEvents_withIncompletePayload_usesFallbackValues() throws Exception {
+        UUID aggregateId = UUID.randomUUID();
+        String payload = "{}";
+        OutboxEvent event = OutboxEvent.create(aggregateId, "payments.events.received", payload, "key-1");
+
+        when(outboxRepo.findPending(50)).thenReturn(List.of(event));
+
+        JsonNode root = mock(JsonNode.class);
+        when(objectMapper.readTree(anyString())).thenReturn(root);
+        when(root.has("paymentId")).thenReturn(false);
+        when(root.has("amount")).thenReturn(false);
+        when(root.has("currency")).thenReturn(false);
+        when(root.has("customerId")).thenReturn(false);
+        when(root.has("paymentMethod")).thenReturn(false);
+        when(root.has("country")).thenReturn(false);
+
+        when(eventPublisher.publishPaymentReceived(
+            anyString(), any(), anyString(), anyString(), anyString(), anyString(), isNull()
+        )).thenReturn(true);
+
+        scheduler.processPendingEvents();
+
+        verify(eventPublisher).publishPaymentReceived(
+            eq(aggregateId.toString()), any(), eq(""), eq(""), eq(""), eq(""), isNull()
+        );
+        verify(outboxRepo).markSent(event.id());
+    }
 }

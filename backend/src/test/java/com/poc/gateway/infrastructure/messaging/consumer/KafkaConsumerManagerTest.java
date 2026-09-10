@@ -260,6 +260,40 @@ class KafkaConsumerManagerTest {
     }
 
     @Test
+    void pollLoop_pollExceptionWhileStopping_doesNotLog() throws Exception {
+        setField("consumer", kafkaConsumer);
+        setField("running", true);
+
+        java.util.concurrent.CountDownLatch pollStarted = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch exceptionThrown = new java.util.concurrent.CountDownLatch(1);
+
+        doAnswer(invocation -> {
+            pollStarted.countDown();
+            try {
+                exceptionThrown.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException ignored) {
+            }
+            throw new RuntimeException("poll error");
+        }).when(kafkaConsumer).poll(any(Duration.class));
+
+        Thread t = new Thread(() -> {
+            try {
+                invokePollLoop();
+            } catch (Exception ignored) {
+            }
+        });
+        t.start();
+
+        pollStarted.await(2, java.util.concurrent.TimeUnit.SECONDS);
+        setField("running", false);
+        exceptionThrown.countDown();
+
+        t.join(3000);
+
+        verify(kafkaConsumer, atLeastOnce()).poll(any(Duration.class));
+    }
+
+    @Test
     void pollLoop_pollExceptionWhileStopped_doesNotLog() throws Exception {
         setField("consumer", kafkaConsumer);
         setField("running", false);
