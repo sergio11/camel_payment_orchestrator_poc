@@ -7,7 +7,6 @@ import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jackson.JacksonDataFormat;
 

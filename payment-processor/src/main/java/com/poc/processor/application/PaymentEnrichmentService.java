@@ -1,23 +1,18 @@
-package com.poc.processor.processor;
+package com.poc.processor.application;
 
+import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Named;
-import org.apache.camel.Exchange;
-import org.apache.camel.Processor;
 
-@Named("paymentEnrichProcessor")
 @ApplicationScoped
-public class PaymentEnrichProcessor implements Processor {
+public class PaymentEnrichmentService implements EnrichPaymentUseCase {
 
     @Override
-    public void process(Exchange exchange) {
-        PaymentMessage message = exchange.getIn().getBody(PaymentMessage.class);
-        
+    public PaymentMessage enrich(PaymentMessage message) {
         PaymentMetadataDTO enrichedMetadata = enrichWithRiskData(message);
-        
-        PaymentMessage enriched = new PaymentMessage(
+
+        return new PaymentMessage(
             message.eventId(),
             message.paymentId(),
             message.amount(),
@@ -32,13 +27,11 @@ public class PaymentEnrichProcessor implements Processor {
             enrichedMetadata,
             message.timestamp()
         );
-        
-        exchange.getIn().setBody(enriched);
     }
 
     private PaymentMetadataDTO enrichWithRiskData(PaymentMessage message) {
         PaymentMetadataDTO source = message.metadata() != null ? message.metadata() : PaymentMetadataDTO.empty();
-        
+
         return new PaymentMetadataDTO(
             source.orderId(),
             source.attempts(),

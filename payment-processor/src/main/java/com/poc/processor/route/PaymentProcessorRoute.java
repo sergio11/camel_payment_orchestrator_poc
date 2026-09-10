@@ -3,6 +3,10 @@ package com.poc.processor.route;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.processor.ContentBasedRouterBean;
+import com.poc.processor.port.inbound.EnrichPaymentUseCase;
+import com.poc.processor.port.inbound.EvaluateFraudUseCase;
+import com.poc.processor.port.outbound.AuditEventPublisherPort;
+import com.poc.processor.domain.FraudEvaluation;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -11,8 +15,6 @@ import org.apache.camel.builder.RouteBuilder;
 @ApplicationScoped
 public class PaymentProcessorRoute extends RouteBuilder {
 
-    // POC reliability: canonical Kafka topics for retry (transient, re-drivable) vs dead-letter (poison, terminal).
-    // A4 will consume payments.events.retry; poison never goes to retry to avoid infinite loops.
     public static final String RETRY_TOPIC_URI = "kafka:{{kafka.topic.payments.retry}}";
     public static final String DEAD_LETTER_TOPIC_URI = "kafka:{{kafka.topic.dead.letter}}";
     public static final String DIRECT_RETRY_HANDLER = "direct:retry-handler";
@@ -24,6 +26,15 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Inject
     ContentBasedRouterBean contentBasedRouterBean;
+
+    @Inject
+    EnrichPaymentUseCase enrichPaymentUseCase;
+
+    @Inject
+    EvaluateFraudUseCase evaluateFraudUseCase;
+
+    @Inject
+    AuditEventPublisherPort auditPublisher;
 
     public static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
         if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
@@ -44,7 +55,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Override
     public void configure() {
-        // Transient failures: 3 redeliveries with exponential back-off, then retry topic (re-drivable, A4).
         errorHandler(deadLetterChannel(DIRECT_RETRY_HANDLER)
             .useOriginalMessage()
             .maximumRedeliveries(3)
@@ -53,8 +63,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .logRetryAttempted(true)
             .logExhausted(true));
 
-        // Poison messages (bad JSON, invalid fields): no redelivery, straight to dead-letter.
-        // Must be declared before routes; handled(true) stops infinite reprocessing.
         onException(JsonProcessingException.class, IllegalArgumentException.class)
             .handled(true)
             .maximumRedeliveries(0)
@@ -64,8 +72,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
         var paymentJson = new org.apache.camel.component.jackson.JacksonDataFormat(objectMapper, PaymentMessage.class);
 
-        // POC: manual commit (autoCommitEnable=false) for at-least-once.
-        // Camel commits the offset only after the route completes; failures are redelivered, poison goes to DLQ.
         from("kafka:{{kafka.topic.payments.received}}?groupId=payment-processor-group&autoCommitEnable=false&autoOffsetReset=earliest")
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
@@ -77,10 +83,19 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 validatePaymentMessage(msg);
             })
             .log("Received payment: ${header.OriginalPaymentId}")
-            .process("paymentEnrichProcessor")
+            .process(exchange -> {
+                PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+                PaymentMessage enriched = enrichPaymentUseCase.enrich(msg);
+                exchange.getIn().setBody(enriched);
+            })
             .wireTap("direct:audit-pipeline")
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+                FraudEvaluation evaluation = evaluateFraudUseCase.evaluate(msg);
+                exchange.getIn().setHeader("CamelFraudAction", evaluation.action());
+                exchange.getIn().setHeader("CamelRiskScore", evaluation.riskScore());
+                exchange.setProperty("FraudEvaluation", evaluation);
+
                 String target = contentBasedRouterBean.routeToFraudCheck(msg.amount(), msg.paymentMethod(), msg.country());
                 exchange.getIn().setHeader("FraudRouteTarget", target);
             })
@@ -97,12 +112,12 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
         from(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW)
             .routeId("fraud-review-high-value")
-            .process("fraudEvaluationProcessor")
+            .log("Fraud evaluation already done for high-value payment: ${body.paymentId}")
             .choice()
-                .when(simple("${header.CamelFraudAction} == 'REJECT'"))
+                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REJECT))
                     .log("Fraud REJECT for high-value payment: ${body.paymentId}")
                     .to("direct:fraud-reject")
-                .when(simple("${header.CamelFraudAction} == 'REVIEW'"))
+                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REVIEW))
                     .log("Fraud REVIEW for high-value payment: ${body.paymentId}")
                     .to("direct:fraud-review-queue")
                 .otherwise()
@@ -112,12 +127,12 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
         from(ContentBasedRouterBean.DESTINATION_FRAUD_CHECK)
             .routeId("fraud-check-standard")
-            .process("fraudEvaluationProcessor")
+            .log("Fraud evaluation already done for standard payment: ${body.paymentId}")
             .choice()
-                .when(simple("${header.CamelFraudAction} == 'REJECT'"))
+                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REJECT))
                     .log("Fraud REJECT: ${body.paymentId}")
                     .to("direct:fraud-reject")
-                .when(simple("${header.CamelFraudAction} == 'REVIEW'"))
+                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REVIEW))
                     .log("Fraud REVIEW: ${body.paymentId}")
                     .to("direct:fraud-review-queue")
                 .otherwise()
@@ -125,7 +140,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .to("direct:provider-selection")
             .end();
 
-        // Transient-exhausted handler: re-drivable retry topic (consumed by A4 reviewer, not auto-replayed).
         from(DIRECT_RETRY_HANDLER)
             .routeId("retry-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
@@ -138,7 +152,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .to(RETRY_TOPIC_URI)
             .log("Published to retry topic");
 
-        // Poison handler: terminal dead-letter, no retry.
         from(DIRECT_POISON_DLQ)
             .routeId("poison-dlq-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
@@ -147,7 +160,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .to(DEAD_LETTER_TOPIC_URI)
             .log("Published poison to dead letter queue");
 
-        // Legacy alias kept for backward compatibility (other routes/tests may reference it).
         from(DIRECT_DLQ_HANDLER)
             .routeId("error-dlq-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)

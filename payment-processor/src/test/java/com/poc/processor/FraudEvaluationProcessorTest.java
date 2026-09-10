@@ -1,14 +1,11 @@
 package com.poc.processor;
 
-import com.poc.shared.event.FraudResult;
+import com.poc.processor.domain.FraudEvaluation;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.processor.config.FraudRulesConfig;
-import com.poc.processor.processor.FraudEvaluationProcessor;
+import com.poc.processor.port.inbound.EvaluateFraudUseCase;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import org.apache.camel.Exchange;
-import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.support.DefaultExchange;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
@@ -26,17 +23,10 @@ import static org.junit.jupiter.api.Assertions.*;
 class FraudEvaluationProcessorTest {
 
     @Inject
-    FraudEvaluationProcessor processor;
+    EvaluateFraudUseCase evaluateFraudUseCase;
 
     @Inject
     FraudRulesConfig config;
-
-    private Exchange createExchange(PaymentMessage message) {
-        DefaultCamelContext context = new DefaultCamelContext();
-        Exchange exchange = new DefaultExchange(context);
-        exchange.getIn().setBody(message);
-        return exchange;
-    }
 
     private PaymentMessage createPaymentMessage(String country, BigDecimal amount, PaymentMetadataDTO metadata) {
         return new PaymentMessage(
@@ -55,10 +45,8 @@ class FraudEvaluationProcessorTest {
         );
     }
 
-    private FraudResult processAndReturn(PaymentMessage msg) {
-        Exchange exchange = createExchange(msg);
-        processor.process(exchange);
-        return exchange.getIn().getBody(FraudResult.class);
+    private FraudEvaluation processAndReturn(PaymentMessage msg) {
+        return evaluateFraudUseCase.evaluate(msg);
     }
 
     private PaymentMessage withMetadata(PaymentMessage msg, PaymentMetadataDTO extra) {
@@ -73,7 +61,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_AMOUNT rule fires when amount > threshold (15000)")
     void highAmount_aboveThreshold_adds50() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("15001"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_AMOUNT"));
         assertTrue(result.riskScore() >= 50);
     }
@@ -82,7 +70,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_AMOUNT rule does NOT fire when amount equals threshold (15000)")
     void highAmount_exactThreshold_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("15000"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_AMOUNT"));
     }
 
@@ -90,7 +78,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_AMOUNT rule does NOT fire when amount below threshold")
     void highAmount_belowThreshold_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("14999"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_AMOUNT"));
     }
 
@@ -100,7 +88,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_RISK_COUNTRY rule fires for country XX")
     void highRiskCountry_countryXX_adds30() {
         PaymentMessage msg = createPaymentMessage("XX", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
         assertTrue(result.riskScore() >= 30);
     }
@@ -109,7 +97,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_RISK_COUNTRY rule fires for country YY")
     void highRiskCountry_countryYY_adds30() {
         PaymentMessage msg = createPaymentMessage("YY", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
     }
 
@@ -117,7 +105,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_RISK_COUNTRY rule fires for country ZZ")
     void highRiskCountry_countryZZ_adds30() {
         PaymentMessage msg = createPaymentMessage("ZZ", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
     }
 
@@ -125,7 +113,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_RISK_COUNTRY rule does NOT fire for safe country")
     void highRiskCountry_safeCountry_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
     }
 
@@ -152,7 +140,7 @@ class FraudEvaluationProcessorTest {
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
             "CREDIT_CARD", "US", 0, false, 0, zoneId, PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("UNUSUAL_HOUR"),
             "Expected UNUSUAL_HOUR to fire with timezone " + zoneId + " (shifted hour to " + targetHour + ")");
     }
@@ -179,7 +167,7 @@ class FraudEvaluationProcessorTest {
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
             "CREDIT_CARD", "US", 0, false, 0, zoneId, PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("UNUSUAL_HOUR"),
             "Expected UNUSUAL_HOUR not to fire with timezone " + zoneId);
     }
@@ -197,7 +185,7 @@ class FraudEvaluationProcessorTest {
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
             "CREDIT_CARD", "US", 0, false, 0, zoneId, PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("UNUSUAL_HOUR"),
             "Expected UNUSUAL_HOUR not to fire at hour 1 with timezone " + zoneId);
     }
@@ -209,7 +197,7 @@ class FraudEvaluationProcessorTest {
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
             "CREDIT_CARD", "US", 0, false, 0, null, PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         int currentHour = LocalTime.now(ZoneId.of("UTC")).getHour();
         if (currentHour >= 2 && currentHour <= 5) {
             assertTrue(result.triggeredRules().contains("UNUSUAL_HOUR"));
@@ -225,7 +213,7 @@ class FraudEvaluationProcessorTest {
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
             "CREDIT_CARD", "US", 0, false, 0, "Invalid/Zone", PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         int currentHour = LocalTime.now(ZoneId.of("UTC")).getHour();
         if (currentHour >= 2 && currentHour <= 5) {
             assertTrue(result.triggeredRules().contains("UNUSUAL_HOUR"));
@@ -240,7 +228,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("RAPID_RETRY rule fires when attempts > threshold (3)")
     void rapidRetry_aboveThreshold_adds25() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), new PaymentMetadataDTO(null, 4, null, null, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("RAPID_RETRY"));
         assertTrue(result.riskScore() >= 25);
     }
@@ -249,7 +237,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("RAPID_RETRY rule does NOT fire when attempts equals threshold")
     void rapidRetry_exactThreshold_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), new PaymentMetadataDTO(null, 3, null, null, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
     }
 
@@ -257,7 +245,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("RAPID_RETRY rule does NOT fire when attempts below threshold")
     void rapidRetry_belowThreshold_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), new PaymentMetadataDTO(null, 2, null, null, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
     }
 
@@ -265,7 +253,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("RAPID_RETRY rule does NOT fire when metadata is null")
     void rapidRetry_nullMetadata_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), null);
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
     }
 
@@ -277,7 +265,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "US",
             new BigDecimal("100"), "USD", "CREDIT_CARD", 1, true, 30, "UTC",
             new PaymentMetadataDTO(null, null, true, 10, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
         assertTrue(result.riskScore() >= 20);
     }
@@ -288,7 +276,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "US",
             new BigDecimal("100"), "USD", "CREDIT_CARD", 1, true, 30, "UTC",
             new PaymentMetadataDTO(null, null, true, 30, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
     }
 
@@ -298,7 +286,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "US",
             new BigDecimal("100"), "USD", "CREDIT_CARD", 1, false, 30, "UTC",
             new PaymentMetadataDTO(null, null, false, 10, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
     }
 
@@ -309,7 +297,7 @@ class FraudEvaluationProcessorTest {
     void highRiskTier_high_adds10() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"),
             new PaymentMetadataDTO(null, null, null, null, "HIGH", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_TIER"));
         assertTrue(result.riskScore() >= 10);
     }
@@ -319,7 +307,7 @@ class FraudEvaluationProcessorTest {
     void highRiskTier_low_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"),
             new PaymentMetadataDTO(null, null, null, null, "LOW", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
     }
 
@@ -328,7 +316,7 @@ class FraudEvaluationProcessorTest {
     void highRiskTier_medium_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"),
             new PaymentMetadataDTO(null, null, null, null, "MEDIUM", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
     }
 
@@ -336,7 +324,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("HIGH_RISK_TIER rule does NOT fire when metadata is null")
     void highRiskTier_nullMetadata_noFire() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), null);
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
     }
 
@@ -346,7 +334,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("COMBINED: HIGH_AMOUNT + HIGH_RISK_COUNTRY = 80 => REJECT")
     void combined_highAmount_highCountry_reject() {
         PaymentMessage msg = createPaymentMessage("XX", new BigDecimal("20000"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_AMOUNT"));
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
         assertEquals("REJECT", result.action());
@@ -357,7 +345,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("COMBINED: HIGH_AMOUNT only = 50 => REVIEW")
     void combined_highAmountOnly_review() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("20000"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_AMOUNT"));
         assertEquals("REVIEW", result.action());
         assertEquals(50, result.riskScore());
@@ -367,7 +355,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("COMBINED: HIGH_RISK_COUNTRY + RAPID_RETRY = 55 => REVIEW")
     void combined_country_retry_review() {
         PaymentMessage msg = createPaymentMessage("ZZ", new BigDecimal("100"), new PaymentMetadataDTO(null, 5, null, null, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
         assertTrue(result.triggeredRules().contains("RAPID_RETRY"));
         assertEquals("REVIEW", result.action());
@@ -386,7 +374,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "XX",
             new BigDecimal("20000"), "USD", "CREDIT_CARD", 4, true, 30, zoneId,
             new PaymentMetadataDTO(null, 5, true, 10, "HIGH", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
 
         assertTrue(result.triggeredRules().contains("HIGH_AMOUNT"));
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
@@ -404,7 +392,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "US",
             new BigDecimal("100"), "USD", "CREDIT_CARD", 1, true, 30, "UTC",
             new PaymentMetadataDTO(null, null, true, 5, "HIGH", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_TIER"));
         assertTrue(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
         assertEquals("APPROVE", result.action());
@@ -417,7 +405,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("APPROVE: riskScore < medium threshold (50)")
     void determineAction_approve() {
         PaymentMessage msg = createPaymentMessage("XX", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertEquals("APPROVE", result.action());
         assertTrue(result.riskScore() < config.riskScoreThresholdMedium());
     }
@@ -426,7 +414,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("REVIEW: riskScore exactly at medium threshold (50)")
     void determineAction_review_exactMedium() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("20000"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertEquals("REVIEW", result.action());
         assertEquals(50, result.riskScore());
     }
@@ -437,7 +425,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "US",
             new BigDecimal("100"), "USD", "CREDIT_CARD", 1, true, 30, "UTC",
             new PaymentMetadataDTO(null, 5, true, 10, null, null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         int score = result.riskScore();
         if (score >= 50 && score < 80) {
             assertEquals("REVIEW", result.action());
@@ -448,7 +436,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("REJECT: riskScore exactly at high threshold (80)")
     void determineAction_reject_exactHigh() {
         PaymentMessage msg = createPaymentMessage("XX", new BigDecimal("20000"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertEquals("REJECT", result.action());
         assertEquals(80, result.riskScore());
     }
@@ -459,7 +447,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "XX",
             new BigDecimal("20000"), "USD", "CREDIT_CARD", 1, false, 30, "UTC",
             new PaymentMetadataDTO(null, null, null, null, "HIGH", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertEquals("REJECT", result.action());
         assertTrue(result.riskScore() >= 80);
     }
@@ -478,44 +466,18 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createFullPaymentMessage("payment-1", "customer-1", "XX",
             new BigDecimal("20000"), "USD", "CREDIT_CARD", 4, true, 30, zoneId,
             new PaymentMetadataDTO(null, 5, true, 10, "HIGH", null, null, null));
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertEquals(100, result.riskScore());
-    }
-
-    // ========== OriginalPaymentMessage header ==========
-
-    @Test
-    @DisplayName("OriginalPaymentMessage header is set on exchange")
-    void setsOriginalPaymentMessageHeader() {
-        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        Exchange exchange = createExchange(msg);
-        processor.process(exchange);
-        PaymentMessage header = exchange.getIn().getHeader("OriginalPaymentMessage", PaymentMessage.class);
-        assertNotNull(header);
-        assertEquals(msg.paymentId(), header.paymentId());
-    }
-
-    @Test
-    @DisplayName("CamelRiskScore and CamelFraudAction headers are set")
-    void setsCamelHeaders() {
-        PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        Exchange exchange = createExchange(msg);
-        processor.process(exchange);
-        Integer riskScore = exchange.getIn().getHeader("CamelRiskScore", Integer.class);
-        String action = exchange.getIn().getHeader("CamelFraudAction", String.class);
-        assertNotNull(riskScore);
-        assertNotNull(action);
-        assertEquals("APPROVE", action);
     }
 
     // ========== Result field verification ==========
 
     @Test
-    @DisplayName("FraudResult contains correct paymentId, amount, and customerId")
+    @DisplayName("FraudEvaluation contains correct paymentId, amount, and customerId")
     void result_containsCorrectFields() {
         PaymentMessage msg = createFullPaymentMessage("payment-99", "customer-42", "US",
             new BigDecimal("500.75"), "EUR", "DEBIT_CARD", 1, false, 60, "UTC", PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertEquals("payment-99", result.paymentId());
         assertEquals(new BigDecimal("500.75"), result.amount());
         assertEquals("customer-42", result.customerId());
@@ -528,7 +490,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("Processor handles null metadata gracefully")
     void handlesNullMetadata() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), null);
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertNotNull(result);
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
         assertFalse(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
@@ -541,7 +503,7 @@ class FraudEvaluationProcessorTest {
     @DisplayName("Processor handles empty metadata gracefully")
     void handlesEmptyMetadata() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), PaymentMetadataDTO.empty());
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertNotNull(result);
         assertEquals("APPROVE", result.action());
     }
@@ -553,7 +515,7 @@ class FraudEvaluationProcessorTest {
             "event-1", "payment-1", new BigDecimal("100"), "USD", "customer-1",
             "CREDIT_CARD", "US", 0, false, 0, "UTC", null, LocalDateTime.now()
         );
-        FraudResult result = processAndReturn(msg);
+        FraudEvaluation result = processAndReturn(msg);
         assertNotNull(result);
         assertEquals("APPROVE", result.action());
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));

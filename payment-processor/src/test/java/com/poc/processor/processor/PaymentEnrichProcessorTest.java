@@ -1,12 +1,10 @@
 package com.poc.processor.processor;
 
+import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import org.apache.camel.Exchange;
-import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.support.DefaultExchange;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,14 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PaymentEnrichProcessorTest {
 
     @Inject
-    PaymentEnrichProcessor processor;
-
-    private Exchange createExchange(PaymentMessage message) {
-        DefaultCamelContext context = new DefaultCamelContext();
-        Exchange exchange = new DefaultExchange(context);
-        exchange.getIn().setBody(message);
-        return exchange;
-    }
+    EnrichPaymentUseCase enrichPaymentUseCase;
 
     private PaymentMessage createPaymentMessage(String paymentId, String customerId, String country,
             PaymentMetadataDTO metadata) {
@@ -39,9 +30,7 @@ class PaymentEnrichProcessorTest {
     }
 
     private PaymentMessage processAndReturn(PaymentMessage msg) {
-        Exchange exchange = createExchange(msg);
-        processor.process(exchange);
-        return exchange.getIn().getBody(PaymentMessage.class);
+        return enrichPaymentUseCase.enrich(msg);
     }
 
     // ========== enrichedAt ==========
