@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.processor.ContentBasedRouterBean;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
-import com.poc.processor.port.outbound.AuditEventPublisherPort;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -32,9 +31,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Inject
     EvaluateFraudUseCase evaluateFraudUseCase;
-
-    @Inject
-    AuditEventPublisherPort auditPublisher;
 
     public static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
         if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
