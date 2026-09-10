@@ -2,11 +2,9 @@ package com.poc.gateway.application.service;
 
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.PaymentPageResult;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.outbound.PaymentReadRepository;
-import com.poc.gateway.mapper.PaymentMapper;
-import com.poc.shared.dto.PaymentPageResponseDTO;
-import com.poc.shared.dto.PaymentResponseDTO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -27,9 +25,6 @@ class ListPaymentsServiceTest {
     @Mock
     PaymentReadRepository paymentRepo;
 
-    @Mock
-    PaymentMapper mapper;
-
     @InjectMocks
     ListPaymentsService service;
 
@@ -43,24 +38,23 @@ class ListPaymentsServiceTest {
 
         when(paymentRepo.findAll(null, null, 20, 0)).thenReturn(List.of(payment));
         when(paymentRepo.count(null, null)).thenReturn(1L);
-        when(mapper.toResponseDTO(any(Payment.class))).thenReturn(
-            new PaymentResponseDTO(payment.id().toString(), BigDecimal.TEN, "USD", "cust-1",
-                "CREDIT_CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now())
-        );
 
-        PaymentPageResponseDTO result = service.execute(null, null, 20, 0);
+        PaymentPageResult result = service.execute(null, null, 20, 0);
 
         assertNotNull(result);
         assertEquals(1, result.payments().size());
+        assertEquals(1L, result.total());
+        assertEquals(20, result.limit());
+        assertEquals(0, result.offset());
     }
 
     @Test
-    void execute_convertsStatusStringToEnum() {
+    void execute_passesPaymentStatusEnumToRepo() {
         when(paymentRepo.findAll(eq("cust-1"), eq(PaymentStatus.APPROVED), anyInt(), anyInt()))
             .thenReturn(List.of());
         when(paymentRepo.count(eq("cust-1"), eq(PaymentStatus.APPROVED))).thenReturn(0L);
 
-        service.execute("cust-1", "APPROVED", 20, 0);
+        service.execute("cust-1", PaymentStatus.APPROVED, 20, 0);
 
         verify(paymentRepo).findAll("cust-1", PaymentStatus.APPROVED, 20, 0);
     }

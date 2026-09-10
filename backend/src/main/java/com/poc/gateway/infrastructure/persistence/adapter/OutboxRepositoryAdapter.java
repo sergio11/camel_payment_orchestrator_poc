@@ -47,7 +47,7 @@ public class OutboxRepositoryAdapter implements OutboxRepositoryPort {
     public List<OutboxEvent> findPending(int limit) {
         List<OutboxEventEntity> entities = em.createQuery(
                 "FROM OutboxEventEntity WHERE status = :s ORDER BY createdAt ASC", OutboxEventEntity.class)
-            .setParameter("s", com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING)
+            .setParameter("s", OutboxStatus.PENDING)
             .setMaxResults(limit)
             .getResultList();
         return entities.stream().map(mapper::toDomain).toList();
@@ -58,7 +58,7 @@ public class OutboxRepositoryAdapter implements OutboxRepositoryPort {
     public void markSent(UUID eventId) {
         OutboxEventEntity e = em.find(OutboxEventEntity.class, eventId);
         if (e != null) {
-            e.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT;
+            e.status = OutboxStatus.SENT;
             em.merge(e);
         }
     }

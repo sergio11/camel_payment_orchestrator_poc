@@ -2,9 +2,9 @@ package com.poc.gateway.infrastructure.messaging.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
-import com.poc.shared.dto.PaymentMetadataDTO;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -137,7 +137,7 @@ class KafkaEventPublisherAdapterTest {
         when(producer.send(any(ProducerRecord.class)))
             .thenReturn(CompletableFuture.completedFuture(okRecordMetadata("payments.received")));
 
-        PaymentMetadataDTO meta = new PaymentMetadataDTO("order-1", 3, true, 30, "LOW", null, null, null);
+        PaymentMetadata meta = new PaymentMetadata("order-1", 3, true, 30, "LOW", null, null, null);
         boolean result = adapter.publishPaymentReceived(
             "pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", meta
         );

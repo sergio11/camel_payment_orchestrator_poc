@@ -3,9 +3,9 @@ package com.poc.gateway.infrastructure.messaging.adapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
-import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.annotation.PostConstruct;
@@ -58,7 +58,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
 
     @Override
     public boolean publishPaymentReceived(String paymentId, BigDecimal amount, String currency,
-            String customerId, String paymentMethod, String country, PaymentMetadataDTO metadata) {
+            String customerId, String paymentMethod, String country, PaymentMetadata metadata) {
         try {
             ObjectNode payload = objectMapper.createObjectNode();
             payload.put("paymentId", paymentId);

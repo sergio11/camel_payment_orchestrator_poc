@@ -1,9 +1,10 @@
 package com.poc.gateway.domain.port.inbound;
 
-import com.poc.shared.dto.PaymentResponseDTO;
+import com.poc.gateway.domain.Payment;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface GetPaymentUseCase {
-    PaymentResponseDTO execute(String paymentId);
-    Optional<PaymentResponseDTO> executeByIdempotencyKey(String idempotencyKey);
+    Payment execute(UUID paymentId);
+    Optional<Payment> executeByIdempotencyKey(String idempotencyKey);
 }

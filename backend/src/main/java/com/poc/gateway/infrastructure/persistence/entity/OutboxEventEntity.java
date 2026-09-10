@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import com.poc.gateway.domain.model.OutboxStatus;
 import java.time.LocalDateTime;
 import java.util.UUID;
 

@@ -20,6 +20,9 @@ public class PaymentStatusHandler {
     @Inject
     EventPublisherPort eventPublisher;
 
+    @Inject
+    com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
     public void processStatusChange(ConsumerRecord<String, String> record, PaymentStatus newStatus) {
         String paymentId = extractPaymentId(record);
         if (paymentId == null) {
@@ -49,8 +52,7 @@ public class PaymentStatusHandler {
 
     private String extractPaymentId(ConsumerRecord<String, String> record) {
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode json = mapper.readTree(record.value());
+            com.fasterxml.jackson.databind.JsonNode json = objectMapper.readTree(record.value());
             return json.has("paymentId") ? json.get("paymentId").asText() : record.key();
         } catch (Exception e) {
             return record.key();

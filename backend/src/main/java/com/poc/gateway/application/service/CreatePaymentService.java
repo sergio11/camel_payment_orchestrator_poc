@@ -7,10 +7,6 @@ import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
-import com.poc.gateway.mapper.PaymentMapper;
-import com.poc.shared.dto.PaymentRequestDTO;
-import com.poc.shared.dto.PaymentResponseDTO;
-import com.poc.shared.dto.PaymentMetadataDTO;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -34,21 +30,17 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     @Inject
     PaymentEventSerializer serializer;
 
-    @Inject
-    PaymentMapper mapper;
-
     @Override
     @Transactional
-    public PaymentResponseDTO execute(PaymentRequestDTO request, String idempotencyKey) {
+    public Payment execute(Payment payment, String idempotencyKey) {
         String key = normalizeKey(idempotencyKey);
 
         Optional<Payment> existing = paymentRepo.findByIdempotencyKey(key);
         if (existing.isPresent()) {
             LOG.infof("Idempotent replay for key %s -> payment %s", key, existing.get().id());
-            return mapper.toResponseDTO(existing.get());
+            return existing.get();
         }
 
-        Payment payment = mapper.toDomain(request);
         Payment saved = paymentRepo.save(payment, key);
 
         String payload = serializer.serialize(saved);
@@ -62,7 +54,7 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             saved.customerId(),
             saved.paymentMethod(),
             saved.country(),
-            mapper.toMetadataDTO(saved.metadata())
+            saved.metadata()
         );
 
         if (published) {
@@ -71,7 +63,7 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             LOG.errorf("Kafka publish failed for payment %s, left as PENDING for OutboxRelay retry", saved.id());
         }
 
-        return mapper.toResponseDTO(saved);
+        return saved;
     }
 
     private String normalizeKey(String key) {

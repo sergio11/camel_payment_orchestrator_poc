@@ -1,7 +1,8 @@
 package com.poc.gateway.domain.port.inbound;
 
-import com.poc.shared.dto.PaymentPageResponseDTO;
+import com.poc.gateway.domain.model.PaymentPageResult;
+import com.poc.gateway.domain.model.PaymentStatus;
 
 public interface ListPaymentsUseCase {
-    PaymentPageResponseDTO execute(String customerId, String status, int limit, int offset);
+    PaymentPageResult execute(String customerId, PaymentStatus status, int limit, int offset);
 }

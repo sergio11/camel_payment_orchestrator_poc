@@ -48,7 +48,7 @@ class PaymentRepositoryAdapterTest {
         entityPayment.customerId = domainPayment.customerId();
         entityPayment.paymentMethod = domainPayment.paymentMethod();
         entityPayment.country = domainPayment.country();
-        entityPayment.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PENDING;
+        entityPayment.status = PaymentStatus.PENDING;
         entityPayment.createdAt = domainPayment.createdAt();
         entityPayment.updatedAt = domainPayment.updatedAt();
     }
@@ -98,7 +98,7 @@ class PaymentRepositoryAdapterTest {
 
         adapter.save(domainPayment);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PENDING, entityPayment.status);
+        assertEquals(PaymentStatus.PENDING, entityPayment.status);
     }
 
     @Test
@@ -314,7 +314,7 @@ class PaymentRepositoryAdapterTest {
 
     @Test
     void updateIfPending_notPending_returnsEmpty() {
-        entityPayment.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.APPROVED;
+        entityPayment.status = PaymentStatus.APPROVED;
         when(em.find(eq(PaymentEntity.class), eq(domainPayment.id()))).thenReturn(entityPayment);
         Optional<Payment> result = adapter.updateIfPending(domainPayment.id(), PaymentStatus.REJECTED);
         assertFalse(result.isPresent());

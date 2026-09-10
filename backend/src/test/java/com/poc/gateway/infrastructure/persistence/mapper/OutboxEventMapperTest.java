@@ -33,7 +33,7 @@ class OutboxEventMapperTest {
 
         OutboxEventEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING, entity.status);
+        assertEquals(OutboxStatus.PENDING, entity.status);
     }
 
     @Test
@@ -45,7 +45,7 @@ class OutboxEventMapperTest {
 
         OutboxEventEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT, entity.status);
+        assertEquals(OutboxStatus.SENT, entity.status);
     }
 
     @Test
@@ -55,7 +55,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = "t";
         entity.payload = "p";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = "k";
 
@@ -71,7 +71,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = "t";
         entity.payload = "p";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT;
+        entity.status = OutboxStatus.SENT;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = "k";
 
@@ -92,7 +92,7 @@ class OutboxEventMapperTest {
         assertEquals(aggId, entity.aggregateId);
         assertEquals("type", entity.type);
         assertEquals("payload", entity.payload);
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING, entity.status);
+        assertEquals(OutboxStatus.PENDING, entity.status);
         assertEquals(now, entity.createdAt);
         assertEquals("key", entity.idempotencyKey);
 
@@ -114,7 +114,7 @@ class OutboxEventMapperTest {
         OutboxEvent domain = new OutboxEvent(id, aggId, "EventType", "{\"data\":true}", OutboxStatus.SENT, now, "idem-123");
 
         OutboxEventEntity entity = mapper.toEntity(domain);
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT, entity.status);
+        assertEquals(OutboxStatus.SENT, entity.status);
 
         OutboxEvent back = mapper.toDomain(entity);
         assertEquals(OutboxStatus.SENT, back.status());
@@ -126,7 +126,7 @@ class OutboxEventMapperTest {
     void toEntity_convertsSentStatus() {
         OutboxEvent domain = OutboxEvent.create(UUID.randomUUID(), "t", "p", "k").withSent();
         OutboxEventEntity entity = mapper.toEntity(domain);
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT, entity.status);
+        assertEquals(OutboxStatus.SENT, entity.status);
     }
 
     @Test
@@ -136,7 +136,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = "t";
         entity.payload = "p";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT;
+        entity.status = OutboxStatus.SENT;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = "k";
 
@@ -163,7 +163,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = "t";
         entity.payload = "p";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = null;
 
@@ -199,7 +199,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = aggId;
         entity.type = "EventType";
         entity.payload = "{\"key\":\"value\"}";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = now;
         entity.idempotencyKey = "idemKey";
 
@@ -221,7 +221,7 @@ class OutboxEventMapperTest {
 
         OutboxEventEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING, entity.status);
+        assertEquals(OutboxStatus.PENDING, entity.status);
         assertEquals(aggId, entity.aggregateId);
         assertNotNull(entity.id);
     }
@@ -233,7 +233,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = "";
         entity.payload = "";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = "";
 
@@ -263,7 +263,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = "t";
         entity.payload = "p";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = null;
         entity.idempotencyKey = "k";
 
@@ -292,7 +292,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = UUID.randomUUID();
         entity.type = null;
         entity.payload = null;
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = "k";
 
@@ -321,7 +321,7 @@ class OutboxEventMapperTest {
         entity.aggregateId = null;
         entity.type = "t";
         entity.payload = "p";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entity.status = OutboxStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.idempotencyKey = "k";
 

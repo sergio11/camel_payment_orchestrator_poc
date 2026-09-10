@@ -11,4 +11,8 @@ public class PaymentNotFoundException extends DomainException {
     public String getPaymentId() {
         return paymentId;
     }
+
+    public static PaymentNotFoundException forId(String paymentId) {
+        return new PaymentNotFoundException(paymentId);
+    }
 }

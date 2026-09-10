@@ -1,6 +1,6 @@
 package com.poc.gateway.domain.port.outbound;
 
-import com.poc.shared.dto.PaymentMetadataDTO;
+import com.poc.gateway.domain.PaymentMetadata;
 import java.math.BigDecimal;
 
 public interface EventPublisherPort {
@@ -11,7 +11,7 @@ public interface EventPublisherPort {
         String customerId,
         String paymentMethod,
         String country,
-        PaymentMetadataDTO metadata
+        PaymentMetadata metadata
     );
 
     boolean publishStatusChanged(String paymentId, String status);

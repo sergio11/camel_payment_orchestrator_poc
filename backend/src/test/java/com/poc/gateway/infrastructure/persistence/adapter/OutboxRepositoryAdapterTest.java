@@ -1,6 +1,7 @@
 package com.poc.gateway.infrastructure.persistence.adapter;
 
 import com.poc.gateway.domain.model.OutboxEvent;
+import com.poc.gateway.domain.model.OutboxStatus;
 import com.poc.gateway.infrastructure.persistence.entity.OutboxEventEntity;
 import com.poc.gateway.infrastructure.persistence.mapper.OutboxEventMapper;
 import jakarta.persistence.EntityManager;
@@ -40,7 +41,7 @@ class OutboxRepositoryAdapterTest {
         entityEvent.aggregateId = domainEvent.aggregateId();
         entityEvent.type = domainEvent.type();
         entityEvent.payload = domainEvent.payload();
-        entityEvent.status = com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.PENDING;
+        entityEvent.status = OutboxStatus.PENDING;
         entityEvent.createdAt = domainEvent.createdAt();
         entityEvent.idempotencyKey = domainEvent.idempotencyKey();
     }
@@ -113,7 +114,7 @@ class OutboxRepositoryAdapterTest {
 
         adapter.markSent(domainEvent.id());
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.OutboxStatus.SENT, entityEvent.status);
+        assertEquals(OutboxStatus.SENT, entityEvent.status);
         verify(em).merge(entityEvent);
     }
 

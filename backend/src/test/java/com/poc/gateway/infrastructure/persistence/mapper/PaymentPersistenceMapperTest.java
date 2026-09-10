@@ -51,7 +51,7 @@ class PaymentPersistenceMapperTest {
         assertEquals("c1", entity.customerId);
         assertEquals("CARD", entity.paymentMethod);
         assertEquals("US", entity.country);
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PENDING, entity.status);
+        assertEquals(PaymentStatus.PENDING, entity.status);
         assertEquals("Stripe", entity.provider);
         assertEquals("err", entity.failureReason);
         assertNotNull(entity.createdAt);
@@ -68,7 +68,7 @@ class PaymentPersistenceMapperTest {
 
         PaymentEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PROCESSING, entity.status);
+        assertEquals(PaymentStatus.PROCESSING, entity.status);
     }
 
     @Test
@@ -81,7 +81,7 @@ class PaymentPersistenceMapperTest {
 
         PaymentEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.APPROVED, entity.status);
+        assertEquals(PaymentStatus.APPROVED, entity.status);
     }
 
     @Test
@@ -94,7 +94,7 @@ class PaymentPersistenceMapperTest {
 
         PaymentEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.REJECTED, entity.status);
+        assertEquals(PaymentStatus.REJECTED, entity.status);
     }
 
     @Test
@@ -107,7 +107,7 @@ class PaymentPersistenceMapperTest {
 
         PaymentEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.FAILED, entity.status);
+        assertEquals(PaymentStatus.FAILED, entity.status);
     }
 
     @Test
@@ -120,7 +120,7 @@ class PaymentPersistenceMapperTest {
 
         PaymentEntity entity = mapper.toEntity(domain);
 
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.REVIEW, entity.status);
+        assertEquals(PaymentStatus.REVIEW, entity.status);
     }
 
     @Test
@@ -196,7 +196,7 @@ class PaymentPersistenceMapperTest {
         entity.customerId = "c2";
         entity.paymentMethod = "WALLET";
         entity.country = "DE";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.APPROVED;
+        entity.status = PaymentStatus.APPROVED;
         entity.provider = "Stripe";
         entity.failureReason = null;
         entity.createdAt = LocalDateTime.now();
@@ -225,7 +225,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = new BigDecimal("10");
         entity.currency = "USD";
         entity.customerId = "c1";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PENDING;
+        entity.status = PaymentStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
         entity.metadata = null;
@@ -244,7 +244,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = new BigDecimal("10");
         entity.currency = "USD";
         entity.customerId = "c1";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PROCESSING;
+        entity.status = PaymentStatus.PROCESSING;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
         entity.metadata = null;
@@ -263,7 +263,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = new BigDecimal("10");
         entity.currency = "USD";
         entity.customerId = "c1";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.REJECTED;
+        entity.status = PaymentStatus.REJECTED;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
         entity.metadata = null;
@@ -282,7 +282,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = new BigDecimal("10");
         entity.currency = "USD";
         entity.customerId = "c1";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.FAILED;
+        entity.status = PaymentStatus.FAILED;
         entity.failureReason = "timeout";
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
@@ -303,7 +303,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = new BigDecimal("10");
         entity.currency = "USD";
         entity.customerId = "c1";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.REVIEW;
+        entity.status = PaymentStatus.REVIEW;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
         entity.metadata = null;
@@ -324,7 +324,7 @@ class PaymentPersistenceMapperTest {
         entity.customerId = "c2";
         entity.paymentMethod = "WALLET";
         entity.country = "DE";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.APPROVED;
+        entity.status = PaymentStatus.APPROVED;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
         entity.metadata = null;
@@ -344,7 +344,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = null;
         entity.currency = "USD";
         entity.customerId = "c1";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PENDING;
+        entity.status = PaymentStatus.PENDING;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
         entity.metadata = null;
@@ -364,7 +364,7 @@ class PaymentPersistenceMapperTest {
         entity.amount = new BigDecimal("50");
         entity.currency = "EUR";
         entity.customerId = "c2";
-        entity.status = com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.APPROVED;
+        entity.status = PaymentStatus.APPROVED;
         entity.createdAt = LocalDateTime.now();
         entity.updatedAt = LocalDateTime.now();
 
@@ -390,7 +390,7 @@ class PaymentPersistenceMapperTest {
         );
 
         PaymentEntity entity = mapper.toEntity(domain);
-        assertEquals(com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.PENDING, entity.status);
+        assertEquals(PaymentStatus.PENDING, entity.status);
 
         when(metadataMapper.toDomain(null)).thenReturn(null);
         Payment backToDomain = mapper.toDomain(entity);

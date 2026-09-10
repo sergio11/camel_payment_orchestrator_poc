@@ -1,4 +1,4 @@
-package com.poc.gateway.mapper;
+package com.poc.gateway.application.mapper;
 
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PaymentMapperTest {
 
-    private final PaymentMapper mapper = new com.poc.gateway.mapper.PaymentMapperImpl();
+    private final PaymentMapper mapper = new com.poc.gateway.application.mapper.PaymentMapperImpl();
 
     @Test
     void toDomain_fromRequest() {

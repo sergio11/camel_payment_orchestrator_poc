@@ -1,4 +1,4 @@
-package com.poc.gateway.mapper;
+package com.poc.gateway.application.mapper;
 
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;

@@ -1,20 +1,28 @@
 package com.poc.gateway.adapter.inbound.rest;
 
+import com.poc.gateway.application.mapper.PaymentMapper;
 import com.poc.gateway.application.service.CreatePaymentService;
 import com.poc.gateway.application.service.GetPaymentService;
 import com.poc.gateway.application.service.ListPaymentsService;
 import com.poc.gateway.application.service.UpdatePaymentStatusService;
+import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.PaymentPageResult;
+import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.shared.dto.PaymentPageResponseDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import static io.restassured.RestAssured.given;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
@@ -34,12 +42,31 @@ class PaymentResourceTest {
     @InjectMock
     UpdatePaymentStatusService updateStatus;
 
+    PaymentMapper mapper;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        mapper = org.mockito.Mockito.mock(PaymentMapper.class);
+        PaymentResource resource = new PaymentResource();
+        Field mapperField = PaymentResource.class.getDeclaredField("mapper");
+        mapperField.setAccessible(true);
+        mapperField.set(resource, mapper);
+        org.mockito.Mockito.reset(mapper);
+    }
+
     @Test
     void create_returns201() {
-        PaymentResponseDTO response = new PaymentResponseDTO(
-            "uuid-1", BigDecimal.TEN, "USD", "cust", "CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        UUID paymentId = UUID.randomUUID();
+        Payment domainPayment = new Payment(
+            paymentId, BigDecimal.TEN, "USD", "cust", "CARD", "US", PaymentStatus.PENDING,
+            null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        when(createPayment.execute(any(PaymentRequestDTO.class), any())).thenReturn(response);
+        PaymentResponseDTO response = new PaymentResponseDTO(
+            paymentId.toString(), BigDecimal.TEN, "USD", "cust", "CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        );
+        when(mapper.toDomain(any(PaymentRequestDTO.class))).thenReturn(domainPayment);
+        when(createPayment.execute(any(Payment.class), any())).thenReturn(domainPayment);
+        when(mapper.toResponseDTO(any(Payment.class))).thenReturn(response);
 
         given()
             .contentType(ContentType.JSON)
@@ -49,19 +76,25 @@ class PaymentResourceTest {
             .post("/payments")
         .then()
             .statusCode(201)
-            .body("id", org.hamcrest.Matchers.equalTo("uuid-1"));
+            .body("id", org.hamcrest.Matchers.equalTo(paymentId.toString()));
     }
 
     @Test
     void getById_returns200() {
-        PaymentResponseDTO response = new PaymentResponseDTO(
-            "uuid-1", BigDecimal.TEN, "USD", "cust", "CARD", "US", "APPROVED", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        UUID paymentId = UUID.randomUUID();
+        Payment domainPayment = new Payment(
+            paymentId, BigDecimal.TEN, "USD", "cust", "CARD", "US", PaymentStatus.APPROVED,
+            null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        when(getPayment.execute("uuid-1")).thenReturn(response);
+        PaymentResponseDTO response = new PaymentResponseDTO(
+            paymentId.toString(), BigDecimal.TEN, "USD", "cust", "CARD", "US", "APPROVED", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        );
+        when(getPayment.execute(paymentId)).thenReturn(domainPayment);
+        when(mapper.toResponseDTO(domainPayment)).thenReturn(response);
 
         given()
         .when()
-            .get("/payments/uuid-1")
+            .get("/payments/" + paymentId)
         .then()
             .statusCode(200)
             .body("status", org.hamcrest.Matchers.equalTo("APPROVED"));
@@ -69,8 +102,8 @@ class PaymentResourceTest {
 
     @Test
     void list_returns200() {
-        PaymentPageResponseDTO page = new PaymentPageResponseDTO(List.of(), 0L, 20, 0);
-        when(listPayments.execute(isNull(), isNull(), eq(20), eq(0))).thenReturn(page);
+        PaymentPageResult pageResult = new PaymentPageResult(List.of(), 0L, 20, 0);
+        when(listPayments.execute(isNull(), isNull(), eq(20), eq(0))).thenReturn(pageResult);
 
         given()
         .when()
@@ -81,16 +114,22 @@ class PaymentResourceTest {
 
     @Test
     void updateStatus_returns200() {
-        PaymentResponseDTO response = new PaymentResponseDTO(
-            "uuid-1", BigDecimal.TEN, "USD", "cust", "CARD", "US", "APPROVED", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        UUID paymentId = UUID.randomUUID();
+        Payment domainPayment = new Payment(
+            paymentId, BigDecimal.TEN, "USD", "cust", "CARD", "US", PaymentStatus.APPROVED,
+            null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        when(updateStatus.execute("uuid-1", "APPROVED")).thenReturn(response);
+        PaymentResponseDTO response = new PaymentResponseDTO(
+            paymentId.toString(), BigDecimal.TEN, "USD", "cust", "CARD", "US", "APPROVED", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        );
+        when(updateStatus.execute(paymentId, PaymentStatus.APPROVED)).thenReturn(domainPayment);
+        when(mapper.toResponseDTO(domainPayment)).thenReturn(response);
 
         given()
             .contentType(ContentType.JSON)
             .body("{\"status\":\"APPROVED\"}")
         .when()
-            .patch("/payments/uuid-1/status")
+            .patch("/payments/" + paymentId + "/status")
         .then()
             .statusCode(200)
             .body("status", org.hamcrest.Matchers.equalTo("APPROVED"));
@@ -98,10 +137,16 @@ class PaymentResourceTest {
 
     @Test
     void getByIdempotencyKey_found_returns200() {
-        PaymentResponseDTO response = new PaymentResponseDTO(
-            "uuid-1", BigDecimal.TEN, "USD", "cust", "CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        UUID paymentId = UUID.randomUUID();
+        Payment domainPayment = new Payment(
+            paymentId, BigDecimal.TEN, "USD", "cust", "CARD", "US", PaymentStatus.PENDING,
+            null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        when(getPayment.executeByIdempotencyKey("key-1")).thenReturn(Optional.of(response));
+        PaymentResponseDTO response = new PaymentResponseDTO(
+            paymentId.toString(), BigDecimal.TEN, "USD", "cust", "CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now()
+        );
+        when(getPayment.executeByIdempotencyKey("key-1")).thenReturn(Optional.of(domainPayment));
+        when(mapper.toResponseDTO(domainPayment)).thenReturn(response);
 
         given()
         .when()

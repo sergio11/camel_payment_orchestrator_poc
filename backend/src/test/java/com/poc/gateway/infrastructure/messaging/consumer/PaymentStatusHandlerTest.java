@@ -3,6 +3,8 @@ package com.poc.gateway.infrastructure.messaging.consumer;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentWriteRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,13 +27,24 @@ class PaymentStatusHandlerTest {
     @Mock
     EventPublisherPort eventPublisher;
 
+    @Mock
+    ObjectMapper objectMapper;
+
     @InjectMocks
     PaymentStatusHandler handler;
 
     @Test
-    void processStatusChange_updatesAndPublishes() {
+    void processStatusChange_updatesAndPublishes() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, paymentId, "{\"paymentId\":\"" + paymentId + "\"}");
+
+        JsonNode root = mock(JsonNode.class);
+        JsonNode paymentIdNode = mock(JsonNode.class);
+        doReturn(root).when(objectMapper).readTree(anyString());
+        when(root.has("paymentId")).thenReturn(true);
+        when(root.get("paymentId")).thenReturn(paymentIdNode);
+        when(paymentIdNode.asText()).thenReturn(paymentId);
+
         when(paymentRepo.updateIfPending(UUID.fromString(paymentId), PaymentStatus.APPROVED))
             .thenReturn(Optional.empty());
 
@@ -42,9 +55,17 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_exception_sendsToDlq() {
+    void processStatusChange_exception_sendsToDlq() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, paymentId, "{\"paymentId\":\"" + paymentId + "\"}");
+
+        JsonNode root = mock(JsonNode.class);
+        JsonNode paymentIdNode = mock(JsonNode.class);
+        doReturn(root).when(objectMapper).readTree(anyString());
+        when(root.has("paymentId")).thenReturn(true);
+        when(root.get("paymentId")).thenReturn(paymentIdNode);
+        when(paymentIdNode.asText()).thenReturn(paymentId);
+
         doThrow(new RuntimeException("fail")).when(paymentRepo).updateIfPending(any(), any());
 
         handler.processStatusChange(record, PaymentStatus.APPROVED);
@@ -54,9 +75,14 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_noPaymentIdInJson_usesKey() {
+    void processStatusChange_noPaymentIdInJson_usesKey() throws Exception {
         String fallbackKey = UUID.randomUUID().toString();
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, fallbackKey, "{}");
+
+        JsonNode root = mock(JsonNode.class);
+        doReturn(root).when(objectMapper).readTree(anyString());
+        when(root.has("paymentId")).thenReturn(false);
+
         when(paymentRepo.updateIfPending(UUID.fromString(fallbackKey), PaymentStatus.APPROVED))
             .thenReturn(Optional.empty());
 
@@ -67,9 +93,12 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_invalidJson_usesKey() {
+    void processStatusChange_invalidJson_usesKey() throws Exception {
         String fallbackKey = UUID.randomUUID().toString();
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, fallbackKey, "not json");
+
+        doThrow(new RuntimeException("Invalid JSON")).when(objectMapper).readTree(anyString());
+
         when(paymentRepo.updateIfPending(UUID.fromString(fallbackKey), PaymentStatus.FAILED))
             .thenReturn(Optional.empty());
 
@@ -80,9 +109,14 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_noPaymentIdField_usesKey() {
+    void processStatusChange_noPaymentIdField_usesKey() throws Exception {
         String key = UUID.randomUUID().toString();
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, key, "{\"other\":\"data\"}");
+
+        JsonNode root = mock(JsonNode.class);
+        doReturn(root).when(objectMapper).readTree(anyString());
+        when(root.has("paymentId")).thenReturn(false);
+
         when(paymentRepo.updateIfPending(UUID.fromString(key), PaymentStatus.REJECTED))
             .thenReturn(Optional.empty());
 
@@ -93,8 +127,10 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_nullKeyAndInvalidJson_sendsToDlq() {
+    void processStatusChange_nullKeyAndInvalidJson_sendsToDlq() throws Exception {
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, null, "not json");
+
+        doThrow(new RuntimeException("Invalid JSON")).when(objectMapper).readTree(anyString());
 
         handler.processStatusChange(record, PaymentStatus.APPROVED);
 
@@ -103,8 +139,10 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_nullKeyAndNullJson_sendsToDlq() {
+    void processStatusChange_nullKeyAndNullJson_sendsToDlq() throws Exception {
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, null, null);
+
+        doThrow(new RuntimeException("Null input")).when(objectMapper).readTree((String) isNull());
 
         handler.processStatusChange(record, PaymentStatus.APPROVED);
 
@@ -136,10 +174,18 @@ class PaymentStatusHandlerTest {
     }
 
     @Test
-    void processStatusChange_jsonHasPaymentIdExtractedFromValue() {
+    void processStatusChange_jsonHasPaymentIdExtractedFromValue() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         String json = "{\"paymentId\":\"" + paymentId + "\",\"amount\":100}";
         ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, "different-key", json);
+
+        JsonNode root = mock(JsonNode.class);
+        JsonNode paymentIdNode = mock(JsonNode.class);
+        doReturn(root).when(objectMapper).readTree(anyString());
+        when(root.has("paymentId")).thenReturn(true);
+        when(root.get("paymentId")).thenReturn(paymentIdNode);
+        when(paymentIdNode.asText()).thenReturn(paymentId);
+
         when(paymentRepo.updateIfPending(UUID.fromString(paymentId), PaymentStatus.REVIEW))
             .thenReturn(Optional.empty());
 

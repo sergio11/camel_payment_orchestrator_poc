@@ -28,11 +28,6 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
     @Inject
     PaymentPersistenceMapper persistenceMapper;
 
-    private static com.poc.gateway.infrastructure.persistence.entity.PaymentStatus toEntityStatus(PaymentStatus domain) {
-        if (domain == null) return null;
-        return com.poc.gateway.infrastructure.persistence.entity.PaymentStatus.valueOf(domain.name());
-    }
-
     @Override
     @Transactional
     public Payment save(Payment payment) {
@@ -47,7 +42,7 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
             e.id = UUID.randomUUID();
         }
         if (e.status == null) {
-            e.status = toEntityStatus(PaymentStatus.PENDING);
+            e.status = PaymentStatus.PENDING;
         }
         if (e.createdAt == null) {
             e.createdAt = LocalDateTime.now();
@@ -97,7 +92,7 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
             q.setParameter("customerId", customerId);
         }
         if (status != null) {
-            q.setParameter("status", toEntityStatus(status));
+            q.setParameter("status", status);
         }
         q.setFirstResult(Math.max(offset, 0));
         q.setMaxResults(Math.max(limit, 1));
@@ -118,7 +113,7 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
             q.setParameter("customerId", customerId);
         }
         if (status != null) {
-            q.setParameter("status", toEntityStatus(status));
+            q.setParameter("status", status);
         }
         return q.getSingleResult();
     }
@@ -130,7 +125,7 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
         if (e == null) {
             throw new PaymentNotFoundException(id.toString());
         }
-        e.status = toEntityStatus(newStatus);
+        e.status = newStatus;
         e.updatedAt = LocalDateTime.now();
         PaymentEntity merged = em.merge(e);
         em.flush();
@@ -141,10 +136,10 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
     @Transactional
     public Optional<Payment> updateIfPending(UUID id, PaymentStatus newStatus) {
         PaymentEntity e = em.find(PaymentEntity.class, id);
-        if (e == null || e.status != toEntityStatus(PaymentStatus.PENDING)) {
+        if (e == null || e.status != PaymentStatus.PENDING) {
             return Optional.empty();
         }
-        e.status = toEntityStatus(newStatus);
+        e.status = newStatus;
         e.updatedAt = LocalDateTime.now();
         try {
             PaymentEntity merged = em.merge(e);

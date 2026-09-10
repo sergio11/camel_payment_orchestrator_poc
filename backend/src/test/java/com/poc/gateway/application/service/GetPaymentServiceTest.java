@@ -5,8 +5,6 @@ import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.exception.PaymentNotFoundException;
 import com.poc.gateway.domain.port.outbound.PaymentReadRepository;
-import com.poc.gateway.mapper.PaymentMapper;
-import com.poc.shared.dto.PaymentResponseDTO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,9 +26,6 @@ class GetPaymentServiceTest {
     @Mock
     PaymentReadRepository paymentRepo;
 
-    @Mock
-    PaymentMapper mapper;
-
     @InjectMocks
     GetPaymentService service;
 
@@ -42,25 +37,18 @@ class GetPaymentServiceTest {
         );
     }
 
-    private PaymentResponseDTO buildResponseDto(String id) {
-        return new PaymentResponseDTO(id, BigDecimal.TEN, "USD", "cust-1",
-            "CREDIT_CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now());
-    }
-
     @Test
     void execute_returnsPaymentForValidId() {
-        String id = UUID.randomUUID().toString();
-        Payment payment = buildPayment(UUID.fromString(id));
+        UUID id = UUID.randomUUID();
+        Payment payment = buildPayment(id);
 
-        when(paymentRepo.findById(UUID.fromString(id))).thenReturn(Optional.of(payment));
-        when(mapper.toResponseDTO(any(Payment.class))).thenReturn(buildResponseDto(id));
+        when(paymentRepo.findById(id)).thenReturn(Optional.of(payment));
 
-        PaymentResponseDTO result = service.execute(id);
+        Payment result = service.execute(id);
 
         assertNotNull(result);
         assertEquals(id, result.id());
-        verify(paymentRepo).findById(UUID.fromString(id));
-        verify(mapper).toResponseDTO(payment);
+        verify(paymentRepo).findById(id);
     }
 
     @Test
@@ -69,39 +57,29 @@ class GetPaymentServiceTest {
     }
 
     @Test
-    void execute_throwsPaymentNotFoundExceptionForInvalidUuid() {
-        assertThrows(PaymentNotFoundException.class, () -> service.execute("not-a-uuid"));
-    }
-
-    @Test
-    void execute_throwsPaymentNotFoundExceptionForEmptyString() {
-        assertThrows(PaymentNotFoundException.class, () -> service.execute(""));
-    }
-
-    @Test
     void execute_throwsPaymentNotFoundExceptionWhenNotFound() {
-        String id = UUID.randomUUID().toString();
-        when(paymentRepo.findById(UUID.fromString(id))).thenReturn(Optional.empty());
+        UUID id = UUID.randomUUID();
+        when(paymentRepo.findById(id)).thenReturn(Optional.empty());
 
         PaymentNotFoundException ex = assertThrows(PaymentNotFoundException.class, () -> service.execute(id));
-        assertEquals(id, ex.getPaymentId());
+        assertEquals(id.toString(), ex.getPaymentId());
     }
 
     @Test
     void executeByIdempotencyKey_returnsEmptyForNull() {
-        Optional<PaymentResponseDTO> result = service.executeByIdempotencyKey(null);
+        Optional<Payment> result = service.executeByIdempotencyKey(null);
         assertTrue(result.isEmpty());
     }
 
     @Test
     void executeByIdempotencyKey_returnsEmptyForBlank() {
-        Optional<PaymentResponseDTO> result = service.executeByIdempotencyKey("   ");
+        Optional<Payment> result = service.executeByIdempotencyKey("   ");
         assertTrue(result.isEmpty());
     }
 
     @Test
     void executeByIdempotencyKey_returnsEmptyForEmptyString() {
-        Optional<PaymentResponseDTO> result = service.executeByIdempotencyKey("");
+        Optional<Payment> result = service.executeByIdempotencyKey("");
         assertTrue(result.isEmpty());
     }
 
@@ -109,35 +87,31 @@ class GetPaymentServiceTest {
     void executeByIdempotencyKey_returnsEmptyWhenNotFound() {
         when(paymentRepo.findByIdempotencyKey("idem-123")).thenReturn(Optional.empty());
 
-        Optional<PaymentResponseDTO> result = service.executeByIdempotencyKey("idem-123");
+        Optional<Payment> result = service.executeByIdempotencyKey("idem-123");
         assertTrue(result.isEmpty());
         verify(paymentRepo).findByIdempotencyKey("idem-123");
     }
 
     @Test
-    void executeByIdempotencyKey_returnsResponseWhenFound() {
-        String id = UUID.randomUUID().toString();
-        Payment payment = buildPayment(UUID.fromString(id));
-        PaymentResponseDTO dto = buildResponseDto(id);
+    void executeByIdempotencyKey_returnsPaymentWhenFound() {
+        UUID id = UUID.randomUUID();
+        Payment payment = buildPayment(id);
 
         when(paymentRepo.findByIdempotencyKey("idem-123")).thenReturn(Optional.of(payment));
-        when(mapper.toResponseDTO(payment)).thenReturn(dto);
 
-        Optional<PaymentResponseDTO> result = service.executeByIdempotencyKey("idem-123");
+        Optional<Payment> result = service.executeByIdempotencyKey("idem-123");
         assertTrue(result.isPresent());
         assertEquals(id, result.get().id());
     }
 
     @Test
     void executeByIdempotencyKey_trimsWhitespace() {
-        String id = UUID.randomUUID().toString();
-        Payment payment = buildPayment(UUID.fromString(id));
-        PaymentResponseDTO dto = buildResponseDto(id);
+        UUID id = UUID.randomUUID();
+        Payment payment = buildPayment(id);
 
         when(paymentRepo.findByIdempotencyKey("idem-123")).thenReturn(Optional.of(payment));
-        when(mapper.toResponseDTO(payment)).thenReturn(dto);
 
-        Optional<PaymentResponseDTO> result = service.executeByIdempotencyKey("  idem-123  ");
+        Optional<Payment> result = service.executeByIdempotencyKey("  idem-123  ");
         assertTrue(result.isPresent());
         verify(paymentRepo).findByIdempotencyKey("idem-123");
     }
