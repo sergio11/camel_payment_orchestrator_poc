@@ -2,17 +2,15 @@ package com.poc.gateway.mapper;
 
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.infrastructure.persistence.mapper.PaymentMetadataMapper;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
 
 @Mapper(componentModel = "cdi", uses = PaymentMetadataMapper.class)
 public interface PaymentMapper {
-
-    PaymentMapper INSTANCE = Mappers.getMapper(PaymentMapper.class);
 
     @Mapping(target = "id", expression = "java(java.util.UUID.randomUUID())")
     @Mapping(target = "status", constant = "PENDING")

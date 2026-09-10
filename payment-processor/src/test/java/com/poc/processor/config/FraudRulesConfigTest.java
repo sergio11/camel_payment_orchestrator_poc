@@ -114,4 +114,71 @@ class FraudRulesConfigTest {
         FraudRulesConfig config = createConfig();
         assertEquals(0, new BigDecimal("5000").compareTo(config.cbrWalletAmountThreshold()));
     }
+
+    @Test
+    @DisplayName("validate with valid config does not throw")
+    void validate_validConfig_doesNotThrow() throws Exception {
+        FraudRulesConfig config = createConfig();
+        assertDoesNotThrow(config::validate);
+    }
+
+    @Test
+    @DisplayName("validate throws when unusualHourStart < 0")
+    void validate_unusualHourStartBelowZero_throws() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "unusualHourStart", -1);
+        assertThrows(IllegalStateException.class, config::validate);
+    }
+
+    @Test
+    @DisplayName("validate throws when unusualHourStart > 23")
+    void validate_unusualHourStartAbove23_throws() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "unusualHourStart", 24);
+        assertThrows(IllegalStateException.class, config::validate);
+    }
+
+    @Test
+    @DisplayName("validate throws when unusualHourEnd < 0")
+    void validate_unusualHourEndBelowZero_throws() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "unusualHourEnd", -1);
+        assertThrows(IllegalStateException.class, config::validate);
+    }
+
+    @Test
+    @DisplayName("validate throws when unusualHourEnd > 23")
+    void validate_unusualHourEndAbove23_throws() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "unusualHourEnd", 24);
+        assertThrows(IllegalStateException.class, config::validate);
+    }
+
+    @Test
+    @DisplayName("validate throws when riskScoreThresholdHigh <= riskScoreThresholdMedium")
+    void validate_riskScoreHighNotGreaterThanMedium_throws() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "riskScoreThresholdHigh", 50);
+        setField(config, "riskScoreThresholdMedium", 50);
+        assertThrows(IllegalStateException.class, config::validate);
+    }
+
+    @Test
+    @DisplayName("validate throws when cbrHighAmountThreshold <= cbrWalletAmountThreshold")
+    void validate_cbrHighNotGreaterThanWallet_throws() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "cbrHighAmountThreshold", new BigDecimal("5000"));
+        setField(config, "cbrWalletAmountThreshold", new BigDecimal("5000"));
+        assertThrows(IllegalStateException.class, config::validate);
+    }
+
+    @Test
+    @DisplayName("highRiskCountries returns empty list when field is null")
+    void highRiskCountries_nullField_returnsEmptyList() throws Exception {
+        FraudRulesConfig config = createConfig();
+        setField(config, "highRiskCountries", null);
+        List<String> countries = config.highRiskCountries();
+        assertNotNull(countries);
+        assertTrue(countries.isEmpty());
+    }
 }

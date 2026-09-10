@@ -3,8 +3,8 @@ package com.poc.backend.integration;
 import com.poc.camel.testsupport.container.PostgresTestContainer;
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
-import com.poc.gateway.entity.PaymentStatus;
-import com.poc.gateway.repository.PaymentRepository;
+import com.poc.gateway.domain.model.PaymentStatus;
+import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PaymentRepositoryPostgresIT {
 
     @Inject
-    PaymentRepository paymentRepository;
+    PaymentRepositoryPort paymentRepository;
 
     @AfterEach
     void cleanup() {
@@ -127,6 +127,41 @@ class PaymentRepositoryPostgresIT {
         paymentRepository.deleteById(saved.id());
 
         Optional<Payment> found = paymentRepository.findById(saved.id());
+        assertThat(found).isEmpty();
+    }
+
+    @Test
+    @DisplayName("IT: Find by idempotency key in real PostgreSQL")
+    void testFindByIdempotencyKey() {
+        Payment payment = Payment.create(
+            new BigDecimal("75.00"), "USD", "cust-idem",
+            "CREDIT_CARD", "US", PaymentMetadata.empty()
+        );
+        paymentRepository.save(payment, "idem-key-123");
+
+        Optional<Payment> found = paymentRepository.findByIdempotencyKey("idem-key-123");
+        assertThat(found).isPresent();
+        assertThat(found.get().customerId()).isEqualTo("cust-idem");
+    }
+
+    @Test
+    @DisplayName("IT: Find by non-existent idempotency key returns empty")
+    void testFindByIdempotencyKey_notFound() {
+        Optional<Payment> found = paymentRepository.findByIdempotencyKey("nonexistent");
+        assertThat(found).isEmpty();
+    }
+
+    @Test
+    @DisplayName("IT: Find by null idempotency key returns empty")
+    void testFindByIdempotencyKey_null() {
+        Optional<Payment> found = paymentRepository.findByIdempotencyKey(null);
+        assertThat(found).isEmpty();
+    }
+
+    @Test
+    @DisplayName("IT: Find by null id returns empty")
+    void testFindById_null() {
+        Optional<Payment> found = paymentRepository.findById(null);
         assertThat(found).isEmpty();
     }
 }

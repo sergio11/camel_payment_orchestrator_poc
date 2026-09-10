@@ -1,6 +1,6 @@
 package com.poc.gateway.domain;
 
-import com.poc.gateway.entity.PaymentStatus;
+import com.poc.gateway.domain.model.PaymentStatus;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;

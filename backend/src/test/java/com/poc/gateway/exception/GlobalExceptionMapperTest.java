@@ -1,313 +1,131 @@
 package com.poc.gateway.exception;
 
+import com.poc.gateway.domain.exception.PaymentNotFoundException;
 import com.poc.shared.dto.ErrorResponseDTO;
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.ConstraintViolationException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import java.util.Set;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class GlobalExceptionMapperTest {
 
-    private GlobalExceptionMapper mapper;
+    @Mock
+    ExceptionClassifier classifier;
 
-    @BeforeEach
-    void setUp() {
-        mapper = new GlobalExceptionMapper();
+    @InjectMocks
+    GlobalExceptionMapper mapper;
+
+    @Test
+    void toResponse_clientErrorException_returnsClientStatus() {
+        ClientErrorException clientError = new ClientErrorException(Response.Status.FORBIDDEN);
+        Response response = mapper.toResponse(clientError);
+
+        assertEquals(403, response.getStatus());
+        verifyNoInteractions(classifier);
     }
 
     @Test
-    @DisplayName("PaymentNotFoundException returns 404")
-    void testPaymentNotFoundExceptionReturns404() {
-        Response response = mapper.toResponse(new PaymentNotFoundException("123"));
+    void toResponse_clientErrorException_returnsClientResponse() {
+        Response expectedResponse = Response.status(409).entity("conflict").build();
+        ClientErrorException clientError = new ClientErrorException(expectedResponse);
+        Response response = mapper.toResponse(clientError);
+
+        assertEquals(expectedResponse.getStatus(), response.getStatus());
+    }
+
+    @Test
+    void toResponse_notFoundCategory_returns404() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.NOT_FOUND);
+        PaymentNotFoundException ex = new PaymentNotFoundException("pay-1");
+
+        Response response = mapper.toResponse(ex);
+
         assertEquals(404, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("NOT_FOUND", error.error());
-        assertTrue(error.message().contains("123"));
+        verify(classifier).classify(ex);
     }
 
     @Test
-    @DisplayName("Generic exception returns 500")
-    void testGenericExceptionReturns500() {
-        Response response = mapper.toResponse(new RuntimeException("Something went wrong"));
-        assertEquals(500, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("INTERNAL_ERROR", error.error());
-    }
+    void toResponse_badRequestCategory_returns400() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.BAD_REQUEST);
+        IllegalArgumentException ex = new IllegalArgumentException("bad input");
 
-    @Test
-    @DisplayName("ConstraintViolationException returns 400 with validation details")
-    void testConstraintViolationExceptionReturns400() {
-        jakarta.validation.Path path1 = mock(jakarta.validation.Path.class);
-        when(path1.toString()).thenReturn("amount");
-
-        ConstraintViolation<?> violation1 = mock(ConstraintViolation.class);
-        when(violation1.getPropertyPath()).thenReturn(path1);
-        when(violation1.getMessage()).thenReturn("must be positive");
-
-        jakarta.validation.Path path2 = mock(jakarta.validation.Path.class);
-        when(path2.toString()).thenReturn("currency");
-
-        ConstraintViolation<?> violation2 = mock(ConstraintViolation.class);
-        when(violation2.getPropertyPath()).thenReturn(path2);
-        when(violation2.getMessage()).thenReturn("must not be blank");
-
-        ConstraintViolationException cve = new ConstraintViolationException(
-            "Validation failed", Set.of(violation1, violation2)
-        );
-
-        Response response = mapper.toResponse(cve);
-
-        assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("VALIDATION_ERROR", error.error());
-        assertEquals("Invalid request", error.message());
-        assertNotNull(error.details());
-        assertEquals(2, error.details().size());
-    }
-
-    @Test
-    @DisplayName("IllegalArgumentException returns 400")
-    void testIllegalArgumentExceptionReturns400() {
-        Response response = mapper.toResponse(new IllegalArgumentException("bad argument"));
-
-        assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("INVALID_ARGUMENT", error.error());
-        assertEquals("bad argument", error.message());
-    }
-
-    @Test
-    @DisplayName("ConstraintViolationException with single violation returns 400")
-    void testConstraintViolationExceptionSingleViolationReturns400() {
-        jakarta.validation.Path path = mock(jakarta.validation.Path.class);
-        when(path.toString()).thenReturn("name");
-
-        ConstraintViolation<?> violation = mock(ConstraintViolation.class);
-        when(violation.getPropertyPath()).thenReturn(path);
-        when(violation.getMessage()).thenReturn("must not be null");
-
-        ConstraintViolationException cve = new ConstraintViolationException(
-            "Validation failed", Set.of(violation)
-        );
-
-        Response response = mapper.toResponse(cve);
-
-        assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("VALIDATION_ERROR", error.error());
-        assertEquals(1, error.details().size());
-        assertEquals("name", error.details().get(0).field());
-        assertEquals("must not be null", error.details().get(0).message());
-    }
-
-    @Test
-    @DisplayName("PaymentNotFoundException has correct error code and message")
-    void testPaymentNotFoundExceptionErrorDetails() {
-        Response response = mapper.toResponse(new PaymentNotFoundException("pay-xyz"));
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-
-        assertEquals("NOT_FOUND", error.error());
-        assertEquals("Payment not found: pay-xyz", error.message());
-        assertNull(error.details());
-    }
-
-    @Test
-    @DisplayName("Jackson JsonParseException returns 400")
-    void testJacksonParseExceptionReturns400() {
-        com.fasterxml.jackson.core.JsonParseException ex =
-            new com.fasterxml.jackson.core.JsonParseException(null, "Unexpected character");
         Response response = mapper.toResponse(ex);
+
         assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("VALIDATION_ERROR", error.error());
     }
 
     @Test
-    @DisplayName("Wrapped Jackson exception returns 400")
-    void testWrappedJacksonExceptionReturns400() {
-        com.fasterxml.jackson.core.JsonParseException cause =
-            new com.fasterxml.jackson.core.JsonParseException(null, "bad json");
-        RuntimeException wrapper = new RuntimeException("deserialization failed", cause);
-        Response response = mapper.toResponse(wrapper);
-        assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("VALIDATION_ERROR", error.error());
-    }
+    void toResponse_conflictCategory_returns409() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.CONFLICT);
+        RuntimeException ex = new RuntimeException("duplicate key");
 
-    @Test
-    @DisplayName("BadRequestException returns 400")
-    void testBadRequestExceptionReturns400() {
-        Response response = mapper.toResponse(new jakarta.ws.rs.BadRequestException("bad body"));
-        assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("VALIDATION_ERROR", error.error());
-    }
-
-    static class FakeJsonParseException extends RuntimeException {
-        FakeJsonParseException() {
-            super((String) null);
-        }
-    }
-
-    @Test
-    @DisplayName("Jackson exception without message uses fallback text")
-    void testJacksonExceptionNullMessageUsesFallback() {
-        Response response = mapper.toResponse(new FakeJsonParseException());
-        assertEquals(400, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("VALIDATION_ERROR", error.error());
-        assertEquals(1, error.details().size());
-        assertEquals("Malformed request body", error.details().get(0).message());
-    }
-
-    @Test
-    @DisplayName("NullPointerException still returns 500")
-    void testNullPointerExceptionReturns500() {
-        Response response = mapper.toResponse(new NullPointerException("oops"));
-        assertEquals(500, response.getStatus());
-    }
-
-    @Test
-    @DisplayName("DB unique constraint violation returns 409")
-    void testUniqueViolationReturns409() {
-        jakarta.persistence.PersistenceException ex =
-            new jakarta.persistence.PersistenceException("duplicate key value violates unique constraint \"uq_payments_idempotency\"");
         Response response = mapper.toResponse(ex);
-        assertEquals(409, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("CONFLICT", error.error());
-    }
 
-    @Test
-    @DisplayName("isBadRequest detects wrapped Jackson causes")
-    void testIsBadRequestWrappedCause() {
-        com.fasterxml.jackson.core.JsonParseException cause =
-            new com.fasterxml.jackson.core.JsonParseException(null, "bad");
-        assertTrue(mapper.isBadRequest(new RuntimeException("wrap", cause)));
-        assertFalse(mapper.isBadRequest(new RuntimeException("plain")));
-    }
-
-    static class GatewayNpe extends NullPointerException {
-        GatewayNpe(String msg) {
-            super(msg);
-        }
-    }
-
-    @Test
-    @DisplayName("Gateway NullPointerException is not treated as bad request")
-    void testGatewayNpeNotBadRequest() {
-        Response response = mapper.toResponse(new GatewayNpe("npe in gateway"));
-        assertEquals(500, response.getStatus());
-    }
-
-    @Test
-    @DisplayName("Non-persistence exception with idempotency message returns 409")
-    void testIdempotencyMessageReturns409() {
-        Response response = mapper.toResponse(new RuntimeException("violates uq_outbox_idempotency"));
-        assertEquals(409, response.getStatus());
-        ErrorResponseDTO error = (ErrorResponseDTO) response.getEntity();
-        assertEquals("CONFLICT", error.error());
-    }
-
-    @Test
-    @DisplayName("Wrapped constraint message returns 409")
-    void testWrappedConstraintMessageReturns409() {
-        RuntimeException cause = new RuntimeException("duplicate key issue");
-        Response response = mapper.toResponse(new RuntimeException("wrap", cause));
         assertEquals(409, response.getStatus());
     }
 
     @Test
-    @DisplayName("Unmatched causal chain returns 500")
-    void testUnmatchedChainReturns500() {
-        Response response = mapper.toResponse(new RuntimeException("a", new RuntimeException("b")));
+    void toResponse_unauthorizedCategory_returns401() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.UNAUTHORIZED);
+        RuntimeException ex = new RuntimeException("unauthorized");
+
+        Response response = mapper.toResponse(ex);
+
+        assertEquals(401, response.getStatus());
+    }
+
+    @Test
+    void toResponse_forbiddenCategory_returns403() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.FORBIDDEN);
+        RuntimeException ex = new RuntimeException("forbidden");
+
+        Response response = mapper.toResponse(ex);
+
+        assertEquals(403, response.getStatus());
+    }
+
+    @Test
+    void toResponse_internalCategory_returns500() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.INTERNAL);
+        RuntimeException ex = new RuntimeException("oops");
+
+        Response response = mapper.toResponse(ex);
+
         assertEquals(500, response.getStatus());
     }
 
     @Test
-    @DisplayName("SQL integrity violation with unique message returns 409")
-    void testSqlIntegrityViolationReturns409() {
-        java.sql.SQLIntegrityConstraintViolationException ex =
-            new java.sql.SQLIntegrityConstraintViolationException("Duplicate entry 'x' for key 'uq'");
+    void toResponse_responseEntityContainsErrorDetail() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.NOT_FOUND);
+        PaymentNotFoundException ex = new PaymentNotFoundException("pay-1");
+
         Response response = mapper.toResponse(ex);
-        assertEquals(409, response.getStatus());
+
+        assertNotNull(response.getEntity());
+        assertTrue(response.getEntity() instanceof ErrorResponseDTO);
+        ErrorResponseDTO dto = (ErrorResponseDTO) response.getEntity();
+        assertEquals("NOT_FOUND", dto.error());
+        assertEquals("Payment not found: pay-1", dto.message());
+        assertNotNull(dto.details());
+        assertEquals(1, dto.details().size());
     }
 
     @Test
-    @DisplayName("EntityExistsException returns 409")
-    void testEntityExistsReturns409() {
-        jakarta.persistence.EntityExistsException ex =
-            new jakarta.persistence.EntityExistsException("already exists");
+    void toResponse_responseEntityHasTimestamp() {
+        when(classifier.classify(any())).thenReturn(ExceptionCategory.BAD_REQUEST);
+        RuntimeException ex = new RuntimeException("bad");
+
         Response response = mapper.toResponse(ex);
-        assertEquals(409, response.getStatus());
-    }
 
-    @Test
-    @DisplayName("PersistenceException without keyword message returns 500")
-    void testPersistenceNoKeywordReturns500() {
-        jakarta.persistence.PersistenceException ex =
-            new jakarta.persistence.PersistenceException("something else");
-        Response response = mapper.toResponse(ex);
-        assertEquals(500, response.getStatus());
-    }
-
-    @Test
-    @DisplayName("Hibernate constraint violation with constraint message returns 409")
-    void testHibernateViolationReturns409() {
-        org.hibernate.exception.ConstraintViolationException ex =
-            new org.hibernate.exception.ConstraintViolationException(
-                "could not execute statement", new java.sql.SQLException("integrity"), "tbl");
-        Response response = mapper.toResponse(ex);
-        assertEquals(409, response.getStatus());
-    }
-
-    @Test
-    @DisplayName("Duplicate without key is not a conflict")
-    void testDuplicateWithoutKeyReturns500() {
-        Response response = mapper.toResponse(new RuntimeException("duplicate entry omitted"));
-        assertEquals(500, response.getStatus());
-    }
-
-    @Test
-    @DisplayName("matchesAny detects markers")
-    void testMatchesAny() {
-        assertTrue(GlobalExceptionMapper.matchesAny("aJsonParseExceptionb", java.util.List.of("JsonParseException")));
-        assertFalse(GlobalExceptionMapper.matchesAny("plain", java.util.List.of("JsonParseException")));
-        assertFalse(GlobalExceptionMapper.matchesAny("plain", java.util.List.of()));
-    }
-
-    @Test
-    @DisplayName("isDuplicateKey requires both words")
-    void testIsDuplicateKey() {
-        assertTrue(GlobalExceptionMapper.isDuplicateKey("duplicate key issue"));
-        assertFalse(GlobalExceptionMapper.isDuplicateKey("duplicate entry omitted"));
-        assertFalse(GlobalExceptionMapper.isDuplicateKey("some key problem"));
-    }
-
-    @Test
-    @DisplayName("matchers handle null input without throwing")
-    void testMatchersNullInput() {
-        assertFalse(mapper.isBadRequest(null));
-        assertFalse(mapper.isConstraintViolation(null));
-    }
-
-    static class FakeEntityExistsException extends RuntimeException {
-        FakeEntityExistsException(String msg) {
-            super(msg);
-        }
-    }
-
-    @Test
-    @DisplayName("EntityExists-like class name without persistence type is not a conflict")
-    void testFakeEntityExistsReturns500() {
-        Response response = mapper.toResponse(new FakeEntityExistsException("plain problem"));
-        assertEquals(500, response.getStatus());
+        ErrorResponseDTO dto = (ErrorResponseDTO) response.getEntity();
+        assertNotNull(dto.timestamp());
     }
 }
