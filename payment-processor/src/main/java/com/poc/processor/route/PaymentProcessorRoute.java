@@ -91,6 +91,8 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .wireTap("direct:audit-pipeline")
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+                exchange.getIn().setHeader("OriginalPaymentMessage", msg);
+
                 FraudEvaluation evaluation = evaluateFraudUseCase.evaluate(msg);
                 exchange.getIn().setHeader("CamelFraudAction", evaluation.action());
                 exchange.getIn().setHeader("CamelRiskScore", evaluation.riskScore());

@@ -1,36 +1,28 @@
 package com.poc.processor.route;
 
-import com.poc.processor.port.outbound.AuditEventPublisherPort;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.jackson.JacksonDataFormat;
 
 @ApplicationScoped
 public class AuditPipelineRoute extends RouteBuilder {
 
     @Inject
-    AuditEventPublisherPort auditPublisher;
+    ObjectMapper objectMapper;
 
     @Override
     public void configure() {
+        var auditJson = new JacksonDataFormat(objectMapper, Object.class);
+
         from("direct:audit-pipeline")
             .routeId("audit-pipeline")
-            .process(exchange -> {
-                Object body = exchange.getIn().getBody();
-                String paymentId = null;
-                if (body != null) {
-                    try {
-                        var method = body.getClass().getMethod("paymentId");
-                        paymentId = (String) method.invoke(body);
-                    } catch (Exception e) {
-                        paymentId = exchange.getIn().getHeader("OriginalPaymentId", String.class);
-                    }
-                }
-                if (paymentId == null) {
-                    paymentId = exchange.getIn().getHeader("OriginalPaymentId", String.class);
-                }
-                auditPublisher.publishAudit(paymentId, "PAYMENT_RECEIVED");
-            })
-            .log("Audit event published for: ${header.OriginalPaymentId}");
+            .log("Auditing payment: ${body.paymentId}")
+            .setHeader("AuditPaymentId", simple("${body.paymentId}"))
+            .setHeader("kafka.KEY", simple("${body.paymentId}"))
+            .marshal(auditJson)
+            .to("kafka:{{kafka.topic.audit}}")
+            .log("Published audit event for: ${header.AuditPaymentId}");
     }
 }
