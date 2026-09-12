@@ -1,12 +1,16 @@
 package com.poc.gateway.application.service;
 
+import com.poc.gateway.application.mapper.PaymentMetadataApplicationMapper;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.model.OutboxEvent;
+import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.inbound.CreatePaymentUseCase;
 import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
+import com.poc.shared.dto.PaymentRequestDTO;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -30,9 +34,12 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     @Inject
     PaymentEventSerializer serializer;
 
+    @Inject
+    PaymentMetadataApplicationMapper metadataMapper;
+
     @Override
     @Transactional
-    public Payment execute(Payment payment, String idempotencyKey) {
+    public Payment execute(PaymentRequestDTO request, String idempotencyKey) {
         String key = normalizeKey(idempotencyKey);
 
         Optional<Payment> existing = paymentRepo.findByIdempotencyKey(key);
@@ -41,21 +48,19 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             return existing.get();
         }
 
-        Payment saved = paymentRepo.save(payment, key);
+        PaymentMetadata metadata = metadataMapper.toDomain(request.metadata());
+        Payment domainPayment = Payment.create(
+            request.amount(), request.currency(), request.customerId(),
+            request.paymentMethod(), request.country(), metadata
+        );
+
+        Payment saved = paymentRepo.save(domainPayment, key);
 
         String payload = serializer.serialize(saved);
         OutboxEvent event = OutboxEvent.create(saved.id(), "payments.events.received", payload, key);
         outboxRepo.persist(event);
 
-        boolean published = eventPublisher.publishPaymentReceived(
-            saved.id().toString(),
-            saved.amount(),
-            saved.currency(),
-            saved.customerId(),
-            saved.paymentMethod(),
-            saved.country(),
-            saved.metadata()
-        );
+        boolean published = eventPublisher.publishPaymentReceived(PaymentReceivedEvent.from(saved));
 
         if (published) {
             outboxRepo.markSent(event.id());

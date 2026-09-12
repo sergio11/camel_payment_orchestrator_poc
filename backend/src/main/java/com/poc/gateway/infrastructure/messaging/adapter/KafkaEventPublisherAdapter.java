@@ -2,8 +2,7 @@ package com.poc.gateway.infrastructure.messaging.adapter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.poc.gateway.domain.Payment;
-import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
@@ -12,7 +11,6 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -62,29 +60,28 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
     }
 
     @Override
-    public boolean publishPaymentReceived(String paymentId, BigDecimal amount, String currency,
-            String customerId, String paymentMethod, String country, PaymentMetadata metadata) {
+    public boolean publishPaymentReceived(PaymentReceivedEvent event) {
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("paymentId", paymentId);
-            payload.put("amount", amount != null ? amount.toString() : "0");
-            payload.put("currency", currency);
-            payload.put("customerId", customerId);
-            payload.put("paymentMethod", paymentMethod);
-            payload.put("country", country);
-            if (metadata != null) {
-                payload.set("metadata", objectMapper.valueToTree(metadata));
+            payload.put("paymentId", event.paymentId());
+            payload.put("amount", event.amount() != null ? event.amount().toString() : "0");
+            payload.put("currency", event.currency());
+            payload.put("customerId", event.customerId());
+            payload.put("paymentMethod", event.paymentMethod());
+            payload.put("country", event.country());
+            if (event.metadata() != null) {
+                payload.set("metadata", objectMapper.valueToTree(event.metadata()));
             }
 
             ProducerRecord<String, String> record = new ProducerRecord<>(
                 topicConfig.received(),
-                paymentId,
+                event.paymentId(),
                 objectMapper.writeValueAsString(payload)
             );
             producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
-            LOG.errorf(e, "Failed to publish payment received event for %s", paymentId);
+            LOG.errorf(e, "Failed to publish payment received event for %s", event.paymentId());
             return false;
         }
     }

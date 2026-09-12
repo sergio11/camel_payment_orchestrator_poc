@@ -9,12 +9,12 @@ import org.mapstruct.Mapping;
 @Mapper(componentModel = "cdi", uses = PaymentMetadataApplicationMapper.class)
 public interface PaymentMapper {
 
-    @Mapping(target = "id", expression = "java(java.util.UUID.randomUUID())")
-    @Mapping(target = "status", constant = "PENDING")
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "status", ignore = true)
     @Mapping(target = "provider", ignore = true)
     @Mapping(target = "failureReason", ignore = true)
-    @Mapping(target = "createdAt", expression = "java(java.time.LocalDateTime.now())")
-    @Mapping(target = "updatedAt", expression = "java(java.time.LocalDateTime.now())")
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
     Payment toDomain(PaymentRequestDTO request);
 
     @Mapping(target = "id", expression = "java(payment.id() != null ? payment.id().toString() : null)")

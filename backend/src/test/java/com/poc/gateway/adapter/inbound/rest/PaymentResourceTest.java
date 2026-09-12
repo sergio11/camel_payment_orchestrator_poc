@@ -52,8 +52,7 @@ class PaymentResourceTest {
         PaymentResponseDTO response = new PaymentResponseDTO(
             paymentId.toString(), BigDecimal.TEN, "USD", "cust", "CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now()
         );
-        when(mapper.toDomain(any(PaymentRequestDTO.class))).thenReturn(domainPayment);
-        when(createPayment.execute(any(Payment.class), any())).thenReturn(domainPayment);
+        when(createPayment.execute(any(PaymentRequestDTO.class), any())).thenReturn(domainPayment);
         when(mapper.toResponseDTO(any(Payment.class))).thenReturn(response);
 
         given()

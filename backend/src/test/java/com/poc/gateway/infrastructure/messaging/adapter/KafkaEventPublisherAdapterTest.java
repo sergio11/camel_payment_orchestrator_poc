@@ -3,6 +3,7 @@ package com.poc.gateway.infrastructure.messaging.adapter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -116,9 +117,7 @@ class KafkaEventPublisherAdapterTest {
         when(producer.send(any(ProducerRecord.class)))
             .thenReturn(CompletableFuture.completedFuture(okRecordMetadata("payments.received")));
 
-        boolean result = adapter.publishPaymentReceived(
-            "pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", null
-        );
+        boolean result = adapter.publishPaymentReceived(new PaymentReceivedEvent("pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", null));
 
         assertTrue(result);
         verify(producer).send(any(ProducerRecord.class));
@@ -138,9 +137,7 @@ class KafkaEventPublisherAdapterTest {
             .thenReturn(CompletableFuture.completedFuture(okRecordMetadata("payments.received")));
 
         PaymentMetadata meta = new PaymentMetadata("order-1", 3, true, 30, "LOW", null, null, null);
-        boolean result = adapter.publishPaymentReceived(
-            "pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", meta
-        );
+        boolean result = adapter.publishPaymentReceived(new PaymentReceivedEvent("pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", meta));
 
         assertTrue(result);
     }
@@ -157,9 +154,7 @@ class KafkaEventPublisherAdapterTest {
         when(producer.send(any(ProducerRecord.class)))
             .thenReturn(CompletableFuture.completedFuture(okRecordMetadata("payments.received")));
 
-        boolean result = adapter.publishPaymentReceived(
-            "pay-1", null, "USD", "c1", "CARD", "US", null
-        );
+        boolean result = adapter.publishPaymentReceived(new PaymentReceivedEvent("pay-1", null, "USD", "c1", "CARD", "US", null));
 
         assertTrue(result);
     }
@@ -173,9 +168,7 @@ class KafkaEventPublisherAdapterTest {
         when(node.put(anyString(), anyString())).thenReturn(node);
         when(objectMapper.writeValueAsString(any())).thenThrow(new RuntimeException("kafka down"));
 
-        boolean result = adapter.publishPaymentReceived(
-            "pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", null
-        );
+        boolean result = adapter.publishPaymentReceived(new PaymentReceivedEvent("pay-1", new BigDecimal("100"), "USD", "c1", "CARD", "US", null));
 
         assertFalse(result);
     }

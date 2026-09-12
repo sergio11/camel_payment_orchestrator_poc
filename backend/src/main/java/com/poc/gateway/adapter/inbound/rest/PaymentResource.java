@@ -55,10 +55,9 @@ public class PaymentResource {
     @POST
     @Operation(summary = "Create a new payment", description = "Creates a new payment with idempotency support")
     public Response create(
-            PaymentRequestDTO request,
+            @Valid PaymentRequestDTO request,
             @HeaderParam("Idempotency-Key") String idempotencyKey) {
-        Payment domainPayment = mapper.toDomain(request);
-        Payment result = createPayment.execute(domainPayment, idempotencyKey);
+        Payment result = createPayment.execute(request, idempotencyKey);
         PaymentResponseDTO response = mapper.toResponseDTO(result);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }

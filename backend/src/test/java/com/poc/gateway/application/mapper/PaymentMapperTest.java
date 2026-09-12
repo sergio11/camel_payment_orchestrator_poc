@@ -33,21 +33,24 @@ class PaymentMapperTest {
     void toDomain_fromRequest() {
         PaymentRequestDTO req = new PaymentRequestDTO(new BigDecimal("50"), "EUR", "cust", "CARD", "DE", PaymentMetadataDTO.empty());
         Payment p = mapper.toDomain(req);
-        assertNotNull(p.id());
+        assertNull(p.id());
         assertEquals(new BigDecimal("50"), p.amount());
         assertEquals("EUR", p.currency());
-        assertEquals(PaymentStatus.PENDING, p.status());
-        assertNotNull(p.createdAt());
-        assertNotNull(p.updatedAt());
+        assertNull(p.status());
+        assertNull(p.createdAt());
+        assertNull(p.updatedAt());
     }
 
     @Test
     void toDomain_setsDefaultValues() {
         PaymentRequestDTO req = new PaymentRequestDTO(new BigDecimal("10"), "USD", "c1", "CARD", "US", PaymentMetadataDTO.empty());
         Payment p = mapper.toDomain(req);
+        assertNull(p.id());
+        assertNull(p.status());
         assertNull(p.provider());
         assertNull(p.failureReason());
-        assertEquals(p.createdAt(), p.updatedAt());
+        assertNull(p.createdAt());
+        assertNull(p.updatedAt());
     }
 
     @Test

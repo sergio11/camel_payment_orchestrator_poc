@@ -1,12 +1,16 @@
 package com.poc.gateway.application.service;
 
+import com.poc.gateway.application.mapper.PaymentMetadataApplicationMapper;
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
+import com.poc.shared.dto.PaymentMetadataDTO;
+import com.poc.shared.dto.PaymentRequestDTO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,29 +42,33 @@ class CreatePaymentServiceTest {
     @Mock
     PaymentEventSerializer serializer;
 
+    @Mock
+    PaymentMetadataApplicationMapper metadataMapper;
+
     @InjectMocks
     CreatePaymentService service;
 
     @Test
     @DisplayName("Should create payment and publish event on new payment")
     void execute_createsPaymentAndPublishesEvent() {
-        Payment payment = new Payment(
+        PaymentRequestDTO request = new PaymentRequestDTO(
+            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
+        );
+        String key = "idem-key-123";
+
+        Payment savedPayment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING,
             null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        String key = "idem-key-123";
-
-        Payment savedPayment = payment.withStatus(PaymentStatus.PENDING);
 
         when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+        when(metadataMapper.toDomain(any())).thenReturn(PaymentMetadata.empty());
         when(paymentRepo.save(any(Payment.class), eq(key))).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any()
-        )).thenReturn(true);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
-        Payment result = service.execute(payment, key);
+        Payment result = service.execute(request, key);
 
         assertNotNull(result);
         assertEquals("USD", result.currency());
@@ -68,9 +76,7 @@ class CreatePaymentServiceTest {
         assertEquals(PaymentStatus.PENDING, result.status());
         verify(paymentRepo).save(any(Payment.class), eq(key));
         verify(outboxRepo).persist(any());
-        verify(eventPublisher).publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any()
-        );
+        verify(eventPublisher).publishPaymentReceived(any(PaymentReceivedEvent.class));
     }
 
     @Test
@@ -82,14 +88,13 @@ class CreatePaymentServiceTest {
             "CREDIT_CARD", "US", PaymentStatus.PENDING,
             null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
+        PaymentRequestDTO request = new PaymentRequestDTO(
+            new BigDecimal("50.00"), "EUR", "cust-2", "CARD", "DE", PaymentMetadataDTO.empty()
+        );
 
         when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.of(existing));
 
-        Payment result = service.execute(
-            new Payment(UUID.randomUUID(), BigDecimal.TEN, "USD", "cust-1", "CREDIT_CARD", "US",
-                PaymentStatus.PENDING, null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()),
-            key
-        );
+        Payment result = service.execute(request, key);
 
         assertNotNull(result);
         assertEquals(existing.id(), result.id());
@@ -100,22 +105,23 @@ class CreatePaymentServiceTest {
     @Test
     @DisplayName("Should generate key when blank idempotency key is provided")
     void execute_blankIdempotencyKey_generatesKey() {
-        Payment payment = new Payment(
+        PaymentRequestDTO request = new PaymentRequestDTO(
+            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
+        );
+
+        Payment savedPayment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING,
             null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
 
-        Payment savedPayment = payment.withStatus(PaymentStatus.PENDING);
-
         when(paymentRepo.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(metadataMapper.toDomain(any())).thenReturn(PaymentMetadata.empty());
         when(paymentRepo.save(any(Payment.class), anyString())).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any()
-        )).thenReturn(true);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
-        Payment result = service.execute(payment, "  ");
+        Payment result = service.execute(request, "  ");
 
         assertNotNull(result);
         assertEquals("USD", result.currency());
@@ -126,22 +132,23 @@ class CreatePaymentServiceTest {
     @Test
     @DisplayName("Should generate key when null idempotency key is provided")
     void execute_nullIdempotencyKey_generatesKey() {
-        Payment payment = new Payment(
+        PaymentRequestDTO request = new PaymentRequestDTO(
+            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
+        );
+
+        Payment savedPayment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING,
             null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
 
-        Payment savedPayment = payment.withStatus(PaymentStatus.PENDING);
-
         when(paymentRepo.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
+        when(metadataMapper.toDomain(any())).thenReturn(PaymentMetadata.empty());
         when(paymentRepo.save(any(Payment.class), anyString())).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any()
-        )).thenReturn(true);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
-        Payment result = service.execute(payment, null);
+        Payment result = service.execute(request, null);
 
         assertNotNull(result);
         assertEquals("USD", result.currency());
@@ -152,23 +159,24 @@ class CreatePaymentServiceTest {
     @Test
     @DisplayName("Should log error but still return payment when Kafka publish fails")
     void execute_publishFails_logsError() {
-        Payment payment = new Payment(
+        PaymentRequestDTO request = new PaymentRequestDTO(
+            new BigDecimal("100.00"), "USD", "cust-1", "CREDIT_CARD", "US", PaymentMetadataDTO.empty()
+        );
+        String key = "idem-key-456";
+
+        Payment savedPayment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
             "CREDIT_CARD", "US", PaymentStatus.PENDING,
             null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        String key = "idem-key-456";
-
-        Payment savedPayment = payment.withStatus(PaymentStatus.PENDING);
 
         when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+        when(metadataMapper.toDomain(any())).thenReturn(PaymentMetadata.empty());
         when(paymentRepo.save(any(Payment.class), eq(key))).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), any()
-        )).thenReturn(false);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(false);
 
-        Payment result = service.execute(payment, key);
+        Payment result = service.execute(request, key);
 
         assertNotNull(result);
         verify(outboxRepo, never()).markSent(any());

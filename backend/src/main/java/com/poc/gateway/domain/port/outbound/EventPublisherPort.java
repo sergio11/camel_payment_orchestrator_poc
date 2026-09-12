@@ -1,18 +1,9 @@
 package com.poc.gateway.domain.port.outbound;
 
-import com.poc.gateway.domain.PaymentMetadata;
-import java.math.BigDecimal;
+import com.poc.gateway.domain.model.PaymentReceivedEvent;
 
 public interface EventPublisherPort {
-    boolean publishPaymentReceived(
-        String paymentId,
-        BigDecimal amount,
-        String currency,
-        String customerId,
-        String paymentMethod,
-        String country,
-        PaymentMetadata metadata
-    );
+    boolean publishPaymentReceived(PaymentReceivedEvent event);
 
     boolean publishStatusChanged(String paymentId, String status);
 

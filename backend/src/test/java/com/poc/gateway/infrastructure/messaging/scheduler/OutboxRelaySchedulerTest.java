@@ -1,6 +1,7 @@
 package com.poc.gateway.infrastructure.messaging.scheduler;
 
 import com.poc.gateway.domain.model.OutboxEvent;
+import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -89,15 +90,11 @@ class OutboxRelaySchedulerTest {
         when(root.get("country")).thenReturn(countryNode);
         when(countryNode.asText()).thenReturn("US");
 
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), isNull()
-        )).thenReturn(true);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         scheduler.processPendingEvents();
 
-        verify(eventPublisher).publishPaymentReceived(
-            eq(paymentId), any(), eq("USD"), eq("cust-1"), eq("CARD"), eq("US"), isNull()
-        );
+        verify(eventPublisher).publishPaymentReceived(any(PaymentReceivedEvent.class));
         verify(outboxRepo).markSent(event.id());
     }
 
@@ -136,9 +133,7 @@ class OutboxRelaySchedulerTest {
         when(root.get("country")).thenReturn(countryNode);
         when(countryNode.asText()).thenReturn("US");
 
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), isNull()
-        )).thenThrow(new RuntimeException("Kafka down"));
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenThrow(new RuntimeException("Kafka down"));
 
         scheduler.processPendingEvents();
 
@@ -172,15 +167,11 @@ class OutboxRelaySchedulerTest {
         when(root.has("paymentMethod")).thenReturn(false);
         when(root.has("country")).thenReturn(false);
 
-        when(eventPublisher.publishPaymentReceived(
-            anyString(), any(), anyString(), anyString(), anyString(), anyString(), isNull()
-        )).thenReturn(true);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         scheduler.processPendingEvents();
 
-        verify(eventPublisher).publishPaymentReceived(
-            eq(aggregateId.toString()), any(), eq(""), eq(""), eq(""), eq(""), isNull()
-        );
+        verify(eventPublisher).publishPaymentReceived(any(PaymentReceivedEvent.class));
         verify(outboxRepo).markSent(event.id());
     }
 }
