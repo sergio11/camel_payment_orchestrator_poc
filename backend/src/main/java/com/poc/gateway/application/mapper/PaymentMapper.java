@@ -1,15 +1,12 @@
 package com.poc.gateway.application.mapper;
 
 import com.poc.gateway.domain.Payment;
-import com.poc.gateway.domain.PaymentMetadata;
-import com.poc.gateway.infrastructure.persistence.mapper.PaymentMetadataMapper;
-import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "cdi", uses = PaymentMetadataMapper.class)
+@Mapper(componentModel = "cdi", uses = PaymentMetadataApplicationMapper.class)
 public interface PaymentMapper {
 
     @Mapping(target = "id", expression = "java(java.util.UUID.randomUUID())")
@@ -23,8 +20,4 @@ public interface PaymentMapper {
     @Mapping(target = "id", expression = "java(payment.id() != null ? payment.id().toString() : null)")
     @Mapping(target = "status", expression = "java(payment.status() != null ? payment.status().name() : null)")
     PaymentResponseDTO toResponseDTO(Payment payment);
-
-    PaymentMetadataDTO toMetadataDTO(PaymentMetadata metadata);
-
-    PaymentMetadata toMetadataDomain(PaymentMetadataDTO dto);
 }

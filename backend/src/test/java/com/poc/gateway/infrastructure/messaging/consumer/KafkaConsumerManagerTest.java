@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -60,8 +61,6 @@ class KafkaConsumerManagerTest {
         manager.processedTopic = "payments.processed";
         manager.groupId = "test-group";
 
-        Properties[] capturedProps = new Properties[1];
-
         try (MockedConstruction<KafkaConsumer> mocked = mockConstruction(KafkaConsumer.class,
                 (mock, context) -> {
                     lenient().doNothing().when(mock).subscribe(anyList());
@@ -73,10 +72,8 @@ class KafkaConsumerManagerTest {
             KafkaConsumer<?, ?> constructedConsumer = mocked.constructed().get(0);
             verify(constructedConsumer).subscribe(Collections.singletonList("payments.processed"));
 
-            Thread thread = (Thread) getField("consumerThread");
-            assertNotNull(thread);
-            assertTrue(thread.isDaemon());
-            assertEquals("kafka-consumer", thread.getName());
+            ExecutorService executorService = (ExecutorService) getField("executor");
+            assertNotNull(executorService);
 
             manager.stop();
         }
@@ -124,22 +121,23 @@ class KafkaConsumerManagerTest {
     }
 
     @Test
-    void stop_withThreadAndConsumer_interruptsAndCloses() throws Exception {
-        Thread mockThread = mock(Thread.class);
-        setField("consumerThread", mockThread);
+    void stop_withExecutorAndConsumer_callsShutdownNowAndCloses() throws Exception {
+        ExecutorService mockExecutor = mock(ExecutorService.class);
+        when(mockExecutor.awaitTermination(anyLong(), any())).thenReturn(true);
+        setField("executor", mockExecutor);
         setField("consumer", kafkaConsumer);
         setField("running", true);
 
         manager.stop();
 
-        verify(mockThread).interrupt();
+        verify(mockExecutor).shutdownNow();
         verify(kafkaConsumer).close();
         assertThatRunningIsFalse();
     }
 
     @Test
-    void stop_nullThread_doesNotThrow() throws Exception {
-        setField("consumerThread", null);
+    void stop_nullExecutor_doesNotThrow() throws Exception {
+        setField("executor", null);
         setField("consumer", kafkaConsumer);
         setField("running", true);
 
@@ -150,19 +148,20 @@ class KafkaConsumerManagerTest {
 
     @Test
     void stop_nullConsumer_doesNotThrow() throws Exception {
-        Thread mockThread = mock(Thread.class);
-        setField("consumerThread", mockThread);
+        ExecutorService mockExecutor = mock(ExecutorService.class);
+        when(mockExecutor.awaitTermination(anyLong(), any())).thenReturn(true);
+        setField("executor", mockExecutor);
         setField("consumer", null);
         setField("running", true);
 
         manager.stop();
 
-        verify(mockThread).interrupt();
+        verify(mockExecutor).shutdownNow();
     }
 
     @Test
     void stop_bothNull_doesNotThrow() throws Exception {
-        setField("consumerThread", null);
+        setField("executor", null);
         setField("consumer", null);
         setField("running", true);
 
@@ -173,14 +172,15 @@ class KafkaConsumerManagerTest {
 
     @Test
     void stop_whenAlreadyStopped_stillClosesConsumer() throws Exception {
-        Thread mockThread = mock(Thread.class);
-        setField("consumerThread", mockThread);
+        ExecutorService mockExecutor = mock(ExecutorService.class);
+        when(mockExecutor.awaitTermination(anyLong(), any())).thenReturn(true);
+        setField("executor", mockExecutor);
         setField("consumer", kafkaConsumer);
         setField("running", false);
 
         manager.stop();
 
-        verify(mockThread).interrupt();
+        verify(mockExecutor).shutdownNow();
         verify(kafkaConsumer).close();
     }
 

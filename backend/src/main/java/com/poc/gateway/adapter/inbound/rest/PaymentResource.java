@@ -11,8 +11,10 @@ import com.poc.gateway.domain.port.inbound.UpdatePaymentStatusUseCase;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import com.poc.shared.dto.PaymentPageResponseDTO;
+import com.poc.shared.dto.UpdatePaymentStatusRequestDTO;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -24,7 +26,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import java.util.Map;
 import java.util.UUID;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
@@ -79,6 +80,8 @@ public class PaymentResource {
             @QueryParam("status") String status,
             @QueryParam("limit") @DefaultValue("20") int limit,
             @QueryParam("offset") @DefaultValue("0") int offset) {
+        if (limit < 1) limit = 20;
+        if (offset < 0) offset = 0;
         PaymentStatus paymentStatus = PaymentStatus.fromString(status).orElse(null);
         PaymentPageResult result = listPayments.execute(customerId, paymentStatus, limit, offset);
         java.util.List<PaymentResponseDTO> payments = result.payments().stream()
@@ -93,10 +96,10 @@ public class PaymentResource {
     @Operation(summary = "Update payment status", description = "Updates the status of an existing payment")
     public Response updateStatus(
             @jakarta.ws.rs.PathParam("id") String id,
-            Map<String, String> body) {
+            @Valid UpdatePaymentStatusRequestDTO body) {
         UUID uuid = UUID.fromString(id);
-        PaymentStatus newStatus = PaymentStatus.fromString(body.get("status"))
-            .orElseThrow(() -> new IllegalArgumentException("Invalid status: " + body.get("status")));
+        PaymentStatus newStatus = PaymentStatus.fromString(body.status())
+            .orElseThrow(() -> new IllegalArgumentException("Invalid status: " + body.status()));
         Payment result = updateStatus.execute(uuid, newStatus);
         PaymentResponseDTO response = mapper.toResponseDTO(result);
         return Response.ok(response).build();
