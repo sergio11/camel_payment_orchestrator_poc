@@ -1,5 +1,6 @@
 package com.poc.processor.application;
 
+import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
@@ -141,7 +142,7 @@ class PaymentProcessingServiceTest {
     void fraudEvaluation_lowRisk_approve() {
         PaymentMessage msg = createLowRiskMessage();
         FraudEvaluation eval = evaluateFraudUseCase.evaluate(msg);
-        assertEquals("APPROVE", eval.action());
+        assertEquals(FraudAction.APPROVE, eval.action());
     }
 
     @Test
@@ -149,7 +150,7 @@ class PaymentProcessingServiceTest {
     void fraudEvaluation_highRisk_reject() {
         PaymentMessage msg = createHighRiskMessage();
         FraudEvaluation eval = evaluateFraudUseCase.evaluate(msg);
-        assertEquals("REJECT", eval.action());
+        assertEquals(FraudAction.REJECT, eval.action());
     }
 
     @Test
@@ -157,7 +158,7 @@ class PaymentProcessingServiceTest {
     void fraudEvaluation_mediumRisk_review() {
         PaymentMessage msg = createMediumRiskMessage();
         FraudEvaluation eval = evaluateFraudUseCase.evaluate(msg);
-        assertEquals("REVIEW", eval.action());
+        assertEquals(FraudAction.REVIEW, eval.action());
     }
 
     @Test

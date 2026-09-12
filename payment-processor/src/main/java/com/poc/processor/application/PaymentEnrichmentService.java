@@ -1,12 +1,25 @@
 package com.poc.processor.application;
 
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
+import com.poc.processor.port.outbound.CustomerRiskPort;
+import com.poc.processor.port.outbound.GeoRiskPort;
+import com.poc.processor.port.outbound.VelocityPort;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class PaymentEnrichmentService implements EnrichPaymentUseCase {
+
+    @Inject
+    CustomerRiskPort customerRiskPort;
+
+    @Inject
+    GeoRiskPort geoRiskPort;
+
+    @Inject
+    VelocityPort velocityPort;
 
     @Override
     public PaymentMessage enrich(PaymentMessage message) {
@@ -37,32 +50,10 @@ public class PaymentEnrichmentService implements EnrichPaymentUseCase {
             source.attempts(),
             source.isNewPaymentMethod(),
             source.paymentMethodAgeDays(),
-            determineCustomerRiskTier(message.customerId()),
+            customerRiskPort.determineRiskTier(message.customerId()),
             java.time.LocalDateTime.now().toString(),
-            calculateVelocityScore(message.customerId()),
-            calculateGeoRiskScore(message.country())
+            velocityPort.calculateVelocityScore(message.customerId()),
+            geoRiskPort.calculateGeoRiskScore(message.country())
         );
-    }
-
-    private String determineCustomerRiskTier(String customerId) {
-        int hash = Math.floorMod(customerId.hashCode(), 3);
-        return switch (hash) {
-            case 0 -> "LOW";
-            case 1 -> "MEDIUM";
-            default -> "HIGH";
-        };
-    }
-
-    private int calculateVelocityScore(String customerId) {
-        return Math.floorMod(customerId.hashCode(), 100);
-    }
-
-    private int calculateGeoRiskScore(String country) {
-        if (country == null) return 0;
-        return switch (country) {
-            case "XX", "YY" -> 80;
-            case "ZZ", "WW" -> 50;
-            default -> 10;
-        };
     }
 }

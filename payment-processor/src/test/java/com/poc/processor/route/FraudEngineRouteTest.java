@@ -1,5 +1,6 @@
 package com.poc.processor.route;
 
+import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.FraudResult;
@@ -107,7 +108,7 @@ class FraudEngineRouteTest {
         PaymentMessage msg = createPaymentMessage();
         FraudEvaluation eval = new FraudEvaluation(
             "pay-null-test", msg.amount(), msg.customerId(),
-            80, FraudEvaluation.ACTION_REJECT, "Test reason", List.of("TEST_RULE")
+            80, FraudAction.REJECT, "Test reason", List.of("TEST_RULE")
         );
 
         producerTemplate.sendBodyAndHeaders("direct:test-fraud-reject-eval", msg,
@@ -135,7 +136,7 @@ class FraudEngineRouteTest {
         PaymentMessage msg = createPaymentMessage();
         FraudEvaluation eval = new FraudEvaluation(
             "pay-null-test", msg.amount(), msg.customerId(),
-            60, FraudEvaluation.ACTION_REVIEW, "Test review", List.of("TEST_RULE")
+            60, FraudAction.REVIEW, "Test review", List.of("TEST_RULE")
         );
 
         producerTemplate.sendBodyAndHeaders("direct:test-fraud-review-eval", msg,

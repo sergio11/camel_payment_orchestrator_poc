@@ -1,6 +1,7 @@
 package com.poc.processor.application;
 
 import com.poc.processor.config.FraudRulesConfig;
+import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
 import com.poc.shared.dto.PaymentMetadataDTO;
@@ -80,21 +81,21 @@ public class FraudEvaluationService implements EvaluateFraudUseCase {
         if (riskScore >= config.riskScoreThresholdHigh()) {
             return new FraudEvaluation(
                 message.paymentId(), message.amount(), message.customerId(),
-                riskScore, FraudEvaluation.ACTION_REJECT,
+                riskScore, FraudAction.REJECT,
                 "High risk score: " + riskScore, triggeredRules
             );
         }
         if (riskScore >= config.riskScoreThresholdMedium()) {
             return new FraudEvaluation(
                 message.paymentId(), message.amount(), message.customerId(),
-                riskScore, FraudEvaluation.ACTION_REVIEW,
+                riskScore, FraudAction.REVIEW,
                 "Medium risk score: " + riskScore, triggeredRules
             );
         }
         return new FraudEvaluation(
             message.paymentId(), message.amount(), message.customerId(),
-            riskScore, FraudEvaluation.ACTION_APPROVE,
-            null, triggeredRules
+                riskScore, FraudAction.APPROVE,
+                null, triggeredRules
         );
     }
 }

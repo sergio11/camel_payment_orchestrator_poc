@@ -1,5 +1,6 @@
 package com.poc.processor;
 
+import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.processor.config.FraudRulesConfig;
@@ -337,7 +338,7 @@ class FraudEvaluationProcessorTest {
         FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_AMOUNT"));
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
-        assertEquals("REJECT", result.action());
+        assertEquals(FraudAction.REJECT, result.action());
         assertEquals(80, result.riskScore());
     }
 
@@ -347,7 +348,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("20000"), PaymentMetadataDTO.empty());
         FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_AMOUNT"));
-        assertEquals("REVIEW", result.action());
+        assertEquals(FraudAction.REVIEW, result.action());
         assertEquals(50, result.riskScore());
     }
 
@@ -358,7 +359,7 @@ class FraudEvaluationProcessorTest {
         FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_COUNTRY"));
         assertTrue(result.triggeredRules().contains("RAPID_RETRY"));
-        assertEquals("REVIEW", result.action());
+        assertEquals(FraudAction.REVIEW, result.action());
         assertEquals(55, result.riskScore());
     }
 
@@ -383,7 +384,7 @@ class FraudEvaluationProcessorTest {
         assertTrue(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
         assertTrue(result.triggeredRules().contains("HIGH_RISK_TIER"));
         assertEquals(100, result.riskScore());
-        assertEquals("REJECT", result.action());
+        assertEquals(FraudAction.REJECT, result.action());
     }
 
     @Test
@@ -395,7 +396,7 @@ class FraudEvaluationProcessorTest {
         FraudEvaluation result = processAndReturn(msg);
         assertTrue(result.triggeredRules().contains("HIGH_RISK_TIER"));
         assertTrue(result.triggeredRules().contains("NEW_PAYMENT_METHOD"));
-        assertEquals("APPROVE", result.action());
+        assertEquals(FraudAction.APPROVE, result.action());
         assertEquals(30, result.riskScore());
     }
 
@@ -406,7 +407,7 @@ class FraudEvaluationProcessorTest {
     void determineAction_approve() {
         PaymentMessage msg = createPaymentMessage("XX", new BigDecimal("100"), PaymentMetadataDTO.empty());
         FraudEvaluation result = processAndReturn(msg);
-        assertEquals("APPROVE", result.action());
+        assertEquals(FraudAction.APPROVE, result.action());
         assertTrue(result.riskScore() < config.riskScoreThresholdMedium());
     }
 
@@ -415,7 +416,7 @@ class FraudEvaluationProcessorTest {
     void determineAction_review_exactMedium() {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("20000"), PaymentMetadataDTO.empty());
         FraudEvaluation result = processAndReturn(msg);
-        assertEquals("REVIEW", result.action());
+        assertEquals(FraudAction.REVIEW, result.action());
         assertEquals(50, result.riskScore());
     }
 
@@ -428,7 +429,7 @@ class FraudEvaluationProcessorTest {
         FraudEvaluation result = processAndReturn(msg);
         int score = result.riskScore();
         if (score >= 50 && score < 80) {
-            assertEquals("REVIEW", result.action());
+            assertEquals(FraudAction.REVIEW, result.action());
         }
     }
 
@@ -437,7 +438,7 @@ class FraudEvaluationProcessorTest {
     void determineAction_reject_exactHigh() {
         PaymentMessage msg = createPaymentMessage("XX", new BigDecimal("20000"), PaymentMetadataDTO.empty());
         FraudEvaluation result = processAndReturn(msg);
-        assertEquals("REJECT", result.action());
+        assertEquals(FraudAction.REJECT, result.action());
         assertEquals(80, result.riskScore());
     }
 
@@ -448,7 +449,7 @@ class FraudEvaluationProcessorTest {
             new BigDecimal("20000"), "USD", "CREDIT_CARD", 1, false, 30, "UTC",
             new PaymentMetadataDTO(null, null, null, null, "HIGH", null, null, null));
         FraudEvaluation result = processAndReturn(msg);
-        assertEquals("REJECT", result.action());
+        assertEquals(FraudAction.REJECT, result.action());
         assertTrue(result.riskScore() >= 80);
     }
 
@@ -505,7 +506,7 @@ class FraudEvaluationProcessorTest {
         PaymentMessage msg = createPaymentMessage("US", new BigDecimal("100"), PaymentMetadataDTO.empty());
         FraudEvaluation result = processAndReturn(msg);
         assertNotNull(result);
-        assertEquals("APPROVE", result.action());
+        assertEquals(FraudAction.APPROVE, result.action());
     }
 
     @Test
@@ -517,7 +518,7 @@ class FraudEvaluationProcessorTest {
         );
         FraudEvaluation result = processAndReturn(msg);
         assertNotNull(result);
-        assertEquals("APPROVE", result.action());
+        assertEquals(FraudAction.APPROVE, result.action());
         assertFalse(result.triggeredRules().contains("RAPID_RETRY"));
         assertFalse(result.triggeredRules().contains("HIGH_RISK_TIER"));
     }

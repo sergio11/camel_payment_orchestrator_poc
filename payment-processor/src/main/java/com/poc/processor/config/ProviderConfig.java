@@ -22,9 +22,13 @@ public class ProviderConfig {
     @ConfigProperty(name = "provider.circuit-breaker.sliding-window-size", defaultValue = "100")
     int circuitBreakerSlidingWindowSize;
 
+    @ConfigProperty(name = "provider.routing.primary", defaultValue = "provider-a")
+    String primaryProvider;
+
     public String providerAUrl() { return aUrl; }
     public String providerBUrl() { return bUrl; }
     public int circuitBreakerFailureThreshold() { return circuitBreakerFailureThreshold; }
     public Duration circuitBreakerWaitDuration() { return circuitBreakerWaitDuration; }
     public int circuitBreakerSlidingWindowSize() { return circuitBreakerSlidingWindowSize; }
+    public String primaryProvider() { return primaryProvider; }
 }

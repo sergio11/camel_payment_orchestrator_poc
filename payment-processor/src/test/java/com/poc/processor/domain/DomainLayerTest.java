@@ -19,13 +19,13 @@ class DomainLayerTest {
     @DisplayName("FraudEvaluation record construction with all fields")
     void fraudEvaluation_recordConstruction() {
         FraudEvaluation eval = new FraudEvaluation(
-            "pay-1", new BigDecimal("100"), "cust-1", 75, "REJECT", "High risk", List.of("HIGH_AMOUNT")
+            "pay-1", new BigDecimal("100"), "cust-1", 75, FraudAction.REJECT, "High risk", List.of("HIGH_AMOUNT")
         );
         assertEquals("pay-1", eval.paymentId());
         assertEquals(new BigDecimal("100"), eval.amount());
         assertEquals("cust-1", eval.customerId());
         assertEquals(75, eval.riskScore());
-        assertEquals("REJECT", eval.action());
+        assertEquals(FraudAction.REJECT, eval.action());
         assertEquals("High risk", eval.reason());
         assertEquals(List.of("HIGH_AMOUNT"), eval.triggeredRules());
     }
@@ -33,16 +33,16 @@ class DomainLayerTest {
     @Test
     @DisplayName("FraudEvaluation constants are correct")
     void fraudEvaluation_constants() {
-        assertEquals("APPROVE", FraudEvaluation.ACTION_APPROVE);
-        assertEquals("REVIEW", FraudEvaluation.ACTION_REVIEW);
-        assertEquals("REJECT", FraudEvaluation.ACTION_REJECT);
+        assertEquals(FraudAction.APPROVE, FraudAction.APPROVE);
+        assertEquals(FraudAction.REVIEW, FraudAction.REVIEW);
+        assertEquals(FraudAction.REJECT, FraudAction.REJECT);
     }
 
     @Test
     @DisplayName("FraudEvaluation.isApprove returns true for APPROVE action")
     void fraudEvaluation_isApprove() {
         FraudEvaluation eval = new FraudEvaluation(
-            "pay-1", new BigDecimal("100"), "cust-1", 10, "APPROVE", null, List.of()
+            "pay-1", new BigDecimal("100"), "cust-1", 10, FraudAction.APPROVE, null, List.of()
         );
         assertTrue(eval.isApprove());
         assertFalse(eval.isReview());
@@ -53,7 +53,7 @@ class DomainLayerTest {
     @DisplayName("FraudEvaluation.isReview returns true for REVIEW action")
     void fraudEvaluation_isReview() {
         FraudEvaluation eval = new FraudEvaluation(
-            "pay-1", new BigDecimal("100"), "cust-1", 60, "REVIEW", "Medium risk", List.of()
+            "pay-1", new BigDecimal("100"), "cust-1", 60, FraudAction.REVIEW, "Medium risk", List.of()
         );
         assertFalse(eval.isApprove());
         assertTrue(eval.isReview());
@@ -64,7 +64,7 @@ class DomainLayerTest {
     @DisplayName("FraudEvaluation.isReject returns true for REJECT action")
     void fraudEvaluation_isReject() {
         FraudEvaluation eval = new FraudEvaluation(
-            "pay-1", new BigDecimal("100"), "cust-1", 90, "REJECT", "High risk", List.of()
+            "pay-1", new BigDecimal("100"), "cust-1", 90, FraudAction.REJECT, "High risk", List.of()
         );
         assertFalse(eval.isApprove());
         assertFalse(eval.isReview());
@@ -75,10 +75,10 @@ class DomainLayerTest {
     @DisplayName("FraudEvaluation record equality")
     void fraudEvaluation_equality() {
         FraudEvaluation eval1 = new FraudEvaluation(
-            "pay-1", new BigDecimal("100"), "cust-1", 75, "REJECT", "reason", List.of("R1")
+            "pay-1", new BigDecimal("100"), "cust-1", 75, FraudAction.REJECT, "reason", List.of("R1")
         );
         FraudEvaluation eval2 = new FraudEvaluation(
-            "pay-1", new BigDecimal("100"), "cust-1", 75, "REJECT", "reason", List.of("R1")
+            "pay-1", new BigDecimal("100"), "cust-1", 75, FraudAction.REJECT, "reason", List.of("R1")
         );
         assertEquals(eval1, eval2);
     }

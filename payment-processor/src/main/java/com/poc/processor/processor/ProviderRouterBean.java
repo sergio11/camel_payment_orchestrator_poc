@@ -1,8 +1,10 @@
 package com.poc.processor.processor;
 
+import com.poc.processor.config.ProviderConfig;
 import com.poc.shared.event.PaymentMessage;
 import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import org.apache.camel.Exchange;
 import org.apache.camel.ExchangeProperties;
 import org.apache.camel.Handler;
@@ -12,13 +14,16 @@ public class ProviderRouterBean {
 
     private static final String ROUTED_KEY = "providerRouted";
 
+    @Inject
+    ProviderConfig providerConfig;
+
     @Handler
     public String routeToProvider(@ExchangeProperties Map<String, Object> properties) {
         if (properties.containsKey(ROUTED_KEY)) {
             return null;
         }
         properties.put(ROUTED_KEY, Boolean.TRUE);
-        return "direct:provider-a";
+        return "direct:" + providerConfig.primaryProvider();
     }
 
     public void restoreOriginalHeaders(Exchange exchange) {

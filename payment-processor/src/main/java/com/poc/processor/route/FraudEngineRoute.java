@@ -1,6 +1,7 @@
 package com.poc.processor.route;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.shared.event.FraudResult;
 import com.poc.shared.event.PaymentMessage;
@@ -31,7 +32,7 @@ public class FraudEngineRoute extends RouteBuilder {
                 if (evaluation == null) {
                     evaluation = new FraudEvaluation(
                         message.paymentId(), message.amount(), message.customerId(),
-                        100, FraudEvaluation.ACTION_REJECT,
+                        100, FraudAction.REJECT,
                         "High risk", List.of()
                     );
                 }
@@ -61,7 +62,7 @@ public class FraudEngineRoute extends RouteBuilder {
                 if (evaluation == null) {
                     evaluation = new FraudEvaluation(
                         message.paymentId(), message.amount(), message.customerId(),
-                        60, FraudEvaluation.ACTION_REVIEW,
+                        60, FraudAction.REVIEW,
                         "Medium risk", List.of()
                     );
                 }

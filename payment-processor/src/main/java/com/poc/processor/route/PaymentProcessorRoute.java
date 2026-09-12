@@ -2,10 +2,14 @@ package com.poc.processor.route;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.poc.processor.application.FraudRoutingService;
+import com.poc.processor.application.FraudRoutingService.FraudRoutingDecision;
 import com.poc.processor.processor.ContentBasedRouterBean;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
+import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
+import com.poc.processor.application.PaymentProcessingService;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -24,7 +28,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
     ObjectMapper objectMapper;
 
     @Inject
-    ContentBasedRouterBean contentBasedRouterBean;
+    FraudRoutingService fraudRoutingService;
 
     @Inject
     EnrichPaymentUseCase enrichPaymentUseCase;
@@ -38,14 +42,6 @@ public class PaymentProcessorRoute extends RouteBuilder {
             if (key != null) {
                 exchange.getMessage().setHeader("OriginalPaymentId", key.toString());
             }
-        }
-    }
-
-    public static void validatePaymentMessage(PaymentMessage msg) {
-        if (msg.paymentId() == null || msg.amount() == null || msg.currency() == null
-            || msg.customerId() == null || msg.paymentMethod() == null) {
-            throw new IllegalArgumentException(
-                "Invalid payment fields: required fields missing for payment " + msg.paymentId());
         }
     }
 
@@ -76,7 +72,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
                 exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
                 exchange.getIn().setHeader("OriginalEventId", msg.eventId());
-                validatePaymentMessage(msg);
+                PaymentProcessingService.validatePaymentMessage(msg);
             })
             .log("Received payment: ${header.OriginalPaymentId}")
             .process(exchange -> {
@@ -90,12 +86,12 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 exchange.getIn().setHeader("OriginalPaymentMessage", msg);
 
                 FraudEvaluation evaluation = evaluateFraudUseCase.evaluate(msg);
-                exchange.getIn().setHeader("CamelFraudAction", evaluation.action());
-                exchange.getIn().setHeader("CamelRiskScore", evaluation.riskScore());
                 exchange.setProperty("FraudEvaluation", evaluation);
 
-                String target = contentBasedRouterBean.routeToFraudCheck(msg.amount(), msg.paymentMethod(), msg.country());
-                exchange.getIn().setHeader("FraudRouteTarget", target);
+                FraudRoutingDecision decision = fraudRoutingService.route(msg, evaluation);
+                exchange.getIn().setHeader("CamelFraudAction", decision.action().name());
+                exchange.getIn().setHeader("CamelRiskScore", decision.evaluation().riskScore());
+                exchange.getIn().setHeader("FraudRouteTarget", decision.routeTarget());
             })
             .log("Fraud route target: ${header.FraudRouteTarget} for ${body.paymentId}")
             .choice()
@@ -112,10 +108,10 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("fraud-review-high-value")
             .log("Fraud evaluation already done for high-value payment: ${body.paymentId}")
             .choice()
-                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REJECT))
+                .when(header("CamelFraudAction").isEqualTo(FraudAction.REJECT.name()))
                     .log("Fraud REJECT for high-value payment: ${body.paymentId}")
                     .to("direct:fraud-reject")
-                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REVIEW))
+                .when(header("CamelFraudAction").isEqualTo(FraudAction.REVIEW.name()))
                     .log("Fraud REVIEW for high-value payment: ${body.paymentId}")
                     .to("direct:fraud-review-queue")
                 .otherwise()
@@ -127,10 +123,10 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("fraud-check-standard")
             .log("Fraud evaluation already done for standard payment: ${body.paymentId}")
             .choice()
-                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REJECT))
+                .when(header("CamelFraudAction").isEqualTo(FraudAction.REJECT.name()))
                     .log("Fraud REJECT: ${body.paymentId}")
                     .to("direct:fraud-reject")
-                .when(header("CamelFraudAction").isEqualTo(FraudEvaluation.ACTION_REVIEW))
+                .when(header("CamelFraudAction").isEqualTo(FraudAction.REVIEW.name()))
                     .log("Fraud REVIEW: ${body.paymentId}")
                     .to("direct:fraud-review-queue")
                 .otherwise()

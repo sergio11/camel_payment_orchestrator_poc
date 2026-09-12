@@ -9,6 +9,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.support.DefaultExchange;
+import com.poc.processor.application.PaymentProcessingService;
 import com.poc.processor.route.PaymentProcessorRoute;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -306,17 +307,17 @@ class PaymentProcessorRouteTest {
     @DisplayName("Verify validatePaymentMessage covers all null checks")
     void testValidatePaymentMessage() {
         PaymentMessage valid = new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now());
-        PaymentProcessorRoute.validatePaymentMessage(valid);
+        PaymentProcessingService.validatePaymentMessage(valid);
 
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", null, BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
+            PaymentProcessingService.validatePaymentMessage(new PaymentMessage("e1", null, BigDecimal.TEN, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", null, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
+            PaymentProcessingService.validatePaymentMessage(new PaymentMessage("e1", "p1", null, "USD", "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, null, "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
+            PaymentProcessingService.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, null, "c1", "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", null, "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
+            PaymentProcessingService.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", null, "CARD", "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
         assertThrows(IllegalArgumentException.class, () ->
-            PaymentProcessorRoute.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", null, "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
+            PaymentProcessingService.validatePaymentMessage(new PaymentMessage("e1", "p1", BigDecimal.TEN, "USD", "c1", null, "US", 0, false, 0, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now())));
     }
 }
