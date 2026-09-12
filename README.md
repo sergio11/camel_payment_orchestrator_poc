@@ -8,13 +8,13 @@
 [![Kafka](https://img.shields.io/badge/Apache_Kafka-3.x-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.28-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-85+-brightgreen?style=for-the-badge)](#-testing)
+[![Tests](https://img.shields.io/badge/Tests-60+-brightgreen?style=for-the-badge)](#-testing)
 
 A proof-of-concept **Payment Orchestration Layer** built with Apache Camel, Quarkus, and Kafka — demonstrating event-driven architecture, fraud detection, circuit breaker patterns, provider failover, and Kubernetes-native deployment.
 
 ---
 
-[📋 Disclaimer](#-disclaimer) · [🚀 Why This Stack?](#-why-this-stack) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Features](#-features) · [📡 API Reference](#-api-reference) · [⚙️ Configuration](#%EF%B8%8F-configuration) · [🏁 Quick Start](#-quick-start) · [🧪 Testing](#-testing) · [📁 Project Structure](#-project-structure)
+[📋 Disclaimer](#-disclaimer) · [🚀 Why This Stack?](#-why-this-stack) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Features](#-features) · [📡 API Reference](#-api-reference) · [⚙️ Configuration](#%EF%B8%8F-configuration) · [🏁 Quick Start](#-quick-start) · [🧪 Testing](#-testing) · [📁 Project Structure](#-project-structure) · [🔒 Security](#-security) · [📐 ADRs](#-architecture-decision-records-adrs)
 
 </div>
 
@@ -90,23 +90,25 @@ Kubernetes provides production-grade orchestration:
 | Aspect | Detail |
 |--------|--------|
 | **Event-Driven Architecture** | Asynchronous processing via Kafka enables loose coupling and horizontal scaling |
-| **EIP Patterns** | Content-Based Router, Wire Tap, Circuit Breaker, Dead Letter Channel implemented via Apache Camel |
+| **EIP Patterns** | Content-Based Router, Wire Tap, Circuit Breaker, Dead Letter Channel, Transactional Outbox via Apache Camel |
 | **Fraud Detection Engine** | Rule-based scoring with 6 configurable rules and 3 action levels (APPROVE/REVIEW/REJECT) |
 | **Fault Tolerance** | Circuit breaker + retry with exponential backoff + provider fallback (A → B → dead letter) |
 | **Cloud-Native** | Kubernetes manifests with HPA, ConfigMaps, Secrets, health probes, and Kustomize overlays |
 | **Observability** | Three pillars: Prometheus metrics, Jaeger distributed tracing, structured JSON logging |
 | **Spec-Driven Development** | OpenAPI 3.0 + AsyncAPI 3.0 specifications with formal phase-based implementation |
 | **Java 17 Modern Features** | Records, sealed interfaces, pattern matching, switch expressions throughout the codebase |
-| **Test Coverage** | 85+ tests covering unit, integration, and Testcontainers-based Kafka tests |
+| **Hexagonal Architecture** | Ports & Adapters pattern with clear Domain/Application/Infrastructure layers, repository ports, and 6 ADRs |
+| **Transactional Outbox** | Reliable Kafka publishing via outbox table + relay scheduler, ensuring at-least-once delivery |
+| **Idempotency Support** | Idempotency key header with unique database constraints to prevent duplicate payment processing |
+| **PostgreSQL Persistence** | Production-ready persistence with JPA/Hibernate, Flyway migrations (payments, outbox, metadata), H2 for dev |
+| **Test Coverage** | ~60 tests covering unit, integration, and Testcontainers-based Kafka and PostgreSQL tests |
 
 ### Weaknesses / Tradeoffs
 
 | Aspect | Detail |
 |--------|--------|
-| **In-Memory Storage** | `PaymentRepository` uses `ConcurrentHashMap` — data lost on restart. Production would use PostgreSQL/MongoDB |
 | **Simulated Providers** | `ProviderAService` and `ProviderBService` simulate latency and failures with random generation |
 | **No Authentication** | REST endpoints are open. Production would require JWT/OAuth2 validation |
-| **No Idempotency** | Duplicate payment submissions are not detected. Production would use idempotency keys |
 | **No TLS** | Services communicate over plain HTTP. Production would use mTLS |
 | **Single-Instance Kafka** | Development uses a single Kafka broker. Production requires a multi-broker cluster |
 
@@ -114,113 +116,107 @@ Kubernetes provides production-grade orchestration:
 
 ## 🏗️ Architecture
 
-### Component Diagram
+### High-Level Overview
+
+```mermaid
+graph LR
+    Client(["Client"]) -->|REST| Gateway["API Gateway\n:8080"]
+    Gateway -->|publish| Kafka["Kafka Cluster"]
+    Kafka -->|consume| Processor["Payment Processor\n:8081"]
+    Processor -->|"success"| Kafka
+    Processor -->|"failover"| Providers["Providers A/B"]
+    Gateway -->|"read/write"| DB[("PostgreSQL")]
+    Gateway -->|"schedule"| Outbox["Outbox Relay"]
+    Outbox -->|re-publish| Kafka
+
+    style Client fill:#4a9eff,color:#fff
+    style Gateway fill:#ff9800,color:#fff
+    style Kafka fill:#231f20,color:#fff
+    style Processor fill:#e91e63,color:#fff
+    style Providers fill:#4caf50,color:#fff
+    style DB fill:#336791,color:#fff
+    style Outbox fill:#9c27b0,color:#fff
+```
+
+### Backend — Hexagonal Architecture (Ports & Adapters)
 
 ```mermaid
 graph TB
-    Client(["Client"])
-
-    subgraph "API Gateway (port 8080)"
-        direction TB
-        REST["REST API<br/>PaymentResource"]
-        SVC["PaymentService"]
-        REPO["PaymentRepository<br/>(in-memory)"]
-        KPub["Kafka Publisher"]
-        KCon["Kafka Consumer"]
+    subgraph "Inbound Adapters"
+        REST["REST API\nPaymentResource"]
     end
 
-    subgraph "Kafka Cluster"
-        direction LR
-        T1["payments.events.received"]
-        T2["payments.events.processed"]
-        T3["payments.events.failed"]
-        T4["fraud.events.detected"]
-        T5["payments.events.audit"]
-        T6["payments.events.dead-letter"]
+    subgraph "Application Layer"
+        CreateUseCase["CreatePaymentUseCase"]
+        GetUseCase["GetPaymentUseCase"]
+        ListUseCase["ListPaymentsService"]
+        UpdateUseCase["UpdatePaymentStatusService"]
     end
 
-    subgraph "Payment Processor (port 8081)"
-        direction TB
-        CBR["Content-Based Router"]
-        Fraud["Fraud Engine<br/>(6 rules)"]
-        PR["Provider Router<br/>(dynamic)"]
-        ProvA["Provider A<br/>(100-200ms, 10% fail)"]
-        ProvB["Provider B<br/>(500-1000ms, 2% fail)"]
+    subgraph "Domain Layer"
+        Payment["Payment (record)"]
+        Status["PaymentStatus (enum)"]
+        Ports["Ports: PaymentRepositoryPort\nEventPublisherPort\nOutboxRepositoryPort"]
     end
 
-    subgraph "Observability"
-        direction LR
-        Prom["Prometheus"]
-        Graf["Grafana"]
-        Jaeger["Jaeger"]
+    subgraph "Outbound Adapters"
+        JPA["JPA Adapter\nPaymentRepositoryAdapter"]
+        Kafka["Kafka Adapter\nKafkaEventPublisherAdapter"]
+        Consumer["Kafka Consumer\nKafkaConsumerManager"]
+        Outbox["Outbox Relay\nOutboxRelayScheduler"]
     end
 
-    Client -->|"POST /payments"| REST
-    REST --> SVC
-    SVC --> REPO
-    SVC --> KPub
-    KPub --> T1
-    T1 --> CBR
-    CBR -->|"high amount / WALLET / high-risk country"| Fraud
-    CBR -->|"standard"| Fraud
-    Fraud -->|"APPROVE"| PR
-    Fraud -->|"REJECT"| T4
-    Fraud -->|"REVIEW"| T4
-    PR -->|"round-robin"| ProvA
-    ProvA -->|"success"| T2
-    ProvA -->|"failure"| ProvB
-    ProvB -->|"success"| T2
-    ProvB -->|"failure"| T6
-    T2 --> KCon
-    T3 --> KCon
-    KCon --> REPO
+    REST --> CreateUseCase & GetUseCase & ListUseCase & UpdateUseCase
+    CreateUseCase & GetUseCase & ListUseCase & UpdateUseCase --> Ports
+    Ports --> JPA & Kafka
+    Consumer -->|status updates| JPA
+    Outbox -->|re-publish| Kafka
 
-    style Client fill:#4a9eff,color:#fff,stroke:#2d7dd2
-    style REST fill:#ff9800,color:#fff,stroke:#e68900
-    style CBR fill:#e91e63,color:#fff,stroke:#c2185b
-    style Fraud fill:#f44336,color:#fff,stroke:#d32f2f
-    style PR fill:#9c27b0,color:#fff,stroke:#7b1fa2
-    style ProvA fill:#4caf50,color:#fff,stroke:#388e3c
-    style ProvB fill:#8bc34a,color:#fff,stroke:#689f38
+    style REST fill:#ff9800,color:#fff
+    style Payment fill:#2196f3,color:#fff
+    style Ports fill:#e91e63,color:#fff
+    style JPA fill:#336791,color:#fff
+    style Kafka fill:#231f20,color:#fff
 ```
 
 ### Payment Processing Flow
 
 ```mermaid
-flowchart TD
-    A["POST /payments"] --> B["PaymentService.createPayment()"]
-    B --> C["PaymentRepository.save()<br/>status: PENDING"]
-    B --> D["Kafka: payments.events.received"]
-    D --> E["PaymentProcessorRoute"]
-    E --> F["WireTap to payments.events.audit"]
-    E --> G["PaymentEnrichProcessor<br/>(risk data enrichment)"]
-    G --> H{"Content-Based Router"}
-    H -->|"amount > 10,000"| I["direct:fraud-review"]
-    H -->|"WALLET + amount > 5,000"| I
-    H -->|"high-risk country (XX,YY,ZZ)"| I
-    H -->|"default"| J["direct:fraud-check"]
-    I --> K["FraudEvaluationProcessor"]
-    J --> K
-    K --> L{"Risk Score"}
-    L -->|"80+ REJECT"| M["fraud.events.detected<br/>payments.events.failed"]
-    L -->|"50-79 REVIEW"| N["fraud.events.detected"]
-    L -->|"under 50 APPROVE"| O["ProviderSelectionRoute"]
-    O --> P{"dynamicRouter<br/>(round-robin)"}
-    P --> Q["Provider A<br/>(Circuit Breaker)"]
-    Q -->|"success"| R["Kafka: payments.events.processed"]
-    Q -->|"failure"| S["Provider B fallback<br/>(Circuit Breaker)"]
-    S -->|"success"| R
-    S -->|"failure"| T["Kafka: payments.events.dead-letter"]
-    R --> U["KafkaPaymentStatusConsumer"]
-    U --> V["PaymentRepository.update()<br/>status: APPROVED or FAILED"]
-    V --> W["Kafka: payments.events.status.changed"]
+flowchart LR
+    subgraph Phase1 ["1. Receive & Persist"]
+        A["POST /payments"] --> B["Save to DB\n+ Outbox"]
+        B --> C["Kafka: events.received"]
+    end
 
-    style A fill:#4a9eff,color:#fff,stroke:#2d7dd2
-    style H fill:#e91e63,color:#fff,stroke:#c2185b
-    style K fill:#f44336,color:#fff,stroke:#d32f2f
-    style Q fill:#4caf50,color:#fff,stroke:#388e3c
-    style S fill:#8bc34a,color:#fff,stroke:#689f38
-    style T fill:#795548,color:#fff,stroke:#5d4037
+    subgraph Phase2 ["2. Fraud Evaluation"]
+        D["Enrich risk data"] --> E{"Content-Based\nRouter"}
+        E -->|"high risk"| F["fraud-review"]
+        E -->|"standard"| G["fraud-check"]
+        F --> H["Fraud Engine\n6 rules"]
+        G --> H
+    end
+
+    subgraph Phase3 ["3. Provider Routing"]
+        H -->|"APPROVE"| I["Provider A\n(Circuit Breaker)"]
+        I -->|"failure"| J["Provider B\n(Circuit Breaker)"]
+        I -->|"success"| K["events.processed"]
+        J -->|"success"| K
+        J -->|"failure"| L["dead-letter"]
+        H -->|"REJECT"| M["events.failed"]
+        H -->|"REVIEW"| N["events.review"]
+    end
+
+    K --> O["Consumer updates DB"]
+    M --> O
+    N --> O
+
+    style Phase1 fill:#e3f2fd,stroke:#1565c0
+    style Phase2 fill:#fce4ec,stroke:#c62828
+    style Phase3 fill:#e8f5e9,stroke:#2e7d32
+    style K fill:#4caf50,color:#fff
+    style L fill:#795548,color:#fff
+    style M fill:#f44336,color:#fff
+    style N fill:#ff9800,color:#fff
 ```
 
 ### Circuit Breaker State Machine
@@ -228,7 +224,7 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> CLOSED: Start
-    CLOSED --> OPEN: Failure rate 50% or higher
+    CLOSED --> OPEN: Failure rate ≥ 50%\n(sliding window: 100 calls)
     OPEN --> HALF_OPEN: Wait 5s
     HALF_OPEN --> CLOSED: 3 successful calls
     HALF_OPEN --> OPEN: Any failure
@@ -236,34 +232,39 @@ stateDiagram-v2
 
 ### Fraud Detection Flow
 
+Six rules evaluate the payment sequentially. Each rule adds points to a cumulative risk score (capped at 100):
+
+| # | Rule | Condition | Points |
+|---|------|-----------|--------|
+| 1 | HIGH_AMOUNT | amount > 15,000 | +50 |
+| 2 | HIGH_RISK_COUNTRY | country in [XX, YY, ZZ] | +30 |
+| 3 | RAPID_RETRY | attempts > 3 | +25 |
+| 4 | NEW_PAYMENT_METHOD | method age < 30 days | +20 |
+| 5 | UNUSUAL_HOUR | hour between 2-5 AM | +15 |
+| 6 | HIGH_RISK_TIER | customerRiskTier == HIGH | +10 |
+
 ```mermaid
 flowchart LR
-    A["Payment Message"] --> B{"HIGH_AMOUNT\nabove 15,000?"}
-    B -->|Yes| C["+50 points"]
-    B -->|No| D{"HIGH_RISK_COUNTRY\nXX, YY, ZZ?"}
-    C --> D
-    D -->|Yes| E["+30 points"]
-    D -->|No| F{"UNUSUAL_HOUR\n2am-5am?"}
-    E --> F
-    F -->|Yes| G["+15 points"]
-    F -->|No| H{"RAPID_RETRY\nabove 3 attempts?"}
-    G --> H
-    H -->|Yes| I["+25 points"]
-    H -->|No| J{"NEW_PAYMENT_METHOD\nunder 30 days?"}
-    I --> J
-    J -->|Yes| K["+20 points"]
-    J -->|No| L{"HIGH_RISK_TIER\n== HIGH?"}
-    K --> L
-    L -->|Yes| M["+10 points"]
-    L -->|No| N{"TOTAL SCORE"}
-    M --> N
-    N -->|"80+ high risk"| O["🔴 REJECT"]
-    N -->|"50-79 medium risk"| P["🟡 REVIEW"]
-    N -->|"under 50 low risk"| Q["🟢 APPROVE"]
+    M["Payment Message"] --> R1{"HIGH_AMOUNT\n>15k?"}
+    R1 -->|+50| R2{"COUNTRY\nXX/YY/ZZ?"}
+    R1 -->|no| R2
+    R2 -->|+30| R3{"UNUSUAL\nHOUR?"}
+    R2 -->|no| R3
+    R3 -->|+15| R4{"RAPID\nRETRY?"}
+    R3 -->|no| R4
+    R4 -->|+25| R5{"NEW\nMETHOD?"}
+    R4 -->|no| R5
+    R5 -->|+20| R6{"HIGH RISK\nTIER?"}
+    R5 -->|no| R6
+    R6 -->|+10| Score{"TOTAL\nSCORE"}
+    R6 -->|no| Score
+    Score -->|"≥80"| Reject["REJECT"]
+    Score -->|"50-79"| Review["REVIEW"]
+    Score -->|"<50"| Approve["APPROVE"]
 
-    style O fill:#f44336,color:#fff
-    style P fill:#ff9800,color:#fff
-    style Q fill:#4caf50,color:#fff
+    style Reject fill:#f44336,color:#fff
+    style Review fill:#ff9800,color:#fff
+    style Approve fill:#4caf50,color:#fff
 ```
 
 ---
@@ -279,6 +280,7 @@ flowchart LR
 | **Circuit Breaker** | Resilience4j via Camel | Provider fault tolerance with 50% failure threshold, 5s wait, 3 half-open calls |
 | **Retry with Backoff** | Camel error handler | Exponential backoff: 5 retries, 2s base delay, 2x multiplier |
 | **Dead Letter Channel** | `direct:dlq-handler` | Failed payments routed to dead-letter Kafka topic |
+| **Transactional Outbox** | `OutboxRelayScheduler` | Reliable event publishing: write to outbox table, relay to Kafka every 10s (batch 50) |
 | **Dynamic Router** | `ProviderRouterBean` | Round-robin provider selection with failover |
 | **Message Enricher** | `PaymentEnrichProcessor` | Enriches payment with simulated risk data (velocity, geo-risk, customer tier) |
 | **Message Translator** | `PaymentMapper` | Converts between entity and DTO representations |
@@ -296,7 +298,7 @@ flowchart LR
 
 **Risk Score Actions:**
 - **≥ 80**: REJECT — Automatic rejection, event published to `fraud.events.detected` and `payments.events.failed`
-- **50-79**: REVIEW — Manual review queue, event published to `fraud.events.detected`
+- **50-79**: REVIEW — Manual review queue, event published to `payments.events.review` and `fraud.events.detected`
 - **< 50**: APPROVE — Automatic approval, proceeds to provider selection
 
 **Score Cap:** Maximum risk score capped at 100 (theoretical max without cap: 150)
@@ -308,6 +310,8 @@ flowchart LR
 | `payments.events.received` | api-gateway | payment-processor | New payment received |
 | `payments.events.processed` | payment-processor | api-gateway | Payment approved by provider |
 | `payments.events.failed` | payment-processor | api-gateway | Payment rejected/failed |
+| `payments.events.review` | payment-processor | api-gateway | Payment flagged for manual review |
+| `payments.events.retry` | payment-processor | payment-processor | Internal retry queue for failed processing |
 | `fraud.events.detected` | payment-processor | external | Fraud detection notification |
 | `payments.events.status.changed` | api-gateway | external | Status transition event |
 | `payments.events.audit` | payment-processor | external | Audit trail (WireTap) |
@@ -322,13 +326,14 @@ flowchart LR
 | Method | Path | Description | Status |
 |--------|------|-------------|--------|
 | `POST` | `/payments` | Create a new payment | `201 Created` |
-| `GET` | `/payments` | List payments (filterable) | `200 OK` |
+| `GET` | `/payments` | List payments (filterable by customerId, status) | `200 OK` |
 | `GET` | `/payments/{id}` | Get payment by UUID | `200 OK` / `404 Not Found` |
-| `GET` | `/payments/{id}/status` | Get payment status | `200 OK` / `404 Not Found` |
+| `PATCH` | `/payments/{id}/status` | Update payment status | `200 OK` / `404 Not Found` |
+| `GET` | `/payments/idempotency/{key}` | Get payment by idempotency key | `200 OK` / `404 Not Found` |
 | `GET` | `/health/live` | Liveness probe | `200 OK` |
 | `GET` | `/health/ready` | Readiness probe | `200 OK` |
 | `GET` | `/openapi` | OpenAPI 3.0.3 spec | `200 OK` |
-| `GET` | `/swagger-ui` | Swagger UI | `200 OK` |
+| `GET` | `/swagger-ui` | Swagger UI (dev/test only) | `200 OK` |
 | `GET` | `/metrics` | Prometheus metrics | `200 OK` |
 
 ### 📨 Create Payment
@@ -427,6 +432,8 @@ provider.max-retries=5
 provider.retry-backoff=2s
 ```
 
+> **Note on ports:** In local development, the payment-processor runs on port `8081`. In Docker/Kubernetes, both services use port `8080` (overridden via `QUARKUS_HTTP_PORT` environment variable in deployment manifests).
+
 ---
 
 ## 🏁 Quick Start
@@ -488,7 +495,7 @@ curl -X POST http://localhost:8080/payments \
 ### 5. Check Payment Status
 
 ```bash
-curl http://localhost:8080/payments/{id}/status
+curl http://localhost:8080/payments/{id}
 ```
 
 ---
@@ -518,11 +525,11 @@ curl http://localhost:8080/payments/{id}/status
 
 | Category | Framework | Description |
 |----------|-----------|-------------|
-| Unit Tests | JUnit 5 + Mockito | PaymentService, PaymentRepository, PaymentMapper |
+| Unit Tests | JUnit 5 + Mockito | PaymentService, FraudEvaluationService, PaymentMapper |
 | Validation Tests | Jakarta Validation | PaymentRequest field validation rules |
 | Integration Tests | QuarkusTest + REST Assured | REST API endpoint testing |
 | Route Tests | QuarkusTest + AdviceWith | Camel route behavior verification |
-| Kafka Tests | Testcontainers | End-to-end Kafka integration |
+| E2E Tests | Testcontainers (Kafka + PostgreSQL) | End-to-end payment flow, poison messages, circuit breaker |
 | Concurrency Tests | JUnit 5 | PaymentRepository thread safety |
 
 ---
@@ -537,14 +544,23 @@ poc_camel/
 │       ├── event/                       # PaymentMessage, FraudResult, ProviderResponse
 │       └── validator/                   # @SupportedCurrency custom validator
 │
-├── backend/                             # API Gateway (port 8080)
+├── backend/                             # API Gateway — Hexagonal Architecture (port 8080)
 │   └── src/main/java/com/poc/gateway/
-│       ├── entity/                      # Payment, PaymentStatus
-│       ├── repository/                  # PaymentRepository (ConcurrentHashMap)
-│       ├── service/                     # PaymentService, KafkaEventPublisher, KafkaPaymentStatusConsumer
-│       ├── resource/                    # PaymentResource (JAX-RS)
-│       ├── mapper/                      # PaymentMapper
-│       └── exception/                   # GlobalExceptionMapper, PaymentNotFoundException
+│       ├── domain/                      # Domain layer: entities, value objects, ports
+│       │   ├── Payment.java             #   immutable domain record
+│       │   ├── model/                   #   PaymentStatus, OutboxEvent, OutboxStatus
+│       │   └── port/                    #   inbound (use cases) + outbound (repository, publisher) ports
+│       ├── application/                 # Application layer: use case implementations
+│       │   ├── service/                 #   CreatePaymentService, GetPaymentService, etc.
+│       │   └── mapper/                  #   Application-level mappers
+│       ├── adapter/inbound/rest/        # Inbound adapter: REST API
+│       │   └── PaymentResource.java     #   JAX-RS resource (POST, GET, PATCH)
+│       └── infrastructure/             # Infrastructure layer: persistence, messaging
+│           ├── persistence/adapter/     #   JPA adapters (PaymentRepositoryAdapter, OutboxRepositoryAdapter)
+│           ├── persistence/entity/      #   JPA entities (PaymentEntity, OutboxEventEntity)
+│           ├── messaging/adapter/       #   Kafka publisher adapter
+│           ├── messaging/consumer/      #   Kafka consumer (KafkaConsumerManager)
+│           └── messaging/scheduler/     #   Outbox relay scheduler (10s interval)
 │
 ├── payment-processor/                   # Camel Route Processor (port 8081)
 │   └── src/main/java/com/poc/processor/
@@ -553,10 +569,11 @@ poc_camel/
 │       ├── config/                      # FraudRulesConfig, ProviderConfig, JacksonConfig
 │       └── service/                     # ProviderAService, ProviderBService (simulated)
 │
+├── test-support/                        # Shared test infrastructure (Testcontainers, base classes)
 ├── docker/                              # Multi-stage Dockerfiles
-├── kubernetes/                          # K8s manifests (Kustomize)
-├── monitoring/                          # Prometheus, Grafana configs
-├── openspec/                            # OpenAPI 3.0, AsyncAPI 3.0, phase specs
+├── kubernetes/                          # K8s manifests (Kustomize: base + overlays dev/prod)
+├── monitoring/                          # Prometheus, Grafana configs + dashboards
+├── openspec/                            # OpenAPI 3.0, AsyncAPI 3.0, ADRs, phase specs
 └── podman-compose.yaml                  # Local infrastructure services
 ```
 
@@ -571,6 +588,8 @@ poc_camel/
 | Integration | Apache Camel 3.15 | EIP patterns out of box, Kafka/HTTP components, Resilience4j |
 | Messaging | Apache Kafka | Event-driven architecture, durable messages, multi-consumer |
 | Resilience | Resilience4j | Circuit breaker, retry with backoff, bulkhead patterns |
+| Persistence | PostgreSQL + Hibernate ORM Panache | Production-ready JPA with Flyway migrations (H2 for dev) |
+| Object Mapping | MapStruct 1.6 | Compile-time entity↔DTO mapping (auto-generated) |
 | Validation | Hibernate Validator 8.x | Jakarta Bean Validation with custom validators |
 | Tracing | OpenTelemetry + Jaeger | Distributed tracing with span correlation |
 | Metrics | Micrometer + Prometheus | Prometheus-compatible metrics at `/q/metrics` |
@@ -579,6 +598,45 @@ poc_camel/
 | Containers | Podman / Docker | Multi-stage builds with JRE Alpine base |
 | Orchestration | Kubernetes (Kind) | HPA, ConfigMaps, Secrets, health probes |
 | Specs | OpenAPI 3.0.3 + AsyncAPI 3.0 | Formal API and event specifications |
+| Testing | JUnit 5, Mockito, Testcontainers, REST Assured, Awaitility | Unit, integration, and E2E testing with real Kafka/PostgreSQL |
+
+---
+
+## 🔒 Security
+
+This POC includes production-oriented security hardening in Kubernetes deployments. See [SECURITY.md](SECURITY.md) for full details.
+
+| Aspect | Implementation |
+|--------|---------------|
+| **K8s Security Context** | `readOnlyRootFilesystem`, drop ALL capabilities, `runAsNonRoot` (UID 1000), seccomp `RuntimeDefault` |
+| **Network Policies** | Default deny-all with explicit allow rules (gateway→processor, apps→Kafka, apps→Jaeger, Prometheus scraping) |
+| **Secrets Management** | K8s Secrets with `secrets.yaml.example` templates; `.env` and `secrets.yaml` are gitignored |
+| **CORS** | Restricted via `${CORS_ORIGINS:https://localhost:3000}` — no wildcard in production |
+| **Swagger UI** | Disabled in `%prod` profile, enabled only in `%dev`/`%test` |
+| **Service Account** | Dedicated `poc-camel-sa` with least-privilege RBAC |
+
+### Production Recommendations (not implemented in POC)
+
+- JWT/OAuth2 authentication on REST endpoints
+- mTLS between services
+- External secrets management (Vault, ExternalSecrets, SealedSecrets)
+- Multi-broker Kafka cluster with SASL/SSL
+- Real risk scoring services replacing simulated fraud detection
+
+---
+
+## 📐 Architecture Decision Records (ADRs)
+
+Six ADRs document key design decisions in [`openspec/adrs/`](openspec/adrs/):
+
+| ADR | Title | Decision |
+|-----|-------|----------|
+| ADR-001 | Domain-Driven Entity Separation | Domain models are immutable records, separate from JPA entities |
+| ADR-002 | SOLID Exception Handling | `ExceptionClassifier` + `MarkerBasedClassifier` for categorization |
+| ADR-003 | MapStruct Mapping Layer | MapStruct for entity↔DTO conversion (auto-generated mappers) |
+| ADR-004 | Repository Interface & Datasource Abstraction | Hexagonal ports: `PaymentRepositoryPort`, JPA adapters replace ConcurrentHashMap |
+| ADR-005 | DTO Naming & snake_case Serialization | Consistent DTO naming with `@JsonProperty` for JSON serialization |
+| ADR-006 | Relational Payment Metadata | 1:1 `payment_metadata` table instead of embedded JSON |
 
 ---
 
