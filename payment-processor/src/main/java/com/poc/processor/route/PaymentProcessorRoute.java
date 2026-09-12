@@ -161,5 +161,11 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
             .to(DEAD_LETTER_TOPIC_URI)
             .log("Published to dead letter queue");
+
+        from("kafka:{{kafka.topic.payments.retry}}?groupId=payment-processor-retry-group&autoCommitEnable=false&autoOffsetReset=earliest")
+            .routeId("retry-consumer")
+            .autoStartup("{{camel.route.retry-consumer.auto-startup:true}}")
+            .log("Retrying payment from retry topic: ${header.kafka.KEY}")
+            .to("kafka:{{kafka.topic.payments.received}}");
     }
 }

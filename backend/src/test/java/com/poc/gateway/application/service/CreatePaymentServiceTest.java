@@ -11,6 +11,8 @@ import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
+import jakarta.enterprise.inject.Instance;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,8 +47,17 @@ class CreatePaymentServiceTest {
     @Mock
     PaymentMetadataApplicationMapper metadataMapper;
 
+    @Mock
+    Instance<CreatePaymentService> self;
+
     @InjectMocks
     CreatePaymentService service;
+
+    @BeforeEach
+    void setUp() {
+        service.self = self;
+        lenient().when(self.get()).thenReturn(service);
+    }
 
     @Test
     @DisplayName("Should create payment and publish event on new payment")

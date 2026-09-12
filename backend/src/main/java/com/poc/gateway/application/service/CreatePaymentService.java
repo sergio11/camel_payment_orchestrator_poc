@@ -12,6 +12,7 @@ import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.shared.dto.PaymentRequestDTO;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.Optional;
@@ -37,8 +38,10 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     @Inject
     PaymentMetadataApplicationMapper metadataMapper;
 
+    @Inject
+    Instance<CreatePaymentService> self;
+
     @Override
-    @Transactional
     public Payment execute(PaymentRequestDTO request, String idempotencyKey) {
         String key = normalizeKey(idempotencyKey);
 
@@ -54,21 +57,26 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             request.paymentMethod(), request.country(), metadata
         );
 
-        Payment saved = paymentRepo.save(domainPayment, key);
-
-        String payload = serializer.serialize(saved);
-        OutboxEvent event = OutboxEvent.create(saved.id(), "payments.events.received", payload, key);
-        outboxRepo.persist(event);
-
-        boolean published = eventPublisher.publishPaymentReceived(PaymentReceivedEvent.from(saved));
-
-        if (published) {
-            outboxRepo.markSent(event.id());
-        } else {
-            LOG.errorf("Kafka publish failed for payment %s, left as PENDING for OutboxRelay retry", saved.id());
-        }
-
+        Payment saved = self.get().persistWithOutbox(domainPayment, key);
+        attemptKafkaPublish(saved);
         return saved;
+    }
+
+    @Transactional
+    Payment persistWithOutbox(Payment domainPayment, String idempotencyKey) {
+        Payment saved = paymentRepo.save(domainPayment, idempotencyKey);
+        String payload = serializer.serialize(saved);
+        OutboxEvent event = OutboxEvent.create(saved.id(), "payments.events.received", payload, idempotencyKey);
+        outboxRepo.persist(event);
+        return saved;
+    }
+
+    private void attemptKafkaPublish(Payment payment) {
+        try {
+            eventPublisher.publishPaymentReceived(PaymentReceivedEvent.from(payment));
+        } catch (Exception e) {
+            LOG.errorf(e, "Kafka publish attempt failed for payment %s, outbox relay will handle delivery", payment.id());
+        }
     }
 
     private String normalizeKey(String key) {

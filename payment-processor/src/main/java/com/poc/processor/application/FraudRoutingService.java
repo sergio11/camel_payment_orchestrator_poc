@@ -2,7 +2,7 @@ package com.poc.processor.application;
 
 import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
-import com.poc.processor.processor.ContentBasedRouterBean;
+import com.poc.processor.port.outbound.RoutingDecisionPort;
 import com.poc.shared.event.PaymentMessage;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -11,10 +11,10 @@ import jakarta.inject.Inject;
 public class FraudRoutingService {
 
     @Inject
-    ContentBasedRouterBean contentBasedRouterBean;
+    RoutingDecisionPort routingPort;
 
     public FraudRoutingDecision route(PaymentMessage message, FraudEvaluation evaluation) {
-        String target = contentBasedRouterBean.routeToFraudCheck(
+        String target = routingPort.resolveFraudRoute(
             message.amount(), message.paymentMethod(), message.country()
         );
         return new FraudRoutingDecision(evaluation.action(), target, evaluation);
