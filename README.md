@@ -14,7 +14,7 @@ A proof-of-concept **Payment Orchestration Layer** built with Apache Camel, Quar
 
 ---
 
-[📋 Disclaimer](#-disclaimer) · [🚀 Why This Stack?](#-why-this-stack) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Features](#-features) · [📡 API Reference](#-api-reference) · [⚙️ Configuration](#%EF%B8%8F-configuration) · [🏁 Quick Start](#-quick-start) · [🧪 Testing](#-testing) · [📁 Project Structure](#-project-structure) · [🔒 Security](#-security) · [📐 ADRs](#-architecture-decision-records-adrs)
+[📋 Disclaimer](#-disclaimer) · [🚀 Why This Stack?](#-why-this-stack) · [🏗️ Architecture](#%EF%B8%8F-architecture) · [✨ Features](#-features) · [📡 API Reference](#-api-reference) · [⚙️ Configuration](#%EF%B8%8F-configuration) · [🏁 Quick Start](#-quick-start) · [🧪 Testing](#-testing) · [☸️ Kubernetes](#%E2%98%B8%EF%B8%8F-kubernetes-deployment) · [📁 Project Structure](#-project-structure) · [🔒 Security](#-security)
 
 </div>
 
@@ -443,22 +443,30 @@ provider.retry-backoff=2s
 | Tool | Version | Purpose |
 |------|---------|---------|
 | Java | 17 LTS | Runtime |
-| Maven | 3.9+ | Build |
+| Ruby | 3.x | Rake tasks (build, test, K8s deploy) |
+| Maven | 3.9+ | Build (invoked via Rake) |
 | Podman / Docker | Latest | Container runtime |
 | Kind | Latest | Local Kubernetes cluster |
 | kubectl | Latest | K8s CLI |
 
+> All build, test, and deployment operations are wrapped in Rake tasks. Run `rake help` to see all available commands.
+
 ### 1. Build the Project
 
 ```bash
-./mvnw clean install
+rake test:run
+```
+
+This runs all tests with a **98% JaCoCo coverage gate**. To build without coverage checks:
+
+```bash
+rake test:run COVERAGE=0
 ```
 
 ### 2. Start Infrastructure Services
 
 ```bash
-# Using Podman Compose (Kafka, Prometheus, Jaeger, Grafana)
-podman-compose up -d
+rake infra:start
 ```
 
 Services available:
@@ -505,21 +513,30 @@ curl http://localhost:8080/payments/{id}
 ### 🏃 Run All Tests
 
 ```bash
-./mvnw test
+rake test:run
 ```
+
+Runs all tests (unit + integration + e2e) with JaCoCo coverage gate at 98% and prints a coverage report.
 
 ### 📦 Run Module Tests
 
 ```bash
 # Shared module (DTOs, validators)
-./mvnw test -pl shared
+rake test:run SCOPE=shared
 
 # Backend module (REST API, service, repository)
-./mvnw test -pl backend
+rake test:run SCOPE=backend
 
 # Payment processor module (Camel routes, fraud engine)
-./mvnw test -pl payment-processor
+rake test:run SCOPE=processor
 ```
+
+### 🔧 Options
+
+| Flag | Values | Description |
+|------|--------|-------------|
+| `SCOPE` | `shared`, `backend`, `processor` | Run tests for a single module |
+| `COVERAGE` | `0` to skip | Skip JaCoCo coverage gate check |
 
 ### 📊 Test Categories
 
@@ -531,6 +548,73 @@ curl http://localhost:8080/payments/{id}
 | Route Tests | QuarkusTest + AdviceWith | Camel route behavior verification |
 | E2E Tests | Testcontainers (Kafka + PostgreSQL) | End-to-end payment flow, poison messages, circuit breaker |
 | Concurrency Tests | JUnit 5 | PaymentRepository thread safety |
+
+---
+
+## ☸️ Kubernetes Deployment
+
+All K8s operations are wrapped in Rake tasks — no raw `kubectl` or `kind` commands needed.
+
+### Build & Deploy
+
+```bash
+# Build container images and load into Kind
+rake k8s:build
+
+# Full deploy (default: dev overlay)
+rake k8s:deploy
+
+# Deploy with production overlay
+rake k8s:deploy OVERLAY=prod
+
+# Rebuild + redeploy only apps (skip infra)
+rake k8s:deploy RESTART_ONLY=1
+
+# Deploy only one service
+rake k8s:build APP=gateway
+rake k8s:deploy APP=gateway
+```
+
+### Verify & Test
+
+```bash
+# Check pod status
+rake k8s:status
+
+# Verify pods + assert log patterns
+rake k8s:check
+
+# E2e smoke test (POST + GET payment via port-forward)
+rake k8s:check SMOKE=1
+
+# Tail logs
+rake k8s:logs
+rake k8s:logs APP=gateway
+```
+
+### Teardown
+
+```bash
+# Remove apps only (keep cluster + infra)
+rake k8s:undeploy APPS_ONLY=1
+
+# Remove everything (namespace + cluster)
+rake k8s:undeploy CLUSTER_DELETE=1
+```
+
+---
+
+## 📐 Spec Validation
+
+Validate OpenAPI, AsyncAPI, and Architecture Decision Records:
+
+```bash
+# Validate all specs (OpenAPI + AsyncAPI + ADRs)
+rake spec:validate
+
+# Validate ADRs only (structure: Estado, Contexto, Decisión, Consecuencias)
+rake adr:validate
+```
 
 ---
 
@@ -594,7 +678,7 @@ poc_camel/
 | Tracing | OpenTelemetry + Jaeger | Distributed tracing with span correlation |
 | Metrics | Micrometer + Prometheus | Prometheus-compatible metrics at `/q/metrics` |
 | Dashboards | Grafana | Real-time monitoring with payment-specific panels |
-| Build | Maven 3.9 | Multi-module build with dependency management |
+| Build | Maven 3.9 + Rake 13 | Multi-module build orchestrated via Rake tasks |
 | Containers | Podman / Docker | Multi-stage builds with JRE Alpine base |
 | Orchestration | Kubernetes (Kind) | HPA, ConfigMaps, Secrets, health probes |
 | Specs | OpenAPI 3.0.3 + AsyncAPI 3.0 | Formal API and event specifications |
@@ -651,19 +735,34 @@ This project follows **Spec-Driven Development (SDD)** with 4 phases:
 | 3 | camel-integration | Camel routes + EIP patterns | Complete |
 | 4 | k8s-observability | K8s deployment + monitoring | Complete |
 
+### Validate Specs
+
 ```bash
-# List available changes
-rake sdd:list
+# Full validation (OpenAPI + AsyncAPI + ADRs)
+rake spec:validate
 
-# Initialize a change
-rake sdd:init[phase-1-foundation]
-
-# Check change status
-rake sdd:check[phase-1-foundation]
-
-# Ship change
-rake sdd:ship[phase-1-foundation]
+# ADRs only
+rake adr:validate
 ```
+
+### All Available Rake Tasks
+
+```bash
+rake help
+```
+
+| Task | Description |
+|------|-------------|
+| `rake test:run` | Run all tests with coverage gate 98% |
+| `rake infra:start` | Start local infrastructure (Kafka, Prometheus, Jaeger, Grafana) |
+| `rake infra:stop` | Stop local infrastructure |
+| `rake k8s:build` | Build and load container images into Kind |
+| `rake k8s:deploy` | Deploy to Kubernetes (OVERLAY=dev\|prod) |
+| `rake k8s:undeploy` | Remove K8s resources |
+| `rake k8s:check` | Verify pods + log assertions |
+| `rake k8s:smoke` | E2e smoke test (POST + GET payment) |
+| `rake spec:validate` | Validate OpenAPI, AsyncAPI, and ADR specifications |
+| `rake adr:validate` | Validate Architecture Decision Records |
 
 ---
 
