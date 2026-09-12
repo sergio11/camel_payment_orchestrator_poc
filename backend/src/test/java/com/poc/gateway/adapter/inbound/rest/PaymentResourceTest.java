@@ -9,15 +9,12 @@ import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.model.PaymentPageResult;
 import com.poc.gateway.domain.model.PaymentStatus;
-import com.poc.shared.dto.PaymentPageResponseDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,17 +39,8 @@ class PaymentResourceTest {
     @InjectMock
     UpdatePaymentStatusService updateStatus;
 
+    @InjectMock
     PaymentMapper mapper;
-
-    @BeforeEach
-    void setUp() throws Exception {
-        mapper = org.mockito.Mockito.mock(PaymentMapper.class);
-        PaymentResource resource = new PaymentResource();
-        Field mapperField = PaymentResource.class.getDeclaredField("mapper");
-        mapperField.setAccessible(true);
-        mapperField.set(resource, mapper);
-        org.mockito.Mockito.reset(mapper);
-    }
 
     @Test
     void create_returns201() {

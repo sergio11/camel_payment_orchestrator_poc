@@ -14,7 +14,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PaymentMapperTest {
 
-    private final PaymentMapper mapper = new com.poc.gateway.application.mapper.PaymentMapperImpl();
+    private final PaymentMetadataApplicationMapper metadataMapper = new com.poc.gateway.application.mapper.PaymentMetadataApplicationMapperImpl();
+    private final PaymentMapper mapper;
+
+    PaymentMapperTest() {
+        com.poc.gateway.application.mapper.PaymentMapperImpl impl = new com.poc.gateway.application.mapper.PaymentMapperImpl();
+        try {
+            java.lang.reflect.Field field = com.poc.gateway.application.mapper.PaymentMapperImpl.class.getDeclaredField("paymentMetadataApplicationMapper");
+            field.setAccessible(true);
+            field.set(impl, metadataMapper);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to inject metadata mapper", e);
+        }
+        mapper = impl;
+    }
 
     @Test
     void toDomain_fromRequest() {
@@ -63,12 +76,12 @@ class PaymentMapperTest {
 
     @Test
     void toMetadataDTO_null() {
-        assertNull(mapper.toMetadataDTO(null));
+        assertNull(metadataMapper.toDTO(null));
     }
 
     @Test
     void toMetadataDomain_null() {
-        assertNull(mapper.toMetadataDomain(null));
+        assertNull(metadataMapper.toDomain(null));
     }
 
     @Test

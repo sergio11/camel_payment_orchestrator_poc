@@ -10,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
+import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -79,21 +80,8 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
 
     @Override
     public List<Payment> findAll(String customerId, PaymentStatus status, int limit, int offset) {
-        StringBuilder jpql = new StringBuilder("FROM PaymentEntity WHERE 1=1");
-        if (customerId != null) {
-            jpql.append(" AND customerId = :customerId");
-        }
-        if (status != null) {
-            jpql.append(" AND status = :status");
-        }
-        jpql.append(" ORDER BY createdAt ASC, id ASC");
-        var q = em.createQuery(jpql.toString(), PaymentEntity.class);
-        if (customerId != null) {
-            q.setParameter("customerId", customerId);
-        }
-        if (status != null) {
-            q.setParameter("status", status);
-        }
+        TypedQuery<PaymentEntity> q = em.createQuery(buildFindQuery(customerId, status), PaymentEntity.class);
+        bindCommonParams(q, customerId, status);
         q.setFirstResult(Math.max(offset, 0));
         q.setMaxResults(Math.max(limit, 1));
         return q.getResultList().stream().map(persistenceMapper::toDomain).toList();
@@ -101,20 +89,8 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
 
     @Override
     public long count(String customerId, PaymentStatus status) {
-        StringBuilder jpql = new StringBuilder("SELECT COUNT(e) FROM PaymentEntity e WHERE 1=1");
-        if (customerId != null) {
-            jpql.append(" AND e.customerId = :customerId");
-        }
-        if (status != null) {
-            jpql.append(" AND e.status = :status");
-        }
-        var q = em.createQuery(jpql.toString(), Long.class);
-        if (customerId != null) {
-            q.setParameter("customerId", customerId);
-        }
-        if (status != null) {
-            q.setParameter("status", status);
-        }
+        TypedQuery<Long> q = em.createQuery(buildCountQuery(customerId, status), Long.class);
+        bindCommonParams(q, customerId, status);
         return q.getSingleResult();
     }
 
@@ -157,6 +133,38 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
         PaymentEntity e = em.find(PaymentEntity.class, id);
         if (e != null) {
             em.remove(e);
+        }
+    }
+
+    private String buildFindQuery(String customerId, PaymentStatus status) {
+        StringBuilder jpql = new StringBuilder("FROM PaymentEntity WHERE 1=1");
+        if (customerId != null) {
+            jpql.append(" AND customerId = :customerId");
+        }
+        if (status != null) {
+            jpql.append(" AND status = :status");
+        }
+        jpql.append(" ORDER BY createdAt ASC, id ASC");
+        return jpql.toString();
+    }
+
+    private String buildCountQuery(String customerId, PaymentStatus status) {
+        StringBuilder jpql = new StringBuilder("SELECT COUNT(e) FROM PaymentEntity e WHERE 1=1");
+        if (customerId != null) {
+            jpql.append(" AND e.customerId = :customerId");
+        }
+        if (status != null) {
+            jpql.append(" AND e.status = :status");
+        }
+        return jpql.toString();
+    }
+
+    private <T> void bindCommonParams(TypedQuery<T> q, String customerId, PaymentStatus status) {
+        if (customerId != null) {
+            q.setParameter("customerId", customerId);
+        }
+        if (status != null) {
+            q.setParameter("status", status);
         }
     }
 }

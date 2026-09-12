@@ -46,6 +46,11 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
         props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("acks", "all");
         props.put("retries", 3);
+        props.put("linger.ms", 5);
+        props.put("batch.size", 16384);
+        props.put("buffer.memory", 33554432);
+        props.put("max.in.flight.requests.per.connection", 5);
+        props.put("delivery.timeout.ms", 120000);
         producer = new KafkaProducer<>(props);
     }
 
@@ -76,7 +81,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
                 paymentId,
                 objectMapper.writeValueAsString(payload)
             );
-            producer.send(record).get();
+            producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             LOG.errorf(e, "Failed to publish payment received event for %s", paymentId);
@@ -97,7 +102,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
                 paymentId,
                 payload
             );
-            producer.send(record).get();
+            producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             LOG.errorf(e, "Failed to publish status changed event for %s", paymentId);
@@ -118,7 +123,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
                 paymentId,
                 objectMapper.writeValueAsString(dlqPayload)
             );
-            producer.send(record).get();
+            producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             LOG.errorf(e, "Failed to publish dead letter event for %s", paymentId);

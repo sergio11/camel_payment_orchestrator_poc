@@ -7,6 +7,7 @@ import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -41,6 +42,7 @@ class CreatePaymentServiceTest {
     CreatePaymentService service;
 
     @Test
+    @DisplayName("Should create payment and publish event on new payment")
     void execute_createsPaymentAndPublishesEvent() {
         Payment payment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
@@ -72,6 +74,7 @@ class CreatePaymentServiceTest {
     }
 
     @Test
+    @DisplayName("Should return existing payment when idempotency key already exists")
     void execute_existingKey_returnsExistingPayment() {
         String key = "existing-key";
         Payment existing = new Payment(
@@ -95,6 +98,7 @@ class CreatePaymentServiceTest {
     }
 
     @Test
+    @DisplayName("Should generate key when blank idempotency key is provided")
     void execute_blankIdempotencyKey_generatesKey() {
         Payment payment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
@@ -120,6 +124,7 @@ class CreatePaymentServiceTest {
     }
 
     @Test
+    @DisplayName("Should generate key when null idempotency key is provided")
     void execute_nullIdempotencyKey_generatesKey() {
         Payment payment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
@@ -145,6 +150,7 @@ class CreatePaymentServiceTest {
     }
 
     @Test
+    @DisplayName("Should log error but still return payment when Kafka publish fails")
     void execute_publishFails_logsError() {
         Payment payment = new Payment(
             UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",

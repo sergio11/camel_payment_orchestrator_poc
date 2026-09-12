@@ -8,6 +8,9 @@ import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.jboss.logging.Logger;
@@ -30,7 +33,7 @@ public class KafkaConsumerManager {
     String groupId;
 
     private KafkaConsumer<String, String> consumer;
-    private Thread consumerThread;
+    private ExecutorService executor;
     private volatile boolean running;
 
     @PostConstruct
@@ -47,16 +50,24 @@ public class KafkaConsumerManager {
         consumer.subscribe(Collections.singletonList(processedTopic));
 
         running = true;
-        consumerThread = new Thread(this::pollLoop, "kafka-consumer");
-        consumerThread.setDaemon(true);
-        consumerThread.start();
+        executor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "kafka-consumer");
+            t.setDaemon(true);
+            return t;
+        });
+        executor.submit(this::pollLoop);
     }
 
     @PreDestroy
     void stop() {
         running = false;
-        if (consumerThread != null) {
-            consumerThread.interrupt();
+        if (executor != null) {
+            executor.shutdownNow();
+            try {
+                executor.awaitTermination(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         if (consumer != null) {
             consumer.close();
