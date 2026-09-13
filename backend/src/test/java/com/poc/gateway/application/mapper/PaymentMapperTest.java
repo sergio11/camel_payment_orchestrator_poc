@@ -2,6 +2,7 @@ package com.poc.gateway.application.mapper;
 
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.CreatePaymentCommand;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.dto.PaymentRequestDTO;
@@ -91,5 +92,61 @@ class PaymentMapperTest {
     void toResponseDTO_nullPayment_returnsNull() {
         PaymentResponseDTO result = mapper.toResponseDTO(null);
         assertNull(result);
+    }
+
+    @Test
+    void toResponseDTO_withNonEmptyMetadata_mapsAllFields() {
+        PaymentMetadata metadata = new PaymentMetadata("order-123", 3, true, 30, "low", "2026-01-01T00:00:00", 5, 10);
+        Payment p = new Payment(UUID.randomUUID(), new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentStatus.APPROVED, "stripe", null, metadata, LocalDateTime.now(), LocalDateTime.now());
+        PaymentResponseDTO dto = mapper.toResponseDTO(p);
+        assertNotNull(dto.metadata());
+        assertEquals("order-123", dto.metadata().orderId());
+        assertEquals(3, dto.metadata().attempts());
+        assertEquals(true, dto.metadata().isNewPaymentMethod());
+        assertEquals(30, dto.metadata().paymentMethodAgeDays());
+        assertEquals("low", dto.metadata().customerRiskTier());
+        assertEquals("2026-01-01T00:00:00", dto.metadata().enrichedAt());
+        assertEquals(5, dto.metadata().velocityScore());
+        assertEquals(10, dto.metadata().geoRiskScore());
+    }
+
+    @Test
+    void toCommand_nullRequest_returnsNull() {
+        CreatePaymentCommand result = mapper.toCommand(null);
+        assertNull(result);
+    }
+
+    @Test
+    void toCommand_fromRequest() {
+        PaymentRequestDTO req = new PaymentRequestDTO(new BigDecimal("50"), "EUR", "cust", "CARD", "DE", PaymentMetadataDTO.empty());
+        CreatePaymentCommand cmd = mapper.toCommand(req);
+        assertNotNull(cmd);
+        assertEquals(new BigDecimal("50"), cmd.amount());
+        assertEquals("EUR", cmd.currency());
+        assertEquals("cust", cmd.customerId());
+        assertEquals("CARD", cmd.paymentMethod());
+        assertEquals("DE", cmd.country());
+    }
+
+    @Test
+    void toDomain_withNullMetadataDTO() {
+        PaymentRequestDTO req = new PaymentRequestDTO(new BigDecimal("50"), "EUR", "cust", "CARD", "DE", null);
+        Payment p = mapper.toDomain(req);
+        assertNotNull(p);
+        assertNull(p.metadata());
+    }
+
+    @Test
+    void toMetadataDomain_withNonNull() {
+        PaymentMetadataDTO dto = new PaymentMetadataDTO("order-1", 5, true, 10, "high", "2026-01-01T00:00:00", 20, 50);
+        PaymentMetadata result = metadataMapper.toDomain(dto);
+        assertNotNull(result);
+        assertEquals("order-1", result.orderId());
+        assertEquals(5, result.attempts());
+        assertEquals(true, result.isNewPaymentMethod());
+        assertEquals(10, result.paymentMethodAgeDays());
+        assertEquals("high", result.customerRiskTier());
+        assertEquals(20, result.velocityScore());
+        assertEquals(50, result.geoRiskScore());
     }
 }

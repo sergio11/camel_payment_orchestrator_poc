@@ -7,10 +7,12 @@ import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -104,5 +106,63 @@ class SimpleHealthCheckBranchesTest {
         HealthCheckResponse r = c.call();
 
         assertTrue(r.getStatus() == HealthCheckResponse.Status.UP);
+    }
+
+    @Test
+    @DisplayName("init with null servers does not create AdminClient")
+    void init_nullServers_noAdminClient() {
+        SimpleHealthCheck c = check(null);
+        c.init();
+        HealthCheckResponse r = c.call();
+        assertTrue(r.getStatus() == HealthCheckResponse.Status.UP);
+    }
+
+    @Test
+    @DisplayName("init with blank servers does not create AdminClient")
+    void init_blankServers_noAdminClient() {
+        SimpleHealthCheck c = check("  ");
+        c.init();
+        HealthCheckResponse r = c.call();
+        assertTrue(r.getStatus() == HealthCheckResponse.Status.UP);
+    }
+
+    @Test
+    @DisplayName("init with valid servers creates AdminClient via static factory")
+    void init_validServers_createsAdminClient() {
+        try (MockedStatic<AdminClient> mocked = mockStatic(AdminClient.class)) {
+            AdminClient mockClient = mock(AdminClient.class);
+            mocked.when(() -> AdminClient.create(any(Map.class))).thenReturn(mockClient);
+
+            SimpleHealthCheck c = check("localhost:9092");
+            c.init();
+
+            mocked.verify(() -> AdminClient.create(any(Map.class)));
+        }
+    }
+
+    @Test
+    @DisplayName("destroy with null AdminClient does not throw")
+    void destroy_nullAdmin_noException() {
+        SimpleHealthCheck c = check("localhost:9092");
+        c.destroy();
+    }
+
+    @Test
+    @DisplayName("destroy calls AdminClient close successfully")
+    void destroy_callsClose() throws Exception {
+        AdminClient admin = mock(AdminClient.class);
+        SimpleHealthCheck c = checkWithMockAdmin(admin);
+        c.destroy();
+        verify(admin).close();
+    }
+
+    @Test
+    @DisplayName("destroy when AdminClient close throws does not propagate")
+    void destroy_closeThrows_doesNotThrow() throws Exception {
+        AdminClient admin = mock(AdminClient.class);
+        doThrow(new RuntimeException("close error")).when(admin).close();
+        SimpleHealthCheck c = checkWithMockAdmin(admin);
+        c.destroy();
+        verify(admin).close();
     }
 }

@@ -362,6 +362,54 @@ class KafkaConsumerManagerTest {
         verify(router, atLeastOnce()).route(record2);
     }
 
+    @Test
+    void stop_timeoutPath_callsShutdownNowAndSecondAwait() throws Exception {
+        ExecutorService mockExecutor = mock(ExecutorService.class);
+        when(mockExecutor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)).thenReturn(false);
+        when(mockExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)).thenReturn(true);
+        setField("executor", mockExecutor);
+        setField("consumer", kafkaConsumer);
+        setField("running", true);
+
+        manager.stop();
+
+        verify(mockExecutor).shutdown();
+        verify(mockExecutor).awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS);
+        verify(mockExecutor).shutdownNow();
+        verify(mockExecutor).awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+        verify(kafkaConsumer).close();
+    }
+
+    @Test
+    void stop_interruptedException_callsShutdownNowAndInterrupts() throws Exception {
+        ExecutorService mockExecutor = mock(ExecutorService.class);
+        when(mockExecutor.awaitTermination(anyLong(), any())).thenThrow(new InterruptedException("interrupted"));
+        setField("executor", mockExecutor);
+        setField("consumer", kafkaConsumer);
+        setField("running", true);
+
+        manager.stop();
+
+        verify(mockExecutor).shutdown();
+        verify(mockExecutor).shutdownNow();
+        assertTrue(Thread.currentThread().isInterrupted());
+        Thread.interrupted();
+    }
+
+    @Test
+    void stop_consumerCloseThrows_doesNotThrow() throws Exception {
+        ExecutorService mockExecutor = mock(ExecutorService.class);
+        when(mockExecutor.awaitTermination(anyLong(), any())).thenReturn(true);
+        setField("executor", mockExecutor);
+        setField("consumer", kafkaConsumer);
+        setField("running", true);
+        doThrow(new RuntimeException("close error")).when(kafkaConsumer).close();
+
+        manager.stop();
+
+        verify(kafkaConsumer).close();
+    }
+
     private void assertThatRunningIsFalse() throws Exception {
         Field field = KafkaConsumerManager.class.getDeclaredField("running");
         field.setAccessible(true);
