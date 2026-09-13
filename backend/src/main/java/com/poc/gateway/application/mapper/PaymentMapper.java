@@ -1,6 +1,7 @@
 package com.poc.gateway.application.mapper;
 
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.model.CreatePaymentCommand;
 import com.poc.shared.dto.PaymentRequestDTO;
 import com.poc.shared.dto.PaymentResponseDTO;
 import org.mapstruct.Mapper;
@@ -16,6 +17,8 @@ public interface PaymentMapper {
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Payment toDomain(PaymentRequestDTO request);
+
+    CreatePaymentCommand toCommand(PaymentRequestDTO request);
 
     @Mapping(target = "id", expression = "java(payment.id() != null ? payment.id().toString() : null)")
     @Mapping(target = "status", expression = "java(payment.status() != null ? payment.status().name() : null)")

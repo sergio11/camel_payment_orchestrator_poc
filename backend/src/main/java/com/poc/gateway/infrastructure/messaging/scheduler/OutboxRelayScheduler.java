@@ -2,6 +2,7 @@ package com.poc.gateway.infrastructure.messaging.scheduler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.model.OutboxEvent;
 import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
@@ -67,8 +68,16 @@ public class OutboxRelayScheduler {
         String paymentMethod = payload.has("paymentMethod") ? payload.get("paymentMethod").asText() : "";
         String country = payload.has("country") ? payload.get("country").asText() : "";
 
+        PaymentMetadata metadata = null;
+        if (payload.has("metadata")) {
+            JsonNode metadataNode = payload.get("metadata");
+            if (!metadataNode.isNull() && !metadataNode.isMissingNode()) {
+                metadata = objectMapper.convertValue(metadataNode, PaymentMetadata.class);
+            }
+        }
+
         PaymentReceivedEvent paymentEvent = new PaymentReceivedEvent(
-            paymentId, amount, currency, customerId, paymentMethod, country, null
+            paymentId, amount, currency, customerId, paymentMethod, country, metadata
         );
         eventPublisher.publishPaymentReceived(paymentEvent);
     }

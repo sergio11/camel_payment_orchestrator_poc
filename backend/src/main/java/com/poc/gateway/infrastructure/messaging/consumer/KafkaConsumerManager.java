@@ -82,7 +82,8 @@ public class KafkaConsumerManager {
                     try {
                         router.route(record);
                     } catch (Exception e) {
-                        LOG.errorf(e, "Error processing record from topic %s", record.topic());
+                        LOG.errorf(e, "Error processing record from topic %s partition %d offset %d",
+                            record.topic(), record.partition(), record.offset());
                     }
                 });
                 consumer.commitSync();

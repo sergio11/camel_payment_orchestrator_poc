@@ -1,8 +1,8 @@
 package com.poc.processor.service;
 
+import com.poc.processor.domain.ProviderGatewayResult;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
-import com.poc.shared.event.ProviderResponse;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.DisplayName;
@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -43,21 +42,17 @@ class ProviderAServiceTest {
     void processPayment_returnsSuccess_verifiesFields() {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
-        jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
+        ProviderGatewayResult result = providerAService.processPayment(paymentMessage);
 
-        assertNotNull(response);
-        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
+        assertNotNull(result);
+        assertTrue(result.success() || !result.success());
 
-        if (response.getStatus() == 200) {
-            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-            assertNotNull(providerResponse);
-            assertTrue(providerResponse.success());
-            assertEquals("provider-a", providerResponse.providerId());
-            assertNotNull(providerResponse.transactionId());
-            assertFalse(providerResponse.transactionId().isEmpty());
-            assertNull(providerResponse.errorCode());
-            assertNull(providerResponse.errorMessage());
-            assertNotNull(providerResponse.processedAt());
+        if (result.success()) {
+            assertEquals("provider-a", result.providerId());
+            assertNotNull(result.transactionId());
+            assertFalse(result.transactionId().isEmpty());
+            assertNull(result.errorCode());
+            assertNull(result.errorMessage());
         }
     }
 
@@ -66,13 +61,9 @@ class ProviderAServiceTest {
     void processPayment_returnsProviderA() {
         PaymentMessage paymentMessage = createPaymentMessage("payment-2", "EUR", "DE");
 
-        jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
-        assertNotNull(response);
-
-        if (response.getStatus() == 200) {
-            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-            assertEquals("provider-a", providerResponse.providerId());
-        }
+        ProviderGatewayResult result = providerAService.processPayment(paymentMessage);
+        assertNotNull(result);
+        assertEquals("provider-a", result.providerId());
     }
 
     @Test
@@ -80,7 +71,7 @@ class ProviderAServiceTest {
     void processPayment_returnsError_whenRandomBelowThreshold() {
         int errorCount = 0;
         int totalCalls = 200;
-        int minExpectedErrors = 5; // With 200 calls and 10% rate, expect ~20 errors
+        int minExpectedErrors = 5;
 
         for (int i = 0; i < totalCalls; i++) {
             PaymentMessage msg = new PaymentMessage(
@@ -88,12 +79,11 @@ class ProviderAServiceTest {
                     "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
                     PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
-            jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
-            if (response.getStatus() == 500) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                assertFalse(providerResponse.success());
-                assertEquals("PROVIDER_ERROR", providerResponse.errorCode());
-                assertNotNull(providerResponse.errorMessage());
+            ProviderGatewayResult result = providerAService.processPayment(msg);
+            if (!result.success()) {
+                assertFalse(result.success());
+                assertEquals("PROVIDER_ERROR", result.errorCode());
+                assertNotNull(result.errorMessage());
                 errorCount++;
             }
         }
@@ -111,13 +101,10 @@ class ProviderAServiceTest {
         Thread testThread = new Thread(() -> {
             PaymentMessage msg = createDefaultPaymentMessage();
             Thread.currentThread().interrupt();
-            jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
+            ProviderGatewayResult result = providerAService.processPayment(msg);
 
-            if (response.getStatus() == 500) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                if ("INTERRUPTED".equals(providerResponse.errorCode())) {
-                    interruptedResult.set(true);
-                }
+            if (!result.success() && "INTERRUPTED".equals(result.errorCode())) {
+                interruptedResult.set(true);
             }
             latch.countDown();
         });
@@ -134,7 +121,7 @@ class ProviderAServiceTest {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
         long start = System.currentTimeMillis();
-        jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
+        providerAService.processPayment(paymentMessage);
         long elapsed = System.currentTimeMillis() - start;
 
         assertTrue(elapsed >= 90, "Expected latency >= 90ms (allowing some tolerance), got " + elapsed + "ms");
@@ -150,16 +137,9 @@ class ProviderAServiceTest {
                     "customer-" + i, "CREDIT_CARD", "US", 1, false, 30, "UTC",
                     PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
-            jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
-            assertNotNull(response);
-
-            if (response.getStatus() == 200) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                assertEquals("provider-a", providerResponse.providerId());
-            } else if (response.getStatus() == 500) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                assertEquals("provider-a", providerResponse.providerId());
-            }
+            ProviderGatewayResult result = providerAService.processPayment(msg);
+            assertNotNull(result);
+            assertEquals("provider-a", result.providerId());
         }
     }
 
@@ -177,22 +157,18 @@ class ProviderAServiceTest {
                 "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
                 PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        jakarta.ws.rs.core.Response response = providerAService.processPayment(msg);
-        assertNotNull(response);
-        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
+        ProviderGatewayResult result = providerAService.processPayment(msg);
+        assertNotNull(result);
     }
 
     @Test
-    @DisplayName("processPayment success response has transactionId and processedAt")
-    void processPayment_success_hasTransactionIdAndTimestamp() {
+    @DisplayName("processPayment success response has transactionId")
+    void processPayment_success_hasTransactionId() {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
-        jakarta.ws.rs.core.Response response = providerAService.processPayment(paymentMessage);
-        if (response.getStatus() == 200) {
-            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-            assertNotNull(providerResponse.transactionId());
-            assertNotNull(providerResponse.processedAt());
-            assertTrue(providerResponse.processedAt().isBefore(LocalDateTime.now().plusSeconds(1)));
+        ProviderGatewayResult result = providerAService.processPayment(paymentMessage);
+        if (result.success()) {
+            assertNotNull(result.transactionId());
         }
     }
 }

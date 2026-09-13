@@ -1,8 +1,7 @@
 package com.poc.gateway.application.service;
 
-import com.poc.gateway.application.mapper.PaymentMetadataApplicationMapper;
 import com.poc.gateway.domain.Payment;
-import com.poc.gateway.domain.PaymentMetadata;
+import com.poc.gateway.domain.model.CreatePaymentCommand;
 import com.poc.gateway.domain.model.OutboxEvent;
 import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.inbound.CreatePaymentUseCase;
@@ -10,7 +9,6 @@ import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
-import com.poc.shared.dto.PaymentRequestDTO;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -36,13 +34,10 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     PaymentEventSerializer serializer;
 
     @Inject
-    PaymentMetadataApplicationMapper metadataMapper;
-
-    @Inject
     Instance<CreatePaymentService> self;
 
     @Override
-    public Payment execute(PaymentRequestDTO request, String idempotencyKey) {
+    public Payment execute(CreatePaymentCommand command, String idempotencyKey) {
         String key = normalizeKey(idempotencyKey);
 
         Optional<Payment> existing = paymentRepo.findByIdempotencyKey(key);
@@ -51,10 +46,9 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             return existing.get();
         }
 
-        PaymentMetadata metadata = metadataMapper.toDomain(request.metadata());
         Payment domainPayment = Payment.create(
-            request.amount(), request.currency(), request.customerId(),
-            request.paymentMethod(), request.country(), metadata
+            command.amount(), command.currency(), command.customerId(),
+            command.paymentMethod(), command.country(), command.metadata()
         );
 
         Payment saved = self.get().persistWithOutbox(domainPayment, key);

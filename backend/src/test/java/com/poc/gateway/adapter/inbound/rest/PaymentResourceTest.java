@@ -9,7 +9,7 @@ import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.model.PaymentPageResult;
 import com.poc.gateway.domain.model.PaymentStatus;
-import com.poc.shared.dto.PaymentRequestDTO;
+import com.poc.gateway.domain.model.CreatePaymentCommand;
 import com.poc.shared.dto.PaymentResponseDTO;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
@@ -52,7 +52,8 @@ class PaymentResourceTest {
         PaymentResponseDTO response = new PaymentResponseDTO(
             paymentId.toString(), BigDecimal.TEN, "USD", "cust", "CARD", "US", "PENDING", null, null, null, LocalDateTime.now(), LocalDateTime.now()
         );
-        when(createPayment.execute(any(PaymentRequestDTO.class), any())).thenReturn(domainPayment);
+        when(mapper.toCommand(any())).thenReturn(new CreatePaymentCommand(BigDecimal.TEN, "USD", "cust", "CARD", "US", PaymentMetadata.empty()));
+        when(createPayment.execute(any(CreatePaymentCommand.class), any())).thenReturn(domainPayment);
         when(mapper.toResponseDTO(any(Payment.class))).thenReturn(response);
 
         given()
@@ -93,6 +94,32 @@ class PaymentResourceTest {
         when(listPayments.execute(isNull(), isNull(), eq(20), eq(0))).thenReturn(pageResult);
 
         given()
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200);
+    }
+
+    @Test
+    void list_invalidLimit_resetsTo20() {
+        PaymentPageResult pageResult = new PaymentPageResult(List.of(), 0L, 20, 0);
+        when(listPayments.execute(isNull(), isNull(), eq(20), eq(0))).thenReturn(pageResult);
+
+        given()
+        .queryParam("limit", 0)
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200);
+    }
+
+    @Test
+    void list_negativeOffset_resetsToZero() {
+        PaymentPageResult pageResult = new PaymentPageResult(List.of(), 0L, 20, 0);
+        when(listPayments.execute(isNull(), isNull(), eq(20), eq(0))).thenReturn(pageResult);
+
+        given()
+        .queryParam("offset", -1)
         .when()
             .get("/payments")
         .then()

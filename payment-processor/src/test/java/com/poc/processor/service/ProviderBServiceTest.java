@@ -1,8 +1,8 @@
 package com.poc.processor.service;
 
+import com.poc.processor.domain.ProviderGatewayResult;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
-import com.poc.shared.event.ProviderResponse;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.DisplayName;
@@ -42,21 +42,16 @@ class ProviderBServiceTest {
     void processPayment_returnsSuccess_verifiesFields() {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
-        jakarta.ws.rs.core.Response response = providerBService.processPayment(paymentMessage);
+        ProviderGatewayResult result = providerBService.processPayment(paymentMessage);
 
-        assertNotNull(response);
-        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
+        assertNotNull(result);
 
-        if (response.getStatus() == 200) {
-            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-            assertNotNull(providerResponse);
-            assertTrue(providerResponse.success());
-            assertEquals("provider-b", providerResponse.providerId());
-            assertNotNull(providerResponse.transactionId());
-            assertFalse(providerResponse.transactionId().isEmpty());
-            assertNull(providerResponse.errorCode());
-            assertNull(providerResponse.errorMessage());
-            assertNotNull(providerResponse.processedAt());
+        if (result.success()) {
+            assertEquals("provider-b", result.providerId());
+            assertNotNull(result.transactionId());
+            assertFalse(result.transactionId().isEmpty());
+            assertNull(result.errorCode());
+            assertNull(result.errorMessage());
         }
     }
 
@@ -65,13 +60,9 @@ class ProviderBServiceTest {
     void processPayment_returnsProviderB() {
         PaymentMessage paymentMessage = createPaymentMessage("payment-2", "EUR", "DE");
 
-        jakarta.ws.rs.core.Response response = providerBService.processPayment(paymentMessage);
-        assertNotNull(response);
-
-        if (response.getStatus() == 200) {
-            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-            assertEquals("provider-b", providerResponse.providerId());
-        }
+        ProviderGatewayResult result = providerBService.processPayment(paymentMessage);
+        assertNotNull(result);
+        assertEquals("provider-b", result.providerId());
     }
 
     @Test
@@ -87,12 +78,11 @@ class ProviderBServiceTest {
                     "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
                     PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
-            jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
-            if (response.getStatus() == 500) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                assertFalse(providerResponse.success());
-                assertEquals("PROVIDER_ERROR", providerResponse.errorCode());
-                assertNotNull(providerResponse.errorMessage());
+            ProviderGatewayResult result = providerBService.processPayment(msg);
+            if (!result.success()) {
+                assertFalse(result.success());
+                assertEquals("PROVIDER_ERROR", result.errorCode());
+                assertNotNull(result.errorMessage());
                 errorCount++;
             }
         }
@@ -109,15 +99,11 @@ class ProviderBServiceTest {
 
         Thread testThread = new Thread(() -> {
             PaymentMessage msg = createDefaultPaymentMessage();
-            // Interrupt the thread before calling processPayment to force the InterruptedException path
             Thread.currentThread().interrupt();
-            jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
+            ProviderGatewayResult result = providerBService.processPayment(msg);
 
-            if (response.getStatus() == 500) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                if ("INTERRUPTED".equals(providerResponse.errorCode())) {
-                    interruptedResult.set(true);
-                }
+            if (!result.success() && "INTERRUPTED".equals(result.errorCode())) {
+                interruptedResult.set(true);
             }
             latch.countDown();
         });
@@ -134,7 +120,7 @@ class ProviderBServiceTest {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
         long start = System.currentTimeMillis();
-        jakarta.ws.rs.core.Response response = providerBService.processPayment(paymentMessage);
+        providerBService.processPayment(paymentMessage);
         long elapsed = System.currentTimeMillis() - start;
 
         assertTrue(elapsed >= 490, "Expected latency >= 490ms (allowing some tolerance), got " + elapsed + "ms");
@@ -150,16 +136,9 @@ class ProviderBServiceTest {
                     "customer-" + i, "CREDIT_CARD", "US", 1, false, 30, "UTC",
                     PaymentMetadataDTO.empty(), LocalDateTime.now()
             );
-            jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
-            assertNotNull(response);
-
-            if (response.getStatus() == 200) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                assertEquals("provider-b", providerResponse.providerId());
-            } else if (response.getStatus() == 500) {
-                ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-                assertEquals("provider-b", providerResponse.providerId());
-            }
+            ProviderGatewayResult result = providerBService.processPayment(msg);
+            assertNotNull(result);
+            assertEquals("provider-b", result.providerId());
         }
     }
 
@@ -177,22 +156,18 @@ class ProviderBServiceTest {
                 "customer-1", "CREDIT_CARD", "US", 1, false, 30, "UTC",
                 PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        jakarta.ws.rs.core.Response response = providerBService.processPayment(msg);
-        assertNotNull(response);
-        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
+        ProviderGatewayResult result = providerBService.processPayment(msg);
+        assertNotNull(result);
     }
 
     @Test
-    @DisplayName("processPayment success response has transactionId and processedAt")
-    void processPayment_success_hasTransactionIdAndTimestamp() {
+    @DisplayName("processPayment success response has transactionId")
+    void processPayment_success_hasTransactionId() {
         PaymentMessage paymentMessage = createDefaultPaymentMessage();
 
-        jakarta.ws.rs.core.Response response = providerBService.processPayment(paymentMessage);
-        if (response.getStatus() == 200) {
-            ProviderResponse providerResponse = response.readEntity(ProviderResponse.class);
-            assertNotNull(providerResponse.transactionId());
-            assertNotNull(providerResponse.processedAt());
-            assertTrue(providerResponse.processedAt().isBefore(LocalDateTime.now().plusSeconds(1)));
+        ProviderGatewayResult result = providerBService.processPayment(paymentMessage);
+        if (result.success()) {
+            assertNotNull(result.transactionId());
         }
     }
 }

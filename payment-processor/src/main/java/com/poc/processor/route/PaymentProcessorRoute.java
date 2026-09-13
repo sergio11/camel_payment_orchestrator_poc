@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.application.FraudRoutingService;
 import com.poc.processor.application.FraudRoutingService.FraudRoutingDecision;
-import com.poc.processor.processor.ContentBasedRouterBean;
+import com.poc.processor.route.CamelRouteConstants;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
 import com.poc.processor.domain.FraudAction;
@@ -95,16 +95,16 @@ public class PaymentProcessorRoute extends RouteBuilder {
             })
             .log("Fraud route target: ${header.FraudRouteTarget} for ${body.paymentId}")
             .choice()
-                .when(header("FraudRouteTarget").isEqualTo(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW))
+                .when(header("FraudRouteTarget").isEqualTo(CamelRouteConstants.DIRECT_FRAUD_REVIEW))
                     .log("High amount or WALLET payment, routing to fraud review: ${body.paymentId}")
-                    .to(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW)
+                    .to(CamelRouteConstants.DIRECT_FRAUD_REVIEW)
                 .otherwise()
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
-                    .to(ContentBasedRouterBean.DESTINATION_FRAUD_CHECK)
+                    .to(CamelRouteConstants.DIRECT_FRAUD_CHECK)
             .end()
             .log("Payment processed: ${header.OriginalPaymentId} -> ${header.CamelFraudAction}");
 
-        from(ContentBasedRouterBean.DESTINATION_FRAUD_REVIEW)
+        from(CamelRouteConstants.DIRECT_FRAUD_REVIEW)
             .routeId("fraud-review-high-value")
             .log("Fraud evaluation already done for high-value payment: ${body.paymentId}")
             .choice()
@@ -119,7 +119,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .to("direct:provider-selection")
             .end();
 
-        from(ContentBasedRouterBean.DESTINATION_FRAUD_CHECK)
+        from(CamelRouteConstants.DIRECT_FRAUD_CHECK)
             .routeId("fraud-check-standard")
             .log("Fraud evaluation already done for standard payment: ${body.paymentId}")
             .choice()

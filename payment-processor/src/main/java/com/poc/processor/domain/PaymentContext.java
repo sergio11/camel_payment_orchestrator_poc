@@ -6,7 +6,7 @@ public record PaymentContext(
     PaymentMessage message,
     String originalPaymentId,
     String originalEventId,
-    String kafkaKey
+    String correlationId
 ) {
     public static PaymentContext from(PaymentMessage message) {
         return new PaymentContext(

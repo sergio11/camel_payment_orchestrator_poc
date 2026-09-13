@@ -2,6 +2,7 @@ package com.poc.gateway.adapter.inbound.rest;
 
 import com.poc.gateway.application.mapper.PaymentMapper;
 import com.poc.gateway.domain.Payment;
+import com.poc.gateway.domain.model.CreatePaymentCommand;
 import com.poc.gateway.domain.model.PaymentPageResult;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.inbound.CreatePaymentUseCase;
@@ -57,7 +58,8 @@ public class PaymentResource {
     public Response create(
             @Valid PaymentRequestDTO request,
             @HeaderParam("Idempotency-Key") String idempotencyKey) {
-        Payment result = createPayment.execute(request, idempotencyKey);
+        CreatePaymentCommand command = mapper.toCommand(request);
+        Payment result = createPayment.execute(command, idempotencyKey);
         PaymentResponseDTO response = mapper.toResponseDTO(result);
         return Response.status(Response.Status.CREATED).entity(response).build();
     }

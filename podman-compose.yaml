@@ -120,10 +120,6 @@ services:
       - poc-camel-grafana-data:/var/lib/grafana
     env_file:
       - ./monitoring/grafana.env
-    environment:
-      GF_SECURITY_ADMIN_USER: poc-admin
-      GF_SECURITY_ADMIN_PASSWORD: poc-demo-pass-2026
-      GF_USERS_ALLOW_SIGN_UP: "false"
     networks:
       - poc-camel-net
     depends_on:

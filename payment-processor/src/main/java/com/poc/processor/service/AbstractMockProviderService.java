@@ -1,5 +1,6 @@
 package com.poc.processor.service;
 
+import com.poc.processor.domain.ProviderGatewayResult;
 import com.poc.processor.port.outbound.PaymentProviderPort;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
@@ -32,47 +33,44 @@ public abstract class AbstractMockProviderService implements PaymentProviderPort
         return providerIdValue;
     }
 
-    @POST
-    @Path("/process")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
     @Override
-    public Response processPayment(PaymentMessage paymentMessage) {
-        String paymentId = paymentMessage.paymentId();
-        String amount = paymentMessage.amount() != null ? paymentMessage.amount().toString() : null;
-
+    public ProviderGatewayResult processPayment(PaymentMessage paymentMessage) {
         int latency = ThreadLocalRandom.current().nextInt(minLatencyMs, maxLatencyMs + 1);
         try {
             Thread.sleep(latency);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return Response.status(500).entity(
-                new ProviderResponse(providerIdValue, null, false, "INTERRUPTED", "Thread interrupted", LocalDateTime.now())
-            ).build();
+            return ProviderGatewayResult.failure(providerIdValue, "INTERRUPTED", "Thread interrupted");
         }
 
         if (ThreadLocalRandom.current().nextDouble() < failureRate) {
-            return Response.status(500).entity(
-                new ProviderResponse(
-                    providerIdValue,
-                    UUID.randomUUID().toString(),
-                    false,
-                    "PROVIDER_ERROR",
-                    "Simulated " + providerIdValue + " failure",
-                    LocalDateTime.now()
-                )
-            ).build();
+            return ProviderGatewayResult.failure(
+                providerIdValue,
+                "PROVIDER_ERROR",
+                "Simulated " + providerIdValue + " failure"
+            );
         }
 
-        return Response.ok(
-            new ProviderResponse(
-                providerIdValue,
-                UUID.randomUUID().toString(),
-                true,
-                null,
-                null,
-                LocalDateTime.now()
-            )
-        ).build();
+        return ProviderGatewayResult.success(providerIdValue, UUID.randomUUID().toString());
+    }
+
+    @POST
+    @Path("/process")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response handlePayment(PaymentMessage paymentMessage) {
+        ProviderGatewayResult result = processPayment(paymentMessage);
+        ProviderResponse providerResponse = new ProviderResponse(
+            result.providerId(),
+            result.transactionId(),
+            result.success(),
+            result.errorCode(),
+            result.errorMessage(),
+            LocalDateTime.now()
+        );
+        if (result.success()) {
+            return Response.ok(providerResponse).build();
+        }
+        return Response.status(500).entity(providerResponse).build();
     }
 }

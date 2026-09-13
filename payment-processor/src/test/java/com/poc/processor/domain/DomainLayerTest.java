@@ -155,7 +155,7 @@ class DomainLayerTest {
         assertEquals(msg, ctx.message());
         assertEquals("pay-1", ctx.originalPaymentId());
         assertEquals("evt-1", ctx.originalEventId());
-        assertEquals("pay-1", ctx.kafkaKey());
+        assertEquals("pay-1", ctx.correlationId());
     }
 
     @Test
@@ -170,7 +170,7 @@ class DomainLayerTest {
         assertEquals(msg, ctx.message());
         assertEquals("pay-1", ctx.originalPaymentId());
         assertEquals("evt-1", ctx.originalEventId());
-        assertEquals("kafka-key", ctx.kafkaKey());
+        assertEquals("kafka-key", ctx.correlationId());
     }
 
     // ========== Exceptions ==========
