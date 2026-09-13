@@ -82,6 +82,7 @@ public class PaymentResource {
             @QueryParam("limit") @DefaultValue("20") int limit,
             @QueryParam("offset") @DefaultValue("0") int offset) {
         if (limit < 1) limit = 20;
+        if (limit > 100) limit = 100;
         if (offset < 0) offset = 0;
         PaymentStatus paymentStatus = PaymentStatus.fromString(status).orElse(null);
         PaymentPageResult result = listPayments.execute(customerId, paymentStatus, limit, offset);

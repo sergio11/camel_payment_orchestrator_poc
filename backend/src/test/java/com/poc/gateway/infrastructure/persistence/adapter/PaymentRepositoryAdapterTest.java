@@ -5,6 +5,7 @@ import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.exception.PaymentNotFoundException;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.infrastructure.persistence.entity.PaymentEntity;
+import com.poc.gateway.infrastructure.persistence.entity.PaymentMetadataEntity;
 import com.poc.gateway.infrastructure.persistence.mapper.PaymentPersistenceMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
@@ -55,13 +56,28 @@ class PaymentRepositoryAdapterTest {
 
     @Test
     void save_newPayment_setsDefaultsAndMerges() {
+        entityPayment.metadata = new PaymentMetadataEntity();
+        entityPayment.metadata.paymentId = entityPayment.id;
+        entityPayment.metadata.enrichedAt = "2024-01-01";
+        entityPayment.metadata.velocityScore = 5;
+        entityPayment.metadata.geoRiskScore = 10;
+        Payment enrichedDomainPayment = new Payment(
+            domainPayment.id(), domainPayment.amount(), domainPayment.currency(),
+            domainPayment.customerId(), domainPayment.paymentMethod(), domainPayment.country(),
+            domainPayment.status(), null, null,
+            new PaymentMetadata("order-1", 3, true, 30, "LOW", "2024-01-01", 5, 10),
+            domainPayment.createdAt(), domainPayment.updatedAt()
+        );
         when(persistenceMapper.toEntity(domainPayment)).thenReturn(entityPayment);
         when(em.merge(entityPayment)).thenReturn(entityPayment);
-        when(persistenceMapper.toDomain(entityPayment)).thenReturn(domainPayment);
+        when(persistenceMapper.toDomain(entityPayment)).thenReturn(enrichedDomainPayment);
 
         Payment result = adapter.save(domainPayment);
 
         assertNotNull(result);
+        assertEquals("2024-01-01", result.metadata().enrichedAt());
+        assertEquals(5, result.metadata().velocityScore());
+        assertEquals(10, result.metadata().geoRiskScore());
         verify(em).merge(entityPayment);
         verify(em).flush();
     }

@@ -12,4 +12,5 @@ public final class CamelRouteConstants {
     public static final String DIRECT_RETRY_HANDLER = "direct:retry-handler";
     public static final String DIRECT_POISON_DLQ = "direct:poison-dlq";
     public static final String DIRECT_DLQ_HANDLER = "direct:dlq-handler";
+    public static final int MAX_RETRY_ATTEMPTS = 3;
 }

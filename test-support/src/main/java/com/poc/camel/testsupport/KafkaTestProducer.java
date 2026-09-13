@@ -11,7 +11,7 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class KafkaTestProducer {
+public class KafkaTestProducer implements AutoCloseable {
 
     private final KafkaProducer<String, String> producer;
     private final ObjectMapper mapper;

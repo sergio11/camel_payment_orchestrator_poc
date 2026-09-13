@@ -29,6 +29,9 @@ class PaymentMetadataMapperTest {
         assertTrue(entity.isNewPaymentMethod);
         assertEquals(30, entity.paymentMethodAgeDays);
         assertEquals("LOW", entity.customerRiskTier);
+        assertEquals("2024-01-01", entity.enrichedAt);
+        assertEquals(5, entity.velocityScore);
+        assertEquals(10, entity.geoRiskScore);
     }
 
     @Test
@@ -40,6 +43,9 @@ class PaymentMetadataMapperTest {
         entity.isNewPaymentMethod = true;
         entity.paymentMethodAgeDays = 30;
         entity.customerRiskTier = "LOW";
+        entity.enrichedAt = "2024-01-01";
+        entity.velocityScore = 5;
+        entity.geoRiskScore = 10;
 
         PaymentMetadata meta = mapper.toDomain(entity);
         assertEquals("order-1", meta.orderId());
@@ -47,11 +53,14 @@ class PaymentMetadataMapperTest {
         assertTrue(meta.isNewPaymentMethod());
         assertEquals(30, meta.paymentMethodAgeDays());
         assertEquals("LOW", meta.customerRiskTier());
+        assertEquals("2024-01-01", meta.enrichedAt());
+        assertEquals(5, meta.velocityScore());
+        assertEquals(10, meta.geoRiskScore());
     }
 
     @Test
     void toEntity_and_toDomain_roundtrip() {
-        PaymentMetadata meta = new PaymentMetadata("order-1", 3, true, 30, "LOW", null, null, null);
+        PaymentMetadata meta = new PaymentMetadata("order-1", 3, true, 30, "LOW", "2024-01-01", 5, 10);
         PaymentMetadataEntity entity = mapper.toEntity(meta);
         PaymentMetadata back = mapper.toDomain(entity);
         assertEquals("order-1", back.orderId());
@@ -59,6 +68,9 @@ class PaymentMetadataMapperTest {
         assertTrue(back.isNewPaymentMethod());
         assertEquals(30, back.paymentMethodAgeDays());
         assertEquals("LOW", back.customerRiskTier());
+        assertEquals("2024-01-01", back.enrichedAt());
+        assertEquals(5, back.velocityScore());
+        assertEquals(10, back.geoRiskScore());
     }
 
     @Test
@@ -70,5 +82,8 @@ class PaymentMetadataMapperTest {
         assertNull(entity.isNewPaymentMethod);
         assertNull(entity.paymentMethodAgeDays);
         assertNull(entity.customerRiskTier);
+        assertNull(entity.enrichedAt);
+        assertNull(entity.velocityScore);
+        assertNull(entity.geoRiskScore);
     }
 }

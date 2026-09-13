@@ -19,6 +19,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+
+import com.poc.processor.domain.exception.FraudEvaluationException;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
@@ -163,6 +165,21 @@ class FraudEvaluationServiceUnitTest {
         FraudEvaluation eval = service.evaluate(msg);
 
         assertTrue(eval.triggeredRules().contains("HIGH_RISK_TIER"));
+    }
+
+    @Test
+    @DisplayName("evaluate throws FraudEvaluationException when config is null")
+    void evaluate_configError_throwsFraudEvaluationException() {
+        when(config.highAmountThreshold()).thenThrow(new RuntimeException("Config error"));
+
+        PaymentMessage msg = new PaymentMessage(
+            "evt-1", "pay-1", new BigDecimal("100"), "USD", "cust-1",
+            "CREDIT_CARD", "US", 0, false, 0, "UTC",
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        assertThrows(FraudEvaluationException.class,
+            () -> service.evaluate(msg));
     }
 
     @Test

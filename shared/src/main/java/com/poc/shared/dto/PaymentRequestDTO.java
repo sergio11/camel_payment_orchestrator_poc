@@ -2,6 +2,7 @@ package com.poc.shared.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.poc.shared.validator.SupportedCurrency;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 
@@ -31,6 +32,7 @@ public record PaymentRequestDTO(
     @JsonProperty("country")
     String country,
 
+    @Valid
     @JsonProperty("metadata")
     PaymentMetadataDTO metadata
 ) {}

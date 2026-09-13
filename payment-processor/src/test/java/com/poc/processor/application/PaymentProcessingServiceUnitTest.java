@@ -2,6 +2,7 @@ package com.poc.processor.application;
 
 import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
+import com.poc.processor.domain.exception.PaymentProcessingException;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
 import com.poc.shared.dto.PaymentMetadataDTO;
@@ -80,7 +81,7 @@ class PaymentProcessingServiceUnitTest {
             "CARD", "US", 0, false, 0, "UTC",
             PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(PaymentProcessingException.class, () ->
             PaymentProcessingService.validatePaymentMessage(msg));
     }
 
@@ -92,7 +93,7 @@ class PaymentProcessingServiceUnitTest {
             "CARD", "US", 0, false, 0, "UTC",
             PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(PaymentProcessingException.class, () ->
             PaymentProcessingService.validatePaymentMessage(msg));
     }
 
@@ -104,7 +105,7 @@ class PaymentProcessingServiceUnitTest {
             "CARD", "US", 0, false, 0, "UTC",
             PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(PaymentProcessingException.class, () ->
             PaymentProcessingService.validatePaymentMessage(msg));
     }
 
@@ -116,7 +117,7 @@ class PaymentProcessingServiceUnitTest {
             "CARD", "US", 0, false, 0, "UTC",
             PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(PaymentProcessingException.class, () ->
             PaymentProcessingService.validatePaymentMessage(msg));
     }
 
@@ -128,7 +129,7 @@ class PaymentProcessingServiceUnitTest {
             null, "US", 0, false, 0, "UTC",
             PaymentMetadataDTO.empty(), LocalDateTime.now()
         );
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(PaymentProcessingException.class, () ->
             PaymentProcessingService.validatePaymentMessage(msg));
     }
 

@@ -2,6 +2,7 @@ package com.poc.processor.application;
 
 import com.poc.processor.config.FraudRulesConfig;
 import com.poc.processor.domain.FraudAction;
+import com.poc.processor.domain.exception.FraudEvaluationException;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
 import com.poc.shared.dto.PaymentMetadataDTO;
@@ -21,11 +22,18 @@ public class FraudEvaluationService implements EvaluateFraudUseCase {
 
     @Override
     public FraudEvaluation evaluate(PaymentMessage message) {
-        List<String> triggeredRules = new ArrayList<>();
-        int riskScore = calculateRiskScore(message, triggeredRules);
-        riskScore = Math.min(riskScore, config.maxRiskScore());
-
-        return determineAction(message, riskScore, triggeredRules);
+        try {
+            List<String> triggeredRules = new ArrayList<>();
+            int riskScore = calculateRiskScore(message, triggeredRules);
+            riskScore = Math.min(riskScore, config.maxRiskScore());
+            return determineAction(message, riskScore, triggeredRules);
+        } catch (Exception e) {
+            throw new FraudEvaluationException(
+                message.paymentId(),
+                "Fraud evaluation failed for payment " + message.paymentId(),
+                e
+            );
+        }
     }
 
     private int calculateRiskScore(PaymentMessage message, List<String> triggeredRules) {

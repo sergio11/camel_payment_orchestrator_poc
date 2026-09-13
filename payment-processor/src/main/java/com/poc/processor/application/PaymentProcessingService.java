@@ -1,6 +1,7 @@
 package com.poc.processor.application;
 
 import com.poc.processor.domain.FraudEvaluation;
+import com.poc.processor.domain.exception.PaymentProcessingException;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
 import com.poc.processor.port.inbound.ProcessPaymentUseCase;
@@ -34,7 +35,8 @@ public class PaymentProcessingService implements ProcessPaymentUseCase {
     public static void validatePaymentMessage(PaymentMessage msg) {
         if (msg.paymentId() == null || msg.amount() == null || msg.currency() == null
             || msg.customerId() == null || msg.paymentMethod() == null) {
-            throw new IllegalArgumentException(
+            throw new PaymentProcessingException(
+                msg.paymentId() != null ? msg.paymentId() : "unknown",
                 "Invalid payment fields: required fields missing for payment " + msg.paymentId());
         }
     }

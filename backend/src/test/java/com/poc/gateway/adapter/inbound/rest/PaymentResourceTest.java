@@ -179,4 +179,17 @@ class PaymentResourceTest {
         .then()
             .statusCode(404);
     }
+
+    @Test
+    void list_limitExceeding100_isCapped() {
+        PaymentPageResult pageResult = new PaymentPageResult(List.of(), 0L, 100, 0);
+        when(listPayments.execute(isNull(), isNull(), eq(100), eq(0))).thenReturn(pageResult);
+
+        given()
+        .queryParam("limit", 500)
+        .when()
+            .get("/payments")
+        .then()
+            .statusCode(200);
+    }
 }

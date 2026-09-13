@@ -36,6 +36,15 @@ public class PaymentMetadataEntity extends PanacheEntityBase {
     @Column(name = "customer_risk_tier", length = 20)
     public String customerRiskTier;
 
+    @Column(name = "enriched_at", length = 30)
+    public String enrichedAt;
+
+    @Column(name = "velocity_score")
+    public Integer velocityScore;
+
+    @Column(name = "geo_risk_score")
+    public Integer geoRiskScore;
+
     @Column(name = "additional_properties", length = 2048)
     public String additionalProperties;
 }

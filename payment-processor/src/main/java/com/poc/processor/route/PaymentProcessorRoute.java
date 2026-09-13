@@ -49,7 +49,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .logRetryAttempted(true)
             .logExhausted(true));
 
-        onException(JsonProcessingException.class, IllegalArgumentException.class)
+        onException(JsonProcessingException.class, com.poc.processor.domain.exception.PaymentProcessingException.class)
             .handled(true)
             .maximumRedeliveries(0)
             .logExhausted(true)
@@ -160,6 +160,18 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("retry-consumer")
             .autoStartup("{{camel.route.retry-consumer.auto-startup:true}}")
             .log("Retrying payment from retry topic: ${header.kafka.KEY}")
-            .to("kafka:{{kafka.topic.payments.received}}");
+            .process(exchange -> {
+                Integer retryCount = exchange.getIn().getHeader("retryCount", 0, Integer.class);
+                exchange.getIn().setHeader("retryCount", retryCount + 1);
+            })
+            .choice()
+                .when(header("retryCount").isLessThan(3))
+                    .log("Retry attempt ${header.retryCount} for ${header.kafka.KEY}")
+                    .to("kafka:{{kafka.topic.payments.received}}")
+                .otherwise()
+                    .log("Max retries exceeded for ${header.kafka.KEY}, sending to DLQ")
+                    .setHeader("kafka.KEY", header("kafka.KEY"))
+                    .to("kafka:{{kafka.topic.dead-letter}}")
+            .end();
     }
 }

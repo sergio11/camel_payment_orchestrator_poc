@@ -5,7 +5,6 @@ import com.poc.gateway.domain.model.OutboxEvent;
 import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,39 +63,15 @@ class OutboxRelaySchedulerTest {
 
         when(outboxRepo.findPending(50)).thenReturn(List.of(event));
 
-        JsonNode root = mock(JsonNode.class);
-        JsonNode paymentIdNode = mock(JsonNode.class);
-        JsonNode amountNode = mock(JsonNode.class);
-        JsonNode currencyNode = mock(JsonNode.class);
-        JsonNode customerIdNode = mock(JsonNode.class);
-        JsonNode paymentMethodNode = mock(JsonNode.class);
-        JsonNode countryNode = mock(JsonNode.class);
-
-        when(objectMapper.readTree(anyString())).thenReturn(root);
-        when(root.has("paymentId")).thenReturn(true);
-        when(root.get("paymentId")).thenReturn(paymentIdNode);
-        when(paymentIdNode.asText()).thenReturn(paymentId);
-        when(root.has("amount")).thenReturn(true);
-        when(root.get("amount")).thenReturn(amountNode);
-        when(amountNode.asText()).thenReturn("100.00");
-        when(root.has("currency")).thenReturn(true);
-        when(root.get("currency")).thenReturn(currencyNode);
-        when(currencyNode.asText()).thenReturn("USD");
-        when(root.has("customerId")).thenReturn(true);
-        when(root.get("customerId")).thenReturn(customerIdNode);
-        when(customerIdNode.asText()).thenReturn("cust-1");
-        when(root.has("paymentMethod")).thenReturn(true);
-        when(root.get("paymentMethod")).thenReturn(paymentMethodNode);
-        when(paymentMethodNode.asText()).thenReturn("CARD");
-        when(root.has("country")).thenReturn(true);
-        when(root.get("country")).thenReturn(countryNode);
-        when(countryNode.asText()).thenReturn("US");
-
+        PaymentReceivedEvent expectedEvent = new PaymentReceivedEvent(
+            paymentId, new java.math.BigDecimal("100.00"), "USD", "cust-1", "CARD", "US", null
+        );
+        when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class))).thenReturn(expectedEvent);
         when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         scheduler.processPendingEvents();
 
-        verify(eventPublisher).publishPaymentReceived(any(PaymentReceivedEvent.class));
+        verify(eventPublisher).publishPaymentReceived(expectedEvent);
         verify(outboxRepo).markSent(event.id());
     }
 
@@ -107,34 +82,10 @@ class OutboxRelaySchedulerTest {
 
         when(outboxRepo.findPending(50)).thenReturn(List.of(event));
 
-        JsonNode root = mock(JsonNode.class);
-        JsonNode paymentIdNode = mock(JsonNode.class);
-        JsonNode amountNode = mock(JsonNode.class);
-        JsonNode currencyNode = mock(JsonNode.class);
-        JsonNode customerIdNode = mock(JsonNode.class);
-        JsonNode paymentMethodNode = mock(JsonNode.class);
-        JsonNode countryNode = mock(JsonNode.class);
-
-        when(objectMapper.readTree(anyString())).thenReturn(root);
-        when(root.has("paymentId")).thenReturn(true);
-        when(root.get("paymentId")).thenReturn(paymentIdNode);
-        when(paymentIdNode.asText()).thenReturn("test-payment-id");
-        when(root.has("amount")).thenReturn(true);
-        when(root.get("amount")).thenReturn(amountNode);
-        when(amountNode.asText()).thenReturn("100.00");
-        when(root.has("currency")).thenReturn(true);
-        when(root.get("currency")).thenReturn(currencyNode);
-        when(currencyNode.asText()).thenReturn("USD");
-        when(root.has("customerId")).thenReturn(true);
-        when(root.get("customerId")).thenReturn(customerIdNode);
-        when(customerIdNode.asText()).thenReturn("cust-1");
-        when(root.has("paymentMethod")).thenReturn(true);
-        when(root.get("paymentMethod")).thenReturn(paymentMethodNode);
-        when(paymentMethodNode.asText()).thenReturn("CARD");
-        when(root.has("country")).thenReturn(true);
-        when(root.get("country")).thenReturn(countryNode);
-        when(countryNode.asText()).thenReturn("US");
-
+        PaymentReceivedEvent expectedEvent = new PaymentReceivedEvent(
+            "test-payment-id", new java.math.BigDecimal("100.00"), "USD", "cust-1", "CARD", "US", null
+        );
+        when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class))).thenReturn(expectedEvent);
         when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenThrow(new RuntimeException("Kafka down"));
 
         scheduler.processPendingEvents();
@@ -163,41 +114,11 @@ class OutboxRelaySchedulerTest {
 
         when(outboxRepo.findPending(50)).thenReturn(List.of(event));
 
-        JsonNode root = mock(JsonNode.class);
-        JsonNode paymentIdNode = mock(JsonNode.class);
-        JsonNode amountNode = mock(JsonNode.class);
-        JsonNode currencyNode = mock(JsonNode.class);
-        JsonNode customerIdNode = mock(JsonNode.class);
-        JsonNode paymentMethodNode = mock(JsonNode.class);
-        JsonNode countryNode = mock(JsonNode.class);
-        JsonNode metadataNode = mock(JsonNode.class);
-
-        when(objectMapper.readTree(anyString())).thenReturn(root);
-        when(root.has("paymentId")).thenReturn(true);
-        when(root.get("paymentId")).thenReturn(paymentIdNode);
-        when(paymentIdNode.asText()).thenReturn(paymentId);
-        when(root.has("amount")).thenReturn(true);
-        when(root.get("amount")).thenReturn(amountNode);
-        when(amountNode.asText()).thenReturn("100.00");
-        when(root.has("currency")).thenReturn(true);
-        when(root.get("currency")).thenReturn(currencyNode);
-        when(currencyNode.asText()).thenReturn("USD");
-        when(root.has("customerId")).thenReturn(true);
-        when(root.get("customerId")).thenReturn(customerIdNode);
-        when(customerIdNode.asText()).thenReturn("cust-1");
-        when(root.has("paymentMethod")).thenReturn(true);
-        when(root.get("paymentMethod")).thenReturn(paymentMethodNode);
-        when(paymentMethodNode.asText()).thenReturn("CARD");
-        when(root.has("country")).thenReturn(true);
-        when(root.get("country")).thenReturn(countryNode);
-        when(countryNode.asText()).thenReturn("US");
-        when(root.has("metadata")).thenReturn(true);
-        when(root.get("metadata")).thenReturn(metadataNode);
-        when(metadataNode.isNull()).thenReturn(false);
-        when(metadataNode.isMissingNode()).thenReturn(false);
-
         PaymentMetadata expectedMetadata = new PaymentMetadata("ord-1", 3, null, null, null, null, null, null);
-        when(objectMapper.convertValue(metadataNode, PaymentMetadata.class)).thenReturn(expectedMetadata);
+        PaymentReceivedEvent expectedEvent = new PaymentReceivedEvent(
+            paymentId, new java.math.BigDecimal("100.00"), "USD", "cust-1", "CARD", "US", expectedMetadata
+        );
+        when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class))).thenReturn(expectedEvent);
         when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         scheduler.processPendingEvents();
@@ -217,38 +138,10 @@ class OutboxRelaySchedulerTest {
 
         when(outboxRepo.findPending(50)).thenReturn(List.of(event));
 
-        JsonNode root = mock(JsonNode.class);
-        JsonNode paymentIdNode = mock(JsonNode.class);
-        JsonNode amountNode = mock(JsonNode.class);
-        JsonNode currencyNode = mock(JsonNode.class);
-        JsonNode customerIdNode = mock(JsonNode.class);
-        JsonNode paymentMethodNode = mock(JsonNode.class);
-        JsonNode countryNode = mock(JsonNode.class);
-        JsonNode metadataNode = mock(JsonNode.class);
-
-        when(objectMapper.readTree(anyString())).thenReturn(root);
-        when(root.has("paymentId")).thenReturn(true);
-        when(root.get("paymentId")).thenReturn(paymentIdNode);
-        when(paymentIdNode.asText()).thenReturn("pay-1");
-        when(root.has("amount")).thenReturn(true);
-        when(root.get("amount")).thenReturn(amountNode);
-        when(amountNode.asText()).thenReturn("10.00");
-        when(root.has("currency")).thenReturn(true);
-        when(root.get("currency")).thenReturn(currencyNode);
-        when(currencyNode.asText()).thenReturn("USD");
-        when(root.has("customerId")).thenReturn(true);
-        when(root.get("customerId")).thenReturn(customerIdNode);
-        when(customerIdNode.asText()).thenReturn("c");
-        when(root.has("paymentMethod")).thenReturn(true);
-        when(root.get("paymentMethod")).thenReturn(paymentMethodNode);
-        when(paymentMethodNode.asText()).thenReturn("CARD");
-        when(root.has("country")).thenReturn(true);
-        when(root.get("country")).thenReturn(countryNode);
-        when(countryNode.asText()).thenReturn("US");
-        when(root.has("metadata")).thenReturn(true);
-        when(root.get("metadata")).thenReturn(metadataNode);
-        when(metadataNode.isNull()).thenReturn(true);
-
+        PaymentReceivedEvent expectedEvent = new PaymentReceivedEvent(
+            "pay-1", new java.math.BigDecimal("10.00"), "USD", "c", "CARD", "US", null
+        );
+        when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class))).thenReturn(expectedEvent);
         when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         scheduler.processPendingEvents();
@@ -267,14 +160,8 @@ class OutboxRelaySchedulerTest {
 
         when(outboxRepo.findPending(50)).thenReturn(List.of(event));
 
-        JsonNode root = mock(JsonNode.class);
-        when(objectMapper.readTree(anyString())).thenReturn(root);
-        when(root.has("paymentId")).thenReturn(false);
-        when(root.has("amount")).thenReturn(false);
-        when(root.has("currency")).thenReturn(false);
-        when(root.has("customerId")).thenReturn(false);
-        when(root.has("paymentMethod")).thenReturn(false);
-        when(root.has("country")).thenReturn(false);
+        when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class)))
+            .thenThrow(new RuntimeException("Deserialization failed"));
 
         when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
