@@ -171,7 +171,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                 .otherwise()
                     .log("Max retries exceeded for ${header.kafka.KEY}, sending to DLQ")
                     .setHeader("kafka.KEY", header("kafka.KEY"))
-                    .to("kafka:{{kafka.topic.dead-letter}}")
+                    .to(CamelRouteConstants.DEAD_LETTER_TOPIC_URI)
             .end();
     }
 }
