@@ -19,13 +19,7 @@ class PaymentMapperTest {
 
     PaymentMapperTest() {
         com.poc.gateway.application.mapper.PaymentMapperImpl impl = new com.poc.gateway.application.mapper.PaymentMapperImpl();
-        try {
-            java.lang.reflect.Field field = com.poc.gateway.application.mapper.PaymentMapperImpl.class.getDeclaredField("paymentMetadataApplicationMapper");
-            field.setAccessible(true);
-            field.set(impl, metadataMapper);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to inject metadata mapper", e);
-        }
+        impl.metadataMapper = metadataMapper;
         mapper = impl;
     }
 
