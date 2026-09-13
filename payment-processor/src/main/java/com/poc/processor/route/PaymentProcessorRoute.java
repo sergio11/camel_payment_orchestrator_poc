@@ -18,12 +18,6 @@ import org.apache.camel.builder.RouteBuilder;
 @ApplicationScoped
 public class PaymentProcessorRoute extends RouteBuilder {
 
-    public static final String RETRY_TOPIC_URI = "kafka:{{kafka.topic.payments.retry}}";
-    public static final String DEAD_LETTER_TOPIC_URI = "kafka:{{kafka.topic.dead.letter}}";
-    public static final String DIRECT_RETRY_HANDLER = "direct:retry-handler";
-    public static final String DIRECT_POISON_DLQ = "direct:poison-dlq";
-    public static final String DIRECT_DLQ_HANDLER = "direct:dlq-handler";
-
     @Inject
     ObjectMapper objectMapper;
 
@@ -47,7 +41,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
 
     @Override
     public void configure() {
-        errorHandler(deadLetterChannel(DIRECT_RETRY_HANDLER)
+        errorHandler(deadLetterChannel(CamelRouteConstants.DIRECT_RETRY_HANDLER)
             .useOriginalMessage()
             .maximumRedeliveries(3)
             .redeliveryDelay(1000)
@@ -60,7 +54,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .maximumRedeliveries(0)
             .logExhausted(true)
             .log("Poison message, routing to DLQ without retry: ${exception.message}")
-            .to(DIRECT_POISON_DLQ);
+            .to(CamelRouteConstants.DIRECT_POISON_DLQ);
 
         var paymentJson = new org.apache.camel.component.jackson.JacksonDataFormat(objectMapper, PaymentMessage.class);
 
@@ -134,7 +128,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .to("direct:provider-selection")
             .end();
 
-        from(DIRECT_RETRY_HANDLER)
+        from(CamelRouteConstants.DIRECT_RETRY_HANDLER)
             .routeId("retry-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Exhausted retries for payment ${header.OriginalPaymentId}: ${exception.message}")
@@ -143,23 +137,23 @@ public class PaymentProcessorRoute extends RouteBuilder {
                     .marshal(paymentJson)
             .end()
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
-            .to(RETRY_TOPIC_URI)
+            .to(CamelRouteConstants.RETRY_TOPIC_URI)
             .log("Published to retry topic");
 
-        from(DIRECT_POISON_DLQ)
+        from(CamelRouteConstants.DIRECT_POISON_DLQ)
             .routeId("poison-dlq-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Poison payment ${header.OriginalPaymentId}: ${exception.message}")
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
-            .to(DEAD_LETTER_TOPIC_URI)
+            .to(CamelRouteConstants.DEAD_LETTER_TOPIC_URI)
             .log("Published poison to dead letter queue");
 
-        from(DIRECT_DLQ_HANDLER)
+        from(CamelRouteConstants.DIRECT_DLQ_HANDLER)
             .routeId("error-dlq-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
             .log("Error processing payment ${header.OriginalPaymentId}: ${exception.message}")
             .setHeader("kafka.KEY", header("OriginalPaymentId"))
-            .to(DEAD_LETTER_TOPIC_URI)
+            .to(CamelRouteConstants.DEAD_LETTER_TOPIC_URI)
             .log("Published to dead letter queue");
 
         from("kafka:{{kafka.topic.payments.retry}}?groupId=payment-processor-retry-group&autoCommitEnable=false&autoOffsetReset=earliest")

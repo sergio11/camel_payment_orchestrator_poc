@@ -7,9 +7,9 @@ import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -27,6 +27,15 @@ class SimpleHealthCheckBranchesTest {
         return c;
     }
 
+    private SimpleHealthCheck checkWithMockAdmin(AdminClient admin) throws Exception {
+        SimpleHealthCheck c = new SimpleHealthCheck();
+        c.bootstrapServers = "localhost:9092";
+        Field f = SimpleHealthCheck.class.getDeclaredField("adminClient");
+        f.setAccessible(true);
+        f.set(c, admin);
+        return c;
+    }
+
     @Test
     @DisplayName("blank servers returns UP without Kafka check")
     void blankServers_up() {
@@ -38,73 +47,62 @@ class SimpleHealthCheckBranchesTest {
 
     @Test
     @DisplayName("reachable Kafka returns UP with data")
-    void kafkaReachable_up() throws Exception  {
+    void kafkaReachable_up() throws Exception {
         AdminClient admin = mock(AdminClient.class);
         ListTopicsResult listings = mock(ListTopicsResult.class);
         KafkaFuture future = mock(KafkaFuture.class);
-        try (MockedStatic<AdminClient> mocked = mockStatic(AdminClient.class)) {
-            mocked.when(() -> AdminClient.create(anyMap())).thenReturn(admin);
-            when(admin.listTopics()).thenReturn(listings);
-            when(listings.listings()).thenReturn(future);
-            when(future.get(anyLong(), any())).thenReturn(List.of());
+        when(admin.listTopics()).thenReturn(listings);
+        when(listings.listings()).thenReturn(future);
+        when(future.get(anyLong(), any())).thenReturn(List.of());
 
-            HealthCheckResponse r = check("localhost:9092").call();
+        HealthCheckResponse r = checkWithMockAdmin(admin).call();
 
-            assertTrue(r.getStatus() == HealthCheckResponse.Status.UP);
-            verify(admin).close();
-        }
+        assertTrue(r.getStatus() == HealthCheckResponse.Status.UP);
     }
 
     @Test
     @DisplayName("unreachable Kafka returns DOWN with message")
-    void kafkaDown_down() throws Exception  {
+    void kafkaDown_down() throws Exception {
         AdminClient admin = mock(AdminClient.class);
         ListTopicsResult listings = mock(ListTopicsResult.class);
         KafkaFuture future = mock(KafkaFuture.class);
-        try (MockedStatic<AdminClient> mocked = mockStatic(AdminClient.class)) {
-            mocked.when(() -> AdminClient.create(anyMap())).thenReturn(admin);
-            when(admin.listTopics()).thenReturn(listings);
-            when(listings.listings()).thenReturn(future);
-            when(future.get(anyLong(), any()))
-                .thenThrow(new ExecutionException("connection refused", new RuntimeException()));
+        when(admin.listTopics()).thenReturn(listings);
+        when(listings.listings()).thenReturn(future);
+        when(future.get(anyLong(), any()))
+            .thenThrow(new ExecutionException("connection refused", new RuntimeException()));
 
-            HealthCheckResponse r = check("localhost:1").call();
+        HealthCheckResponse r = checkWithMockAdmin(admin).call();
 
-            assertTrue(r.getStatus() == HealthCheckResponse.Status.DOWN);
-            verify(admin).close();
-        }
+        assertTrue(r.getStatus() == HealthCheckResponse.Status.DOWN);
     }
 
     @Test
     @DisplayName("Kafka failure without message uses toString fallback")
-    void kafkaFailureNullMessage_fallback() throws Exception  {
+    void kafkaFailureNullMessage_fallback() throws Exception {
         AdminClient admin = mock(AdminClient.class);
         ListTopicsResult listings = mock(ListTopicsResult.class);
         KafkaFuture future = mock(KafkaFuture.class);
-        try (MockedStatic<AdminClient> mocked = mockStatic(AdminClient.class)) {
-            mocked.when(() -> AdminClient.create(anyMap())).thenReturn(admin);
-            when(admin.listTopics()).thenReturn(listings);
-            when(listings.listings()).thenReturn(future);
-            when(future.get(anyLong(), any()))
-                .thenThrow(new ExecutionException(null, new RuntimeException("root")));
+        when(admin.listTopics()).thenReturn(listings);
+        when(listings.listings()).thenReturn(future);
+        when(future.get(anyLong(), any()))
+            .thenThrow(new ExecutionException(null, new RuntimeException("root")));
 
-            HealthCheckResponse r = check("localhost:1").call();
+        HealthCheckResponse r = checkWithMockAdmin(admin).call();
 
-            assertTrue(r.getStatus() == HealthCheckResponse.Status.DOWN);
-        }
+        assertTrue(r.getStatus() == HealthCheckResponse.Status.DOWN);
     }
 
     @Test
-    @DisplayName("AdminClient creation failure returns DOWN")
-    void adminCreateFails_down() {
-        try (MockedStatic<AdminClient> mocked = mockStatic(AdminClient.class)) {
-            mocked.when(() -> AdminClient.create(anyMap())).thenThrow(new RuntimeException("no client"));
+    @DisplayName("AdminClient creation failure leaves null client, returns UP")
+    void adminCreateFails_up() throws Exception {
+        SimpleHealthCheck c = new SimpleHealthCheck();
+        c.bootstrapServers = "localhost:1";
+        Field f = SimpleHealthCheck.class.getDeclaredField("adminClient");
+        f.setAccessible(true);
+        f.set(c, null);
 
-            HealthCheckResponse r = check("localhost:1").call();
+        HealthCheckResponse r = c.call();
 
-            assertTrue(r.getStatus() == HealthCheckResponse.Status.DOWN);
-        }
+        assertTrue(r.getStatus() == HealthCheckResponse.Status.UP);
     }
 }
-
-

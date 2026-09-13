@@ -121,7 +121,7 @@ class KafkaConsumerManagerTest {
     }
 
     @Test
-    void stop_withExecutorAndConsumer_callsShutdownNowAndCloses() throws Exception {
+    void stop_withExecutorAndConsumer_callsShutdownAndCloses() throws Exception {
         ExecutorService mockExecutor = mock(ExecutorService.class);
         when(mockExecutor.awaitTermination(anyLong(), any())).thenReturn(true);
         setField("executor", mockExecutor);
@@ -130,7 +130,8 @@ class KafkaConsumerManagerTest {
 
         manager.stop();
 
-        verify(mockExecutor).shutdownNow();
+        verify(mockExecutor).shutdown();
+        verify(mockExecutor).awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS);
         verify(kafkaConsumer).close();
         assertThatRunningIsFalse();
     }
@@ -156,7 +157,7 @@ class KafkaConsumerManagerTest {
 
         manager.stop();
 
-        verify(mockExecutor).shutdownNow();
+        verify(mockExecutor).shutdown();
     }
 
     @Test
@@ -180,7 +181,7 @@ class KafkaConsumerManagerTest {
 
         manager.stop();
 
-        verify(mockExecutor).shutdownNow();
+        verify(mockExecutor).shutdown();
         verify(kafkaConsumer).close();
     }
 

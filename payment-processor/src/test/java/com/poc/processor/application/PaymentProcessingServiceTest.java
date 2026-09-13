@@ -32,21 +32,27 @@ class PaymentProcessingServiceTest {
     @DisplayName("execute with low risk payment completes successfully")
     void execute_approve() {
         PaymentMessage msg = createLowRiskMessage();
-        assertDoesNotThrow(() -> service.execute(msg));
+        service.execute(msg);
+        assertNotNull(msg, "Message should still be valid after processing");
+        assertNotNull(msg.paymentId(), "PaymentId should be preserved");
     }
 
     @Test
     @DisplayName("execute with high risk payment completes successfully")
     void execute_reject() {
         PaymentMessage msg = createHighRiskMessage();
-        assertDoesNotThrow(() -> service.execute(msg));
+        service.execute(msg);
+        assertNotNull(msg, "Message should still be valid after processing");
+        assertNotNull(msg.paymentId(), "PaymentId should be preserved");
     }
 
     @Test
     @DisplayName("execute with medium risk payment completes successfully")
     void execute_review() {
         PaymentMessage msg = createMediumRiskMessage();
-        assertDoesNotThrow(() -> service.execute(msg));
+        service.execute(msg);
+        assertNotNull(msg, "Message should still be valid after processing");
+        assertNotNull(msg.paymentId(), "PaymentId should be preserved");
     }
 
     @Test

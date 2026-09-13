@@ -62,15 +62,23 @@ public class KafkaConsumerManager {
     void stop() {
         running = false;
         if (executor != null) {
-            executor.shutdownNow();
+            executor.shutdown();
             try {
-                executor.awaitTermination(5, TimeUnit.SECONDS);
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                    executor.awaitTermination(5, TimeUnit.SECONDS);
+                }
             } catch (InterruptedException e) {
+                executor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
         }
         if (consumer != null) {
-            consumer.close();
+            try {
+                consumer.close();
+            } catch (Exception e) {
+                LOG.warnf(e, "Error closing Kafka consumer");
+            }
         }
     }
 

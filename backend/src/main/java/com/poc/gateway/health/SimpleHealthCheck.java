@@ -11,6 +11,8 @@ import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.eclipse.microprofile.health.HealthCheckResponseBuilder;
 import org.eclipse.microprofile.health.Readiness;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @Readiness
@@ -20,18 +22,39 @@ public class SimpleHealthCheck implements HealthCheck {
     @ConfigProperty(name = "kafka.bootstrap.servers", defaultValue = "")
     String bootstrapServers;
 
+    private AdminClient adminClient;
+
+    @PostConstruct
+    void init() {
+        if (bootstrapServers != null && !bootstrapServers.isBlank()) {
+            adminClient = AdminClient.create(Map.of(
+                AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 3000,
+                AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 5000
+            ));
+        }
+    }
+
+    @PreDestroy
+    void destroy() {
+        if (adminClient != null) {
+            try {
+                adminClient.close();
+            } catch (Exception e) {
+                // Ignore on shutdown
+            }
+        }
+    }
+
     @Override
     public HealthCheckResponse call() {
         HealthCheckResponseBuilder builder = HealthCheckResponse.named("Payment Gateway Health Check");
-        if (bootstrapServers == null || bootstrapServers.isBlank()) {
+        if (adminClient == null) {
             builder.up();
             return builder.build();
         }
-        try (AdminClient admin = AdminClient.create(
-                Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
-                        AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 3000,
-                        AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 5000))) {
-            admin.listTopics().listings().get(5, TimeUnit.SECONDS);
+        try {
+            adminClient.listTopics().listings().get(5, TimeUnit.SECONDS);
             builder.up().withData("kafka", "reachable");
         } catch (Exception e) {
             builder.down().withData("kafka", e.getMessage() == null ? e.toString() : e.getMessage());
