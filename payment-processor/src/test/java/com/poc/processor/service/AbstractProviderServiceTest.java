@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import jakarta.ws.rs.core.Response;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -138,5 +139,13 @@ abstract class AbstractProviderServiceTest {
         }
         assertTrue(result.success(), "Expected at least one success in 20 attempts");
         assertNotNull(result.transactionId(), "TransactionId must be present on success");
+    }
+
+    @Test
+    @DisplayName("handlePayment returns Response for any payment message")
+    void handlePayment_returnsResponse() {
+        Response response = providerService().handlePayment(createDefaultPaymentMessage());
+        assertNotNull(response);
+        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
     }
 }
