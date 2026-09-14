@@ -67,7 +67,7 @@ class PoisonMessageE2E {
     }
 
     @Test
-    @DisplayName("E2E: Payment with null required fields goes to dead-letter (IllegalArgumentException)")
+    @DisplayName("E2E: Payment with null required fields goes to dead-letter (PaymentProcessingException)")
     void testInvalidFieldGoesToDLQ() throws Exception {
         String paymentId = UUID.randomUUID().toString();
         PaymentMessage payment = new PaymentMessage(

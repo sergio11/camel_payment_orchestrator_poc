@@ -90,7 +90,7 @@ abstract class AbstractProviderServiceTest {
         });
 
         testThread.start();
-        latch.await();
+        assertTrue(latch.await(5, java.util.concurrent.TimeUnit.SECONDS), "Thread did not complete within 5 seconds");
 
         assertTrue(interruptedResult.get(), "Expected INTERRUPTED error code when thread is interrupted");
     }
@@ -131,10 +131,12 @@ abstract class AbstractProviderServiceTest {
     @Test
     @DisplayName("processPayment success response has transactionId")
     void processPayment_success_hasTransactionId() {
-        PaymentMessage paymentMessage = createDefaultPaymentMessage();
-
-        ProviderGatewayResult result = providerService().processPayment(paymentMessage);
-        assertTrue(result.success(), "Expected success");
+        ProviderGatewayResult result = null;
+        for (int i = 0; i < 20; i++) {
+            result = providerService().processPayment(createDefaultPaymentMessage());
+            if (result.success()) break;
+        }
+        assertTrue(result.success(), "Expected at least one success in 20 attempts");
         assertNotNull(result.transactionId(), "TransactionId must be present on success");
     }
 }

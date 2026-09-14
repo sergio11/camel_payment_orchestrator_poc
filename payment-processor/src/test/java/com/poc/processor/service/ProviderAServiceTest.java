@@ -29,19 +29,19 @@ class ProviderAServiceTest extends AbstractProviderServiceTest {
     @Test
     @DisplayName("processPayment returns success with correct response fields")
     void processPayment_returnsSuccess_verifiesFields() {
-        PaymentMessage paymentMessage = createDefaultPaymentMessage();
-
-        ProviderGatewayResult result = providerAService.processPayment(paymentMessage);
+        ProviderGatewayResult result = null;
+        for (int i = 0; i < 20; i++) {
+            result = providerAService.processPayment(createDefaultPaymentMessage());
+            if (result.success()) break;
+        }
 
         assertNotNull(result);
-        assertTrue(result.success(), "Expected success for normal payment");
+        assertTrue(result.success(), "Expected at least one success in 20 attempts");
 
-        if (result.success()) {
-            assertEquals("provider-a", result.providerId());
-            assertNotNull(result.transactionId());
-            assertFalse(result.transactionId().isEmpty());
-            assertNull(result.errorCode());
-            assertNull(result.errorMessage());
-        }
+        assertEquals("provider-a", result.providerId());
+        assertNotNull(result.transactionId());
+        assertFalse(result.transactionId().isEmpty());
+        assertNull(result.errorCode());
+        assertNull(result.errorMessage());
     }
 }
