@@ -5,6 +5,7 @@ import com.poc.processor.port.outbound.PaymentProviderPort;
 import com.poc.shared.event.PaymentMessage;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -43,5 +44,13 @@ class ProviderAServiceTest extends AbstractProviderServiceTest {
         assertFalse(result.transactionId().isEmpty());
         assertNull(result.errorCode());
         assertNull(result.errorMessage());
+    }
+
+    @Test
+    @DisplayName("handlePayment returns Response for any payment message")
+    void handlePayment_returnsResponse() {
+        Response response = providerAService.handlePayment(createDefaultPaymentMessage());
+        assertNotNull(response);
+        assertTrue(response.getStatus() == 200 || response.getStatus() == 500);
     }
 }
