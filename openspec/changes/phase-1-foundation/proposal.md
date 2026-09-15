@@ -1,37 +1,31 @@
-# Proposal: Phase 1 - Foundation
+## Why
 
-## Overview
-Establish the foundational infrastructure for the Payment Orchestration Layer project including project structure, development tools, local services, and Kubernetes cluster setup.
+The project needs a foundational infrastructure layer before any payment processing
+logic can be implemented. This includes a properly structured Maven multi-module
+project, local development services (Kafka, Prometheus, Jaeger, Grafana), Kubernetes
+cluster setup, and SDD workflow automation via Rake tasks.
 
-## Problem Statement
-Before implementing payment processing logic, the project requires:
-- A properly structured Maven/Quarkus project
-- Local development services (Kafka, Prometheus, Jaeger)
-- Kubernetes cluster (Kind) for local testing
-- SDD workflow automation with Rake
+## What Changes
 
-## Goals
-- Create Maven multi-module project structure for Quarkus + Camel
-- Set up Podman Compose for local services (Kafka, Prometheus, Jaeger)
-- Configure Kind cluster within Podman Desktop
-- Implement Rake tasks for SDD workflow automation
-- Establish logging and basic observability
+- Maven multi-module project structure (shared, backend, payment-processor) with Quarkus BOM
+- Podman Compose for local services (Kafka, Prometheus, Jaeger, Grafana)
+- Kubernetes infrastructure manifests for Kafka, Postgres, Jaeger, Monitoring
+- Rake task automation for SDD workflow (ADR validation, spec validation, test execution)
+- OpenSpec initialization with ADR and API spec scaffolding
+- Monitoring configuration (Prometheus scrape configs, Grafana dashboards)
 
-## Non-Goals
-- No payment processing logic (Phase 3)
-- No actual provider integration (simulated)
-- No production Kubernetes configuration
-- No database setup (future phase)
+## Capabilities
 
-## Success Metrics
-- `rake podman:ps` shows all services running
-- `rake k8s:pods` shows cluster operational
-- `rake sdd:list` shows changes initialized
-- Application starts with health endpoint responding
+### New Capabilities
+- `project-scaffolding`: Maven multi-module structure with Quarkus BOM and shared dependencies
+- `local-services`: Podman Compose for Kafka, Prometheus, Jaeger, Grafana
+- `k8s-infrastructure`: Base Kubernetes manifests for infrastructure components
+- `sdd-automation`: Rake tasks for spec-driven development workflow
 
-## Timeline
-- Start: Week 1
-- Target: Week 1 completion
+### Modified Capabilities
+(none - this is the foundation)
 
-## Dependencies
-- None (this is the foundation)
+## Impact
+
+Establishes the entire project structure, development workflow, and infrastructure
+required by all subsequent phases.

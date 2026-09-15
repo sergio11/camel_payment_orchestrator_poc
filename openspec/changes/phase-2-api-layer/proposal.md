@@ -1,38 +1,33 @@
-# Proposal: Phase 2 - API Layer
+## Why
 
-## Overview
-Implement the REST API layer for the Payment Orchestration Layer using Quarkus, following a spec-first approach with OpenAPI 3.0 specification.
+The system needs a REST API to accept payment requests, query status, list with
+filtering, and update payment status. This is the public entry point for all
+payment operations and must support idempotency, validation, and structured
+error responses.
 
-## Problem Statement
-The system needs a REST API to:
-- Accept payment requests via POST /payments
-- Query payment status via GET /payments/{id}
-- List payments with filtering via GET /payments
-- Provide health check endpoint
+## What Changes
 
-## Goals
-- Define OpenAPI specification for all payment endpoints
-- Implement Quarkus REST resources with proper validation
-- Configure Bean Validation for request bodies
-- Implement proper error handling (400, 404, 422, 500)
-- Enable OpenAPI documentation endpoint
-- Set up basic in-memory payment storage
+- POST /payments to create payments with idempotency support
+- GET /payments with customerId, status, limit, offset filtering and pagination
+- GET /payments/{id} for payment retrieval by UUID
+- PATCH /payments/{id}/status for status updates
+- GET /payments/idempotency/{key} for idempotency-based retrieval
+- Health check via SmallRye Health (/q/health)
+- OpenAPI documentation via SmallRye OpenAPI
+- Bean Validation with custom @SupportedCurrency validator
+- Global exception mapper with structured ErrorResponseDTO
 
-## Non-Goals
-- No actual payment processing (deferred to Phase 3)
-- No Kafka integration yet
-- No database (in-memory only)
-- No authentication/authorization
+## Capabilities
 
-## Success Metrics
-- All endpoints return correct HTTP status codes
-- Invalid requests return 400 with error details
-- OpenAPI docs available at /q/openapi
-- Health endpoint returns UP status
+### New Capabilities
+- `payment-rest-api`: REST endpoints for payment CRUD operations with hexagonal architecture
+- `payment-validation`: Bean Validation with custom validators for currency and field constraints
+- `error-handling`: Global exception mapper with MarkerBasedClassifier for structured error responses
 
-## Timeline
-- Start: Week 2
-- Target: Week 2 completion
+### Modified Capabilities
+(none)
 
-## Dependencies
-- Phase 1 foundation must be complete
+## Impact
+
+Defines the public API contract for the Payment Orchestration Layer.
+All subsequent phases (Camel integration, K8s deployment) build on this API layer.

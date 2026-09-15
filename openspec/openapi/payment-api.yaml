@@ -16,6 +16,13 @@ paths:
       description: Submit a payment request for processing through fraud check and provider routing
       tags:
         - Payments
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Optional idempotency key for deduplication
       requestBody:
         required: true
         content:
@@ -47,22 +54,11 @@ paths:
         - $ref: '#/components/parameters/offset'
       responses:
         200:
-          description: List of payments
+          description: Paginated list of payments
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  payments:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PaymentResponse'
-                  total:
-                    type: integer
-                  limit:
-                    type: integer
-                  offset:
-                    type: integer
+                $ref: '#/components/schemas/PaymentPageResponse'
 
   /payments/{id}:
     get:
@@ -90,10 +86,10 @@ paths:
           $ref: '#/components/responses/NotFound'
 
   /payments/{id}/status:
-    get:
-      operationId: getPaymentStatus
-      summary: Get payment status
-      description: Simplified endpoint to check current payment status
+    patch:
+      operationId: updatePaymentStatus
+      summary: Update payment status
+      description: Updates the status of an existing payment
       tags:
         - Payments
       parameters:
@@ -103,43 +99,62 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePaymentStatusRequest'
       responses:
         200:
-          description: Payment status
+          description: Payment status updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentStatusResponse'
+                $ref: '#/components/schemas/PaymentResponse'
+        400:
+          $ref: '#/components/responses/BadRequest'
         404:
           $ref: '#/components/responses/NotFound'
 
-  /health:
+  /payments/idempotency/{key}:
+    get:
+      operationId: getByIdempotencyKey
+      summary: Get payment by idempotency key
+      description: Retrieves a payment by its idempotency key
+      tags:
+        - Payments
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Idempotency key
+      responses:
+        200:
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        404:
+          $ref: '#/components/responses/NotFound'
+
+  /q/health:
     get:
       operationId: healthCheck
       summary: Health check
-      description: Returns the health status of the service
+      description: Returns the health status of the service (SmallRye Health)
       tags:
         - Health
       responses:
         200:
-          description: Service is healthy
+          description: Service health status
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    enum: [UP, DOWN]
-                  checks:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                        status:
-                          type: string
+                $ref: '#/components/schemas/HealthResponse'
 
 components:
   parameters:
@@ -197,7 +212,7 @@ components:
           example: cust-12345
         paymentMethod:
           type: string
-          enum: [CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER, WALLET, CRYPTO]
+          description: "Payment method identifier (e.g. CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER, WALLET, CRYPTO)"
           example: CREDIT_CARD
         country:
           type: string
@@ -205,13 +220,17 @@ components:
           description: Country code (ISO 3166-1 alpha-2)
           example: US
         metadata:
-          type: object
-          additionalProperties: true
-          maxProperties: 20
-          description: Additional payment metadata
-          example:
-            orderId: order-67890
-            description: Purchase of goods
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    UpdatePaymentStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
+          description: New payment status
 
     PaymentResponse:
       type: object
@@ -225,9 +244,9 @@ components:
           format: decimal
         currency:
           type: string
-        customerId:
+        customer_id:
           type: string
-        paymentMethod:
+        payment_method:
           type: string
         country:
           type: string
@@ -239,20 +258,33 @@ components:
           type: string
           description: Selected payment provider
           nullable: true
-        failureReason:
+        failure_reason:
           type: string
           description: Reason for failure if status is FAILED
           nullable: true
         metadata:
-          type: object
-          additionalProperties: true
-        createdAt:
+          $ref: '#/components/schemas/PaymentMetadata'
+        created_at:
           type: string
           format: date-time
           example: 2026-05-01T10:30:00Z
-        updatedAt:
+        updated_at:
           type: string
           format: date-time
+
+    PaymentPageResponse:
+      type: object
+      properties:
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentResponse'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
 
     PaymentStatusResponse:
       type: object
@@ -263,9 +295,54 @@ components:
         status:
           type: string
           enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
-        lastUpdated:
+        last_updated:
           type: string
           format: date-time
+
+    PaymentMetadata:
+      type: object
+      properties:
+        order_id:
+          type: string
+        attempts:
+          type: integer
+          minimum: 0
+          maximum: 100
+        is_new_payment_method:
+          type: boolean
+        payment_method_age_days:
+          type: integer
+          minimum: 0
+        customer_risk_tier:
+          type: string
+        enriched_at:
+          type: string
+        velocity_score:
+          type: integer
+          minimum: 0
+          maximum: 99
+        geo_risk_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+              data:
+                type: object
 
     ErrorDetail:
       type: object

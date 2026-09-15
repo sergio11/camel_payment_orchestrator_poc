@@ -15,30 +15,30 @@ servers:
 channels:
   payment.received:
     address: payments.events.received
-    description: Event published when a new payment is received
+    description: Event published when a new payment is received by the API Gateway
     messages:
       $ref: '#/components/messages/PaymentReceived'
     publish:
       summary: Payment received
-      description: Published when a new payment request enters the system
+      description: Published by API Gateway when a new payment request enters the system
 
   payment.processed:
     address: payments.events.processed
-    description: Event published when a payment has been processed
+    description: Event published when a payment has been successfully processed by a provider
     messages:
       $ref: '#/components/messages/PaymentProcessed'
     publish:
       summary: Payment processed
-      description: Published after successful payment processing
+      description: Published by ProviderSelectionRoute after successful provider response
 
   payment.failed:
     address: payments.events.failed
-    description: Event published when payment processing fails
+    description: Event published when payment is rejected by fraud engine
     messages:
       $ref: '#/components/messages/PaymentFailed'
     publish:
       summary: Payment failed
-      description: Published when payment processing fails
+      description: Published by FraudEngineRoute when fraud action is REJECT
 
   payment.review:
     address: payments.events.review
@@ -47,16 +47,16 @@ channels:
       $ref: '#/components/messages/PaymentReview'
     publish:
       summary: Payment review
-      description: Published when fraud engine marks payment for REVIEW
+      description: Published by FraudEngineRoute when fraud action is REVIEW
 
   fraud.detected:
     address: fraud.events.detected
-    description: Event published when fraud is detected
+    description: Event published when fraud evaluation completes
     messages:
       $ref: '#/components/messages/FraudDetected'
     publish:
-      summary: Fraud detected
-      description: Published when fraud check detects high risk
+      summary: Fraud evaluation result
+      description: Published by FraudEngineRoute with the FraudResult (APPROVE/REVIEW/REJECT)
 
   payment.status.changed:
     address: payments.events.status.changed
@@ -65,25 +65,34 @@ channels:
       $ref: '#/components/messages/PaymentStatusChanged'
     publish:
       summary: Payment status changed
-      description: Published when payment status transitions
+      description: Published by API Gateway when payment status transitions
 
   payment.audit:
     address: payments.events.audit
-    description: Event published for payment audit trail
+    description: Event published for payment audit trail via wire tap
     messages:
       $ref: '#/components/messages/PaymentAudit'
     publish:
       summary: Payment audit event
-      description: Published for payment audit logging and compliance
+      description: Published by AuditPipelineRoute via wire tap from main processor
+
+  payment.retry:
+    address: payments.events.retry
+    description: Retry queue for transient payment processing failures
+    messages:
+      $ref: '#/components/messages/PaymentRetry'
+    publish:
+      summary: Payment retry
+      description: Published by PaymentProcessorRoute when main route retries are exhausted
 
   payment.dead-letter:
     address: payments.events.dead-letter
-    description: Event published when payment processing exhausts all retries
+    description: Event published when payment processing exhausts all retries or encounters poison messages
     messages:
       $ref: '#/components/messages/PaymentDeadLetter'
     publish:
       summary: Payment dead letter event
-      description: Published when payment cannot be processed after all retry attempts
+      description: Published by dead letter handlers when payment cannot be processed
 
 components:
   messages:
@@ -97,28 +106,28 @@ components:
     PaymentProcessed:
       name: PaymentProcessed
       title: Payment Processed Event
-      summary: Event triggered when a payment has been successfully processed
+      summary: Event triggered when a payment has been successfully processed by a provider
       payload:
         $ref: '#/components/schemas/PaymentProcessedPayload'
 
     PaymentFailed:
       name: PaymentFailed
       title: Payment Failed Event
-      summary: Event triggered when payment processing fails
+      summary: Event triggered when payment is rejected by fraud engine
       payload:
-        $ref: '#/components/schemas/PaymentFailedPayload'
+        $ref: '#/components/schemas/PaymentMessagePayload'
 
     PaymentReview:
       name: PaymentReview
       title: Payment Review Event
       summary: Event triggered when payment requires manual review
       payload:
-        $ref: '#/components/schemas/PaymentReviewPayload'
+        $ref: '#/components/schemas/PaymentMessagePayload'
 
     FraudDetected:
       name: FraudDetected
-      title: Fraud Detected Event
-      summary: Event triggered when fraud detection identifies high risk
+      title: Fraud Evaluation Result
+      summary: Event triggered when fraud detection evaluates a payment
       payload:
         $ref: '#/components/schemas/FraudDetectedPayload'
 
@@ -132,14 +141,21 @@ components:
     PaymentAudit:
       name: PaymentAudit
       title: Payment Audit Event
-      summary: Event triggered for payment audit trail
+      summary: Event triggered for payment audit trail (wire tap)
       payload:
-        $ref: '#/components/schemas/PaymentAuditPayload'
+        $ref: '#/components/schemas/PaymentMessagePayload'
+
+    PaymentRetry:
+      name: PaymentRetry
+      title: Payment Retry Event
+      summary: Event triggered when payment retries are exhausted on main processor
+      payload:
+        $ref: '#/components/schemas/PaymentMessagePayload'
 
     PaymentDeadLetter:
       name: PaymentDeadLetter
       title: Payment Dead Letter Event
-      summary: Event triggered when payment processing exhausts all retries
+      summary: Event triggered when payment cannot be processed after all attempts
       payload:
         $ref: '#/components/schemas/PaymentDeadLetterPayload'
 
@@ -147,26 +163,18 @@ components:
     PaymentReceivedPayload:
       type: object
       required:
-        - eventId
         - paymentId
         - amount
         - currency
         - customerId
         - paymentMethod
-        - country
-        - attemptCount
-        - isNewPaymentMethod
-        - customerAgeDays
-        - timeZone
-        - timestamp
       properties:
-        eventId:
-          type: string
         paymentId:
           type: string
-          format: uuid
+          description: Unique payment identifier
         amount:
-          type: number
+          type: string
+          description: Payment amount (serialized as string by API Gateway)
         currency:
           type: string
           enum: [USD, EUR, GBP, MXN, JPY]
@@ -176,6 +184,60 @@ components:
           type: string
         country:
           type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    PaymentProcessedPayload:
+      type: object
+      required:
+        - providerId
+        - transactionId
+        - success
+        - processedAt
+      properties:
+        providerId:
+          type: string
+          description: Provider that processed the payment
+        transactionId:
+          type: string
+          description: Provider transaction identifier
+        success:
+          type: boolean
+          description: Whether the provider call succeeded
+        errorCode:
+          type: string
+          nullable: true
+          description: Error code if provider call failed
+        errorMessage:
+          type: string
+          nullable: true
+          description: Error message if provider call failed
+        processedAt:
+          type: string
+          format: date-time
+          description: Timestamp when provider processed the payment
+
+    PaymentMessagePayload:
+      type: object
+      description: Full payment message used internally across Camel routes
+      properties:
+        eventId:
+          type: string
+          nullable: true
+        paymentId:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string
+        customerId:
+          type: string
+        paymentMethod:
+          type: string
+        country:
+          type: string
+          nullable: true
         attemptCount:
           type: integer
         isNewPaymentMethod:
@@ -184,101 +246,31 @@ components:
           type: integer
         timeZone:
           type: string
+          nullable: true
         metadata:
-          type: object
+          $ref: '#/components/schemas/PaymentMetadata'
         timestamp:
           type: string
           format: date-time
-
-    PaymentProcessedPayload:
-      type: object
-      required:
-        - paymentId
-        - status
-        - provider
-        - timestamp
-      properties:
-        paymentId:
-          type: string
-          format: uuid
-        amount:
-          type: number
-        currency:
-          type: string
-        status:
-          type: string
-          enum: [APPROVED]
-        provider:
-          type: string
-        providerTransactionId:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
-
-    PaymentFailedPayload:
-      type: object
-      required:
-        - paymentId
-        - status
-        - failureReason
-        - timestamp
-      properties:
-        paymentId:
-          type: string
-          format: uuid
-        amount:
-          type: number
-        currency:
-          type: string
-        status:
-          type: string
-          enum: [FAILED, REJECTED]
-        failureReason:
-          type: string
-        providerAttempted:
-          type: string
-        attempts:
-          type: integer
-        timestamp:
-          type: string
-          format: date-time
-
-    PaymentReviewPayload:
-      type: object
-      required:
-        - paymentId
-        - status
-        - timestamp
-      properties:
-        paymentId:
-          type: string
-          format: uuid
-        amount:
-          type: number
-        currency:
-          type: string
-        status:
-          type: string
-          enum: [REVIEW]
-        reason:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
+          nullable: true
 
     FraudDetectedPayload:
       type: object
       required:
+        - type
         - paymentId
+        - amount
+        - customerId
         - riskScore
         - triggeredRules
         - action
-        - timestamp
       properties:
+        type:
+          type: string
+          enum: [APPROVE, REVIEW, REJECT]
+          description: Jackson polymorphism discriminator
         paymentId:
           type: string
-          format: uuid
         amount:
           type: number
         customerId:
@@ -294,69 +286,70 @@ components:
           example: ["HIGH_AMOUNT", "HIGH_RISK_COUNTRY"]
         action:
           type: string
-          enum: [REVIEW, REJECT, APPROVE]
-        timestamp:
+          enum: [APPROVE, REVIEW, REJECT]
+        reason:
           type: string
-          format: date-time
+          nullable: true
+          description: Present only for REVIEW and REJECT actions
 
     PaymentStatusChangedPayload:
       type: object
       required:
         - paymentId
-        - previousStatus
-        - newStatus
-        - timestamp
+        - status
       properties:
         paymentId:
           type: string
-          format: uuid
-        previousStatus:
+        status:
           type: string
           enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
-        newStatus:
-          type: string
-          enum: [PENDING, PROCESSING, APPROVED, REJECTED, FAILED, REVIEW]
-        reason:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
-
-    PaymentAuditPayload:
-      type: object
-      required:
-        - paymentId
-        - action
-        - timestamp
-      properties:
-        paymentId:
-          type: string
-          format: uuid
-        action:
-          type: string
-        details:
-          type: object
-        timestamp:
-          type: string
-          format: date-time
 
     PaymentDeadLetterPayload:
       type: object
-      required:
-        - paymentId
-        - failureReason
-        - attempts
-        - timestamp
+      description: Dead letter payload (may come from API Gateway or payment-processor)
       properties:
         paymentId:
           type: string
-          format: uuid
-        failureReason:
+        originalPayload:
+          type: string
+          nullable: true
+          description: Original serialized payment message (from API Gateway)
+        reason:
+          type: string
+          nullable: true
+          description: Failure reason (from API Gateway)
+        amount:
+          type: number
+          nullable: true
+          description: Present when published by payment-processor as PaymentMessage
+        currency:
+          type: string
+          nullable: true
+        customerId:
+          type: string
+          nullable: true
+        paymentMethod:
+          type: string
+          nullable: true
+        metadata:
+          $ref: '#/components/schemas/PaymentMetadata'
+
+    PaymentMetadata:
+      type: object
+      properties:
+        order_id:
           type: string
         attempts:
           type: integer
-        lastError:
+        is_new_payment_method:
+          type: boolean
+        payment_method_age_days:
+          type: integer
+        customer_risk_tier:
           type: string
-        timestamp:
+        enriched_at:
           type: string
-          format: date-time
+        velocity_score:
+          type: integer
+        geo_risk_score:
+          type: integer
