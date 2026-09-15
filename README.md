@@ -8,7 +8,7 @@
 [![Kafka](https://img.shields.io/badge/Apache_Kafka-3.x-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.28-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-60+-brightgreen?style=for-the-badge)](#-testing)
+[![Tests](https://img.shields.io/badge/Tests-624+-brightgreen?style=for-the-badge)](#-testing)
 
 A proof-of-concept **Payment Orchestration Layer** built with Apache Camel, Quarkus, and Kafka — demonstrating event-driven architecture, fraud detection, circuit breaker patterns, provider failover, and Kubernetes-native deployment.
 
@@ -36,10 +36,10 @@ Java 17 LTS provides modern language features that significantly improve code qu
 
 | Feature | Usage in this POC | Benefit |
 |---------|-------------------|---------|
-| **Records** | `PaymentRequest`, `PaymentResponse`, `PaymentMessage`, `FraudResult` | Immutable DTOs without boilerplate constructors, getters, equals, hashCode |
+| **Records** | `PaymentRequestDTO`, `PaymentResponseDTO`, `PaymentMessage`, `FraudResult` | Immutable DTOs without boilerplate constructors, getters, equals, hashCode |
 | **Sealed Interfaces** | `FraudResult` with `Approve`, `Review`, `Reject` permits | Type-safe fraud outcomes with exhaustive switch expressions |
 | **Pattern Matching** | `instanceof` in exception mappers | Cleaner exception handling without explicit casts |
-| **Switch Expressions** | `PaymentEnrichProcessor` risk tier selection | Expression-based switching with arrow syntax |
+| **Switch Expressions** | `MockGeoRiskAdapter`, `MockCustomerRiskAdapter`, `GlobalExceptionMapper` | Expression-based switching with arrow syntax |
 | **Text Blocks** | Test JSON payloads | Multi-line strings without concatenation |
 
 ### ⚡ Why Quarkus?
@@ -60,7 +60,7 @@ Apache Camel provides Enterprise Integration Patterns (EIP) out of the box:
 - **Wire Tap**: Non-blocking parallel audit logging without affecting the main flow
 - **Circuit Breaker**: Resilience4j integration for provider fault tolerance
 - **Dead Letter Channel**: Capture unrecoverable failures for later analysis
-- **Dynamic Router**: Round-robin provider selection with failover capability
+- **Dynamic Router**: Primary provider routing with circuit breaker failover
 - **Kafka Component**: Native consumer/producer integration with Apache Kafka
 
 ### 📨 Why Apache Kafka?
@@ -76,7 +76,7 @@ Kafka provides the backbone for event-driven architecture:
 
 Kubernetes provides production-grade orchestration:
 
-- **HPA**: Auto-scaling based on CPU (70%) and memory (80%) with min 2 / max 10 pods
+- **HPA**: Auto-scaling based on CPU (70%) and memory (80%) — api-gateway min 1, payment-processor min 2, max 10 pods
 - **ConfigMaps**: Externalized configuration for fraud rules and provider settings
 - **Secrets**: Secure storage for provider credentials
 - **Health Probes**: Liveness, readiness, and startup probes for reliable deployments
@@ -101,7 +101,7 @@ Kubernetes provides production-grade orchestration:
 | **Transactional Outbox** | Reliable Kafka publishing via outbox table + relay scheduler, ensuring at-least-once delivery |
 | **Idempotency Support** | Idempotency key header with unique database constraints to prevent duplicate payment processing |
 | **PostgreSQL Persistence** | Production-ready persistence with JPA/Hibernate, Flyway migrations (payments, outbox, metadata), H2 for dev |
-| **Test Coverage** | ~60 tests covering unit, integration, and Testcontainers-based Kafka and PostgreSQL tests |
+| **Test Coverage** | ~624 tests covering unit, integration, and Testcontainers-based Kafka and PostgreSQL tests |
 
 ### Weaknesses / Tradeoffs
 
@@ -237,7 +237,7 @@ Six rules evaluate the payment sequentially. Each rule adds points to a cumulati
 | # | Rule | Condition | Points |
 |---|------|-----------|--------|
 | 1 | HIGH_AMOUNT | amount > 15,000 | +50 |
-| 2 | HIGH_RISK_COUNTRY | country in [XX, YY, ZZ] | +30 |
+| 2 | HIGH_RISK_COUNTRY | country in [XX, YY, ZZ, WW] | +30 |
 | 3 | RAPID_RETRY | attempts > 3 | +25 |
 | 4 | NEW_PAYMENT_METHOD | method age < 30 days | +20 |
 | 5 | UNUSUAL_HOUR | hour between 2-5 AM | +15 |
@@ -246,7 +246,7 @@ Six rules evaluate the payment sequentially. Each rule adds points to a cumulati
 ```mermaid
 flowchart LR
     M["Payment Message"] --> R1{"HIGH_AMOUNT\n>15k?"}
-    R1 -->|+50| R2{"COUNTRY\nXX/YY/ZZ?"}
+    R1 -->|+50| R2{"COUNTRY\nXX/YY/ZZ/WW?"}
     R1 -->|no| R2
     R2 -->|+30| R3{"UNUSUAL\nHOUR?"}
     R2 -->|no| R3
@@ -278,11 +278,11 @@ flowchart LR
 | **Content-Based Router** | `ContentBasedRouterBean` | Routes payments to fraud-review vs fraud-check based on amount, payment method, and country |
 | **Wire Tap** | `AuditPipelineRoute` | Non-blocking parallel audit logging to Kafka |
 | **Circuit Breaker** | Resilience4j via Camel | Provider fault tolerance with 50% failure threshold, 5s wait, 3 half-open calls |
-| **Retry with Backoff** | Camel error handler | Exponential backoff: 5 retries, 2s base delay, 2x multiplier |
-| **Dead Letter Channel** | `direct:dlq-handler` | Failed payments routed to dead-letter Kafka topic |
+| **Retry with Backoff** | Camel error handler | Exponential backoff: 3 retries, 1s base delay |
+| **Dead Letter Channel** | `direct:poison-dlq`, `direct:dead-letter` | Failed payments routed to dead-letter Kafka topic (poison messages + provider failures) |
 | **Transactional Outbox** | `OutboxRelayScheduler` | Reliable event publishing: write to outbox table, relay to Kafka every 10s (batch 50) |
-| **Dynamic Router** | `ProviderRouterBean` | Round-robin provider selection with failover |
-| **Message Enricher** | `PaymentEnrichProcessor` | Enriches payment with simulated risk data (velocity, geo-risk, customer tier) |
+| **Dynamic Router** | `ProviderRouterBean` | Primary provider routing with circuit breaker failover |
+| **Message Enricher** | `PaymentEnrichmentService` | Enriches payment with simulated risk data (velocity, geo-risk, customer tier) |
 | **Message Translator** | `PaymentMapper` | Converts between entity and DTO representations |
 
 ### 🛡️ Fraud Detection Engine
@@ -290,7 +290,7 @@ flowchart LR
 | Rule | Condition | Score | Description |
 |------|-----------|-------|-------------|
 | HIGH_AMOUNT | amount > 15,000 | +50 | Large transaction amount |
-| HIGH_RISK_COUNTRY | country in [XX, YY, ZZ] | +30 | High-risk country code |
+| HIGH_RISK_COUNTRY | country in [XX, YY, ZZ, WW] | +30 | High-risk country code |
 | RAPID_RETRY | attempts > 3 | +25 | Multiple retry attempts |
 | NEW_PAYMENT_METHOD | method age < 30 days | +20 | New payment method for customer |
 | UNUSUAL_HOUR | hour between 2-5 AM | +15 | Transaction at unusual time |
@@ -334,7 +334,7 @@ flowchart LR
 | `GET` | `/health/ready` | Readiness probe | `200 OK` |
 | `GET` | `/openapi` | OpenAPI 3.0.3 spec | `200 OK` |
 | `GET` | `/swagger-ui` | Swagger UI (dev/test only) | `200 OK` |
-| `GET` | `/metrics` | Prometheus metrics | `200 OK` |
+| `GET` | `/q/metrics` | Prometheus metrics | `200 OK` |
 
 ### 📨 Create Payment
 
@@ -371,10 +371,10 @@ curl -X POST http://localhost:8080/payments \
 
 | Field | Rules |
 |-------|-------|
-| `amount` | Required, min 0.01, max 999999.99, max 2 decimal places |
+| `amount` | Required, min 0.01, max 999999.99 (2 decimal places enforced by DB) |
 | `currency` | Required, ISO 4217: USD, EUR, GBP, MXN, JPY |
 | `customerId` | Required, max 50 characters |
-| `paymentMethod` | Required, enum: CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER, WALLET, CRYPTO |
+| `paymentMethod` | Required (accepted values: CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER, WALLET, CRYPTO) |
 | `country` | Optional, max 2 characters (ISO 3166-1 alpha-2) |
 | `metadata` | Optional, arbitrary key-value pairs |
 
@@ -393,7 +393,10 @@ kafka.bootstrap.servers=localhost:9092
 kafka.topic.payments.received=payments.events.received
 kafka.topic.payments.processed=payments.events.processed
 kafka.topic.payments.failed=payments.events.failed
+kafka.topic.payments.review=payments.events.review
 kafka.topic.payments.status.changed=payments.events.status.changed
+kafka.topic.payments.retry=payments.events.retry
+kafka.topic.payments.dead-letter=payments.events.dead-letter
 
 # OpenTelemetry
 quarkus.opentelemetry.enabled=true
@@ -412,7 +415,7 @@ quarkus.http.port=8081
 
 # Fraud Rules
 fraud.rules.high-amount-threshold=15000
-fraud.rules.high-risk-countries=XX,YY,ZZ
+fraud.rules.high-risk-countries=XX,YY,ZZ,WW
 fraud.rules.rapid-retry-threshold=3
 fraud.rules.new-method-days-threshold=30
 fraud.rules.unusual-hour-start=2
@@ -428,8 +431,13 @@ provider.a-url=http://localhost:8081/provider-a/process
 provider.b-url=http://localhost:8081/provider-b/process
 provider.circuit-breaker.failure-threshold=50
 provider.circuit-breaker.wait-duration=5s
-provider.max-retries=5
-provider.retry-backoff=2s
+provider.circuit-breaker.sliding-window-size=100
+provider.routing.primary=provider-a
+
+# Kafka Topics
+kafka.topic.fraud.detected=fraud.events.detected
+kafka.topic.audit=payments.events.audit
+kafka.topic.dead.letter=payments.events.dead-letter
 ```
 
 > **Note on ports:** In local development, the payment-processor runs on port `8081`. In Docker/Kubernetes, both services use port `8080` (overridden via `QUARKUS_HTTP_PORT` environment variable in deployment manifests).
@@ -542,12 +550,12 @@ rake test:run SCOPE=processor
 
 | Category | Framework | Description |
 |----------|-----------|-------------|
-| Unit Tests | JUnit 5 + Mockito | PaymentService, FraudEvaluationService, PaymentMapper |
+| Unit Tests | JUnit 5 + Mockito | PaymentProcessingService, FraudEvaluationService, PaymentMapper |
 | Validation Tests | Jakarta Validation | PaymentRequest field validation rules |
 | Integration Tests | QuarkusTest + REST Assured | REST API endpoint testing |
 | Route Tests | QuarkusTest + AdviceWith | Camel route behavior verification |
 | E2E Tests | Testcontainers (Kafka + PostgreSQL) | End-to-end payment flow, poison messages, circuit breaker |
-| Concurrency Tests | JUnit 5 | PaymentRepository thread safety |
+| Concurrency Tests | JUnit 5 | KafkaConsumerManager thread lifecycle |
 
 ---
 
@@ -624,7 +632,7 @@ rake adr:validate
 poc_camel/
 ├── shared/                              # Shared DTOs, events, validators
 │   └── src/main/java/com/poc/shared/
-│       ├── dto/                         # PaymentRequest, PaymentResponse, ErrorResponse
+│       ├── dto/                         # PaymentRequestDTO, PaymentResponseDTO, ErrorResponseDTO
 │       ├── event/                       # PaymentMessage, FraudResult, ProviderResponse
 │       └── validator/                   # @SupportedCurrency custom validator
 │
@@ -649,7 +657,7 @@ poc_camel/
 ├── payment-processor/                   # Camel Route Processor (port 8081)
 │   └── src/main/java/com/poc/processor/
 │       ├── route/                       # PaymentProcessorRoute, FraudEngineRoute, ProviderSelectionRoute, AuditPipelineRoute
-│       ├── processor/                   # FraudEvaluationProcessor, ContentBasedRouterBean, PaymentEnrichProcessor, ProviderRouterBean
+│       ├── processor/                   # FraudEvaluationService, ContentBasedRouterBean, PaymentEnrichmentService, ProviderRouterBean
 │       ├── config/                      # FraudRulesConfig, ProviderConfig, JacksonConfig
 │       └── service/                     # ProviderAService, ProviderBService (simulated)
 │
@@ -697,7 +705,7 @@ This POC includes production-oriented security hardening in Kubernetes deploymen
 | **Secrets Management** | K8s Secrets with `secrets.yaml.example` templates; `.env` and `secrets.yaml` are gitignored |
 | **CORS** | Restricted via `${CORS_ORIGINS:https://localhost:3000}` — no wildcard in production |
 | **Swagger UI** | Disabled in `%prod` profile, enabled only in `%dev`/`%test` |
-| **Service Account** | Dedicated `poc-camel-sa` with least-privilege RBAC |
+| **Service Account** | Dedicated `poc-camel-sa` (RBAC roles recommended for production) |
 
 ### Production Recommendations (not implemented in POC)
 
