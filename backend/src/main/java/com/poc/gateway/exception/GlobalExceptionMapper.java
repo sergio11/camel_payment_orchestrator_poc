@@ -20,7 +20,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
 
     @Override
     public Response toResponse(Throwable exception) {
-        LOG.debugf("Handling exception: %s", exception.getClass().getSimpleName());
+        LOG.warnf("Handling exception: %s - %s", exception.getClass().getName(), exception.getMessage());
 
         if (exception instanceof ClientErrorException clientError) {
             return clientError.getResponse();

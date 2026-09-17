@@ -3,6 +3,8 @@ package com.poc.gateway.infrastructure.messaging.consumer;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentWriteRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.UUID;
@@ -15,13 +17,13 @@ public class PaymentStatusHandler {
     private static final Logger LOG = Logger.getLogger(PaymentStatusHandler.class);
 
     @Inject
-    PaymentWriteRepository paymentRepo;
+    private PaymentWriteRepository paymentRepo;
 
     @Inject
-    EventPublisherPort eventPublisher;
+    private EventPublisherPort eventPublisher;
 
     @Inject
-    com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     public void processStatusChange(ConsumerRecord<String, String> record, PaymentStatus newStatus) {
         String paymentId = extractPaymentId(record);
@@ -52,7 +54,7 @@ public class PaymentStatusHandler {
 
     private String extractPaymentId(ConsumerRecord<String, String> record) {
         try {
-            com.fasterxml.jackson.databind.JsonNode json = objectMapper.readTree(record.value());
+            JsonNode json = objectMapper.readTree(record.value());
             return json.has("paymentId") ? json.get("paymentId").asText() : record.key();
         } catch (Exception e) {
             return record.key();

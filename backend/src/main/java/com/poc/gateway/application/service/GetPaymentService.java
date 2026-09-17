@@ -13,7 +13,7 @@ import java.util.UUID;
 public class GetPaymentService implements GetPaymentUseCase {
 
     @Inject
-    PaymentReadRepository paymentRepo;
+    private PaymentReadRepository paymentRepo;
 
     @Override
     public Payment execute(UUID paymentId) {

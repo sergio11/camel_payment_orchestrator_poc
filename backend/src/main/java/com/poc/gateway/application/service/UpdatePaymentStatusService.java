@@ -14,7 +14,7 @@ import java.util.UUID;
 public class UpdatePaymentStatusService implements UpdatePaymentStatusUseCase {
 
     @Inject
-    PaymentWriteRepository paymentRepo;
+    private PaymentWriteRepository paymentRepo;
 
     @Override
     @Transactional

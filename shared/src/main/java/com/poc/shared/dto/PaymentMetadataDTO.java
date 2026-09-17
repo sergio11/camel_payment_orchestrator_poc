@@ -39,4 +39,12 @@ public record PaymentMetadataDTO(
     public static PaymentMetadataDTO empty() {
         return new PaymentMetadataDTO(null, null, null, null, null, null, null, null);
     }
+
+    public PaymentMetadataDTO conEnrichment(String customerRiskTier, Integer velocityScore, Integer geoRiskScore) {
+        return new PaymentMetadataDTO(
+            orderId, attempts, isNewPaymentMethod, paymentMethodAgeDays,
+            customerRiskTier, java.time.LocalDateTime.now().toString(),
+            velocityScore, geoRiskScore
+        );
+    }
 }

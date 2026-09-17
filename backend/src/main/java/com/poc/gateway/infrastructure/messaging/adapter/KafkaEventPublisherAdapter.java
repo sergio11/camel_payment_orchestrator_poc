@@ -6,13 +6,14 @@ import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
+import com.poc.shared.util.KafkaConfigHelper;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.util.Map;
-import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.jboss.logging.Logger;
@@ -21,15 +22,18 @@ import org.jboss.logging.Logger;
 public class KafkaEventPublisherAdapter implements EventPublisherPort {
 
     private static final Logger LOG = Logger.getLogger(KafkaEventPublisherAdapter.class);
+    private static final int SEND_TIMEOUT_SECONDS = 30;
+    private static final String FIELD_PAYMENT_ID = "paymentId";
+    private static final String FIELD_ORIGINAL_PAYLOAD = "originalPayload";
 
     @Inject
-    KafkaTopicConfig topicConfig;
+    private KafkaTopicConfig topicConfig;
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @Inject
-    PaymentEventSerializer serializer;
+    private PaymentEventSerializer serializer;
 
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
@@ -38,18 +42,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
 
     @PostConstruct
     void init() {
-        Properties props = new Properties();
-        props.put("bootstrap.servers", bootstrapServers);
-        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        props.put("acks", "all");
-        props.put("retries", 3);
-        props.put("linger.ms", 5);
-        props.put("batch.size", 16384);
-        props.put("buffer.memory", 33554432);
-        props.put("max.in.flight.requests.per.connection", 5);
-        props.put("delivery.timeout.ms", 120000);
-        producer = new KafkaProducer<>(props);
+        producer = new KafkaProducer<>(KafkaConfigHelper.producerConfig(bootstrapServers));
     }
 
     @PreDestroy
@@ -63,7 +56,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
     public boolean publishPaymentReceived(PaymentReceivedEvent event) {
         try {
             ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("paymentId", event.paymentId());
+            payload.put(FIELD_PAYMENT_ID, event.paymentId());
             payload.put("amount", event.amount() != null ? event.amount().toString() : "0");
             payload.put("currency", event.currency());
             payload.put("customerId", event.customerId());
@@ -78,7 +71,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
                 event.paymentId(),
                 objectMapper.writeValueAsString(payload)
             );
-            producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            producer.send(record).get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             LOG.errorf(e, "Failed to publish payment received event for %s", event.paymentId());
@@ -90,7 +83,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
     public boolean publishStatusChanged(String paymentId, String status) {
         try {
             String payload = objectMapper.writeValueAsString(Map.of(
-                "paymentId", paymentId,
+                FIELD_PAYMENT_ID, paymentId,
                 "status", status
             ));
 
@@ -99,7 +92,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
                 paymentId,
                 payload
             );
-            producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            producer.send(record).get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             LOG.errorf(e, "Failed to publish status changed event for %s", paymentId);
@@ -111,8 +104,8 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
     public boolean publishDeadLetter(String paymentId, String payload, String reason) {
         try {
             ObjectNode dlqPayload = objectMapper.createObjectNode();
-            dlqPayload.put("paymentId", paymentId);
-            dlqPayload.put("originalPayload", payload);
+            dlqPayload.put(FIELD_PAYMENT_ID, paymentId);
+            dlqPayload.put(FIELD_ORIGINAL_PAYLOAD, payload);
             dlqPayload.put("reason", reason);
 
             ProducerRecord<String, String> record = new ProducerRecord<>(
@@ -120,7 +113,7 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
                 paymentId,
                 objectMapper.writeValueAsString(dlqPayload)
             );
-            producer.send(record).get(30, java.util.concurrent.TimeUnit.SECONDS);
+            producer.send(record).get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             return true;
         } catch (Exception e) {
             LOG.errorf(e, "Failed to publish dead letter event for %s", paymentId);

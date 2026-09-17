@@ -13,7 +13,7 @@ import java.util.List;
 public class ListPaymentsService implements ListPaymentsUseCase {
 
     @Inject
-    PaymentReadRepository paymentRepo;
+    private PaymentReadRepository paymentRepo;
 
     @Override
     public PaymentPageResult execute(String customerId, PaymentStatus status, int limit, int offset) {

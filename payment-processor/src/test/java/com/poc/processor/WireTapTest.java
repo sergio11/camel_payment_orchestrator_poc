@@ -27,37 +27,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @QuarkusTest
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 class WireTapTest {
 
     @Inject
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
-    static KafkaProducer<String, String> producer;
-    private String resolvedBootstrapServers;
+    private KafkaProducer<String, String> producer;
 
-    void resolveOnce() {
-        if (resolvedBootstrapServers == null) {
-            resolvedBootstrapServers = bootstrapServers;
-            Properties prodProps = new Properties();
-            prodProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
-            prodProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-            prodProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-            producer = new KafkaProducer<>(prodProps);
-        }
+    @BeforeEach
+    void setUp() {
+        Properties prodProps = new Properties();
+        prodProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        prodProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        prodProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        producer = new KafkaProducer<>(prodProps);
     }
 
-    @AfterAll
-    static void teardown() {
+    @AfterEach
+    void tearDown() {
         if (producer != null) {
             producer.close();
+            producer = null;
         }
     }
 
     private KafkaConsumer<String, String> createConsumer(String groupId) {
         Properties consProps = new Properties();
-        consProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, resolvedBootstrapServers);
+        consProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         consProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         consProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         consProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
@@ -71,7 +69,6 @@ class WireTapTest {
     @Test
     @DisplayName("3.46: Verify Wire Tap logs to audit topic")
     void testWireTapLogsToAuditTopic() throws Exception {
-        resolveOnce();
         KafkaConsumer<String, String> consumer = createConsumer("test-audit-" + UUID.randomUUID());
         try {
             String paymentId = UUID.randomUUID().toString();

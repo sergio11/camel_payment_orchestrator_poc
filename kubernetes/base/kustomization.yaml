@@ -13,6 +13,7 @@ resources:
   - jaeger-configmap.yaml
   - hpa.yaml
   - networkpolicy.yaml
+  - rbac.yaml
   # postgres StatefulSet+PVC+Service live in kubernetes/infrastructure/postgres.yaml
   # and are deployed via k8s:infra (glob *.yaml), not here, to keep infra/app split.
 

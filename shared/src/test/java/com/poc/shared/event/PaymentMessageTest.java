@@ -1,6 +1,7 @@
 package com.poc.shared.event;
 
 import com.poc.shared.dto.PaymentMetadataDTO;
+import com.poc.shared.exception.InvalidPaymentException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -97,5 +98,109 @@ class PaymentMessageTest {
         );
 
         assertEquals(msg1, msg2);
+    }
+
+    @Test
+    @DisplayName("validate() should not throw for a valid payment message")
+    void testValidateValidMessage() {
+        PaymentMessage message = createValidMessage();
+
+        assertDoesNotThrow(message::validate);
+    }
+
+    @Test
+    @DisplayName("validate() should throw InvalidPaymentException when paymentId is null")
+    void testValidateNullPaymentId() {
+        PaymentMessage message = new PaymentMessage(
+            "evt-001", null, new BigDecimal("100.00"), "USD", "cust-1", "CARD", "US",
+            1, false, 30, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        InvalidPaymentException ex = assertThrows(InvalidPaymentException.class, message::validate);
+        assertEquals("unknown", ex.getPaymentId());
+    }
+
+    @Test
+    @DisplayName("validate() should throw InvalidPaymentException when amount is null")
+    void testValidateNullAmount() {
+        PaymentMessage message = new PaymentMessage(
+            "evt-001", "pay-1", null, "USD", "cust-1", "CARD", "US",
+            1, false, 30, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        InvalidPaymentException ex = assertThrows(InvalidPaymentException.class, message::validate);
+        assertEquals("pay-1", ex.getPaymentId());
+    }
+
+    @Test
+    @DisplayName("validate() should throw InvalidPaymentException when currency is null")
+    void testValidateNullCurrency() {
+        PaymentMessage message = new PaymentMessage(
+            "evt-001", "pay-1", new BigDecimal("100.00"), null, "cust-1", "CARD", "US",
+            1, false, 30, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        InvalidPaymentException ex = assertThrows(InvalidPaymentException.class, message::validate);
+        assertEquals("pay-1", ex.getPaymentId());
+    }
+
+    @Test
+    @DisplayName("validate() should throw InvalidPaymentException when customerId is null")
+    void testValidateNullCustomerId() {
+        PaymentMessage message = new PaymentMessage(
+            "evt-001", "pay-1", new BigDecimal("100.00"), "USD", null, "CARD", "US",
+            1, false, 30, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        InvalidPaymentException ex = assertThrows(InvalidPaymentException.class, message::validate);
+        assertEquals("pay-1", ex.getPaymentId());
+    }
+
+    @Test
+    @DisplayName("validate() should throw InvalidPaymentException when paymentMethod is null")
+    void testValidateNullPaymentMethod() {
+        PaymentMessage message = new PaymentMessage(
+            "evt-001", "pay-1", new BigDecimal("100.00"), "USD", "cust-1", null, "US",
+            1, false, 30, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        InvalidPaymentException ex = assertThrows(InvalidPaymentException.class, message::validate);
+        assertEquals("pay-1", ex.getPaymentId());
+    }
+
+    @Test
+    @DisplayName("withMetadata() should return a new message with updated metadata and preserve all other fields")
+    void testWithMetadata() {
+        LocalDateTime now = LocalDateTime.now();
+        PaymentMetadataDTO originalMetadata = PaymentMetadataDTO.empty();
+        PaymentMessage original = new PaymentMessage(
+            "evt-001", "pay-123", new BigDecimal("250.00"), "EUR", "cust-456",
+            "DEBIT_CARD", "DE", 2, true, 180, "Europe/Berlin", originalMetadata, now
+        );
+
+        PaymentMetadataDTO newMetadata = new PaymentMetadataDTO("ORD-1", 5, false, 60, "HIGH", null, 30, 50);
+        PaymentMessage result = original.withMetadata(newMetadata);
+
+        assertEquals("evt-001", result.eventId());
+        assertEquals("pay-123", result.paymentId());
+        assertEquals(new BigDecimal("250.00"), result.amount());
+        assertEquals("EUR", result.currency());
+        assertEquals("cust-456", result.customerId());
+        assertEquals("DEBIT_CARD", result.paymentMethod());
+        assertEquals("DE", result.country());
+        assertEquals(2, result.attemptCount());
+        assertTrue(result.isNewPaymentMethod());
+        assertEquals(180, result.customerAgeDays());
+        assertEquals("Europe/Berlin", result.timeZone());
+        assertEquals(newMetadata, result.metadata());
+        assertEquals(now, result.timestamp());
+        assertNotSame(original, result);
+    }
+
+    private PaymentMessage createValidMessage() {
+        return new PaymentMessage(
+            "evt-001", "pay-123", new BigDecimal("100.00"), "USD", "cust-456",
+            "CARD", "US", 1, false, 30, "UTC", PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
     }
 }

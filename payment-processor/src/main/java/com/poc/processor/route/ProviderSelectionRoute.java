@@ -2,7 +2,6 @@ package com.poc.processor.route;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.poc.processor.config.ProviderConfig;
-import com.poc.processor.processor.ProviderRouterBean;
 import com.poc.shared.event.PaymentMessage;
 import com.poc.shared.event.ProviderResponse;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -14,10 +13,10 @@ import org.apache.camel.component.jackson.JacksonDataFormat;
 public class ProviderSelectionRoute extends RouteBuilder {
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @Inject
-    ProviderConfig providerConfig;
+    private ProviderConfig providerConfig;
 
     @Override
     public void configure() {
@@ -27,14 +26,14 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:provider-selection")
             .routeId("provider-selection")
-            .bean(ProviderRouterBean.class, "restoreOriginalHeaders")
-            .log("Selecting provider for payment: ${header.OriginalPaymentId}")
-            .dynamicRouter(method(ProviderRouterBean.class, "routeToProvider"))
+            .bean("providerRouterBean", "restoreOriginalHeaders")
+            .log("Selecting provider for payment: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
+            .dynamicRouter(method("providerRouterBean", "routeToProvider"))
             .end();
 
         from("direct:provider-a")
             .routeId("provider-a")
-            .log("Routing to Provider A: ${header.OriginalPaymentId}")
+            .log("Routing to Provider A: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
             .circuitBreaker()
                 .resilience4jConfiguration()
                     .failureRateThreshold(providerConfig.circuitBreakerFailureThreshold())
@@ -44,30 +43,31 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .end()
                 .to("direct:call-provider-a")
             .onFallback()
-                .log("Provider A failed, falling back to Provider B: ${header.OriginalPaymentId}")
+                .log("Provider A failed, falling back to Provider B: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
                 .to("direct:provider-b-fallback")
             .end()
-            .log("Provider A completed for: ${header.OriginalPaymentId}");
+            .log("Provider A completed for: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}");
 
         from("direct:call-provider-a")
             .routeId("call-provider-a")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
-            .bean(ProviderRouterBean.class, "prepareProviderCall")
+            .bean("providerRouterBean", "prepareProviderCall")
             .choice()
-                .when(header("OriginalPaymentMessage").isNull())
+                .when(header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE).isNull())
                     .log("Missing OriginalPaymentMessage, routing to dead letter")
                     .to("direct:dead-letter")
                     .stop()
                 .otherwise()
                     .marshal(paymentJson)
                     .to("netty-http:{{provider.a-url}}?connectTimeout=5000&socketTimeout=10000")
+                    .bean("providerRouterBean", "restoreHeadersAfterHttpCall")
                     .unmarshal(responseJson)
                     .choice()
                         .when(simple("${body.success} == true"))
                             .log("Provider A success: ${body.transactionId}")
-                            .setHeader("kafka.KEY", header("OriginalPaymentId"))
-                            .log("Publishing processed event for payment: ${header.kafka.KEY}")
+                            .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID))
+                            .log("Publishing processed event for payment: ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")
                             .marshal(responseJson)
                             .to("kafka:{{kafka.topic.payments.processed}}")
                         .otherwise()
@@ -81,7 +81,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:provider-b-fallback")
             .routeId("provider-b-fallback")
-            .log("Fallback to Provider B: ${header.OriginalPaymentId}")
+            .log("Fallback to Provider B: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
             .circuitBreaker()
                 .resilience4jConfiguration()
                     .failureRateThreshold(providerConfig.circuitBreakerFailureThreshold())
@@ -91,30 +91,31 @@ public class ProviderSelectionRoute extends RouteBuilder {
                 .end()
                 .to("direct:call-provider-b")
             .onFallback()
-                .log("Provider B also failed, sending to dead letter: ${header.OriginalPaymentId}")
+                .log("Provider B also failed, sending to dead letter: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
                 .to("direct:dead-letter")
             .end()
-            .log("Provider B completed for: ${header.OriginalPaymentId}");
+            .log("Provider B completed for: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}");
 
         from("direct:call-provider-b")
             .routeId("call-provider-b")
             .setHeader("CamelHttpMethod", constant("POST"))
             .setHeader("Content-Type", constant("application/json"))
-            .bean(ProviderRouterBean.class, "prepareProviderCall")
+            .bean("providerRouterBean", "prepareProviderCall")
             .choice()
-                .when(header("OriginalPaymentMessage").isNull())
+                .when(header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE).isNull())
                     .log("Missing OriginalPaymentMessage, routing to dead letter")
                     .to("direct:dead-letter")
                     .stop()
                 .otherwise()
                     .marshal(paymentJson)
                     .to("netty-http:{{provider.b-url}}?connectTimeout=5000&socketTimeout=10000")
+                    .bean("providerRouterBean", "restoreHeadersAfterHttpCall")
                     .unmarshal(responseJson)
                     .choice()
                         .when(simple("${body.success} == true"))
                             .log("Provider B success: ${body.transactionId}")
-                            .setHeader("kafka.KEY", header("OriginalPaymentId"))
-                            .log("Publishing processed event for payment: ${header.kafka.KEY}")
+                            .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID))
+                            .log("Publishing processed event for payment: ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")
                             .marshal(responseJson)
                             .to("kafka:{{kafka.topic.payments.processed}}")
                         .otherwise()
@@ -128,14 +129,14 @@ public class ProviderSelectionRoute extends RouteBuilder {
 
         from("direct:dead-letter")
             .routeId("dead-letter")
-            .bean(ProviderRouterBean.class, "restoreDeadLetter")
+            .bean("providerRouterBean", "restoreDeadLetter")
             .choice()
                 .when(simple("${body} == null"))
-                    .log("Missing body and OriginalPaymentMessage, dropping message: ${header.OriginalPaymentId}")
+                    .log("Missing body and OriginalPaymentMessage, dropping message: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
                     .stop()
                 .otherwise()
-                    .log("Sending to dead letter queue: ${header.OriginalPaymentId}")
-                    .setHeader("kafka.KEY", header("OriginalPaymentId"))
+                    .log("Sending to dead letter queue: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
+                    .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID))
                     .marshal(stringJson)
                     .to("kafka:{{kafka.topic.dead.letter}}")
                     .log("Published to dead letter topic")

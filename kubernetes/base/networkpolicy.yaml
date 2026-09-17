@@ -12,6 +12,73 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: allow-infra-egress
+  namespace: poc-camel
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-self-egress
+  namespace: poc-camel
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 29092
+          protocol: TCP
+        - port: 9092
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-self-ingress
+  namespace: poc-camel
+spec:
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: kafka
+      ports:
+        - port: 29092
+          protocol: TCP
+        - port: 9092
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: allow-apps-to-kafka
   namespace: poc-camel
 spec:
@@ -57,7 +124,9 @@ spec:
         - port: 4317
           protocol: TCP
         - port: 4318
-          protocol: UDP
+          protocol: TCP
+        - port: 14268
+          protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -88,9 +157,7 @@ metadata:
   name: allow-prometheus-scrape
   namespace: poc-camel
 spec:
-  podSelector:
-    matchLabels:
-      app: api-gateway
+  podSelector: {}
   policyTypes:
     - Ingress
   ingress:
@@ -118,13 +185,16 @@ spec:
         - podSelector:
             matchLabels:
               app: api-gateway
+        - podSelector:
+            matchLabels:
+              app: payment-processor
       ports:
         - port: 8080
           protocol: TCP
     - from:
         - podSelector:
             matchLabels:
-              app: prometheus
+              app: monitoring
       ports:
         - port: 8080
           protocol: TCP
@@ -168,6 +238,17 @@ spec:
         - port: 5432
           protocol: TCP
     - to:
+        - podSelector:
+            matchLabels:
+              app: jaeger
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+        - port: 14268
+          protocol: TCP
+    - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
@@ -195,6 +276,13 @@ spec:
     - to:
         - podSelector:
             matchLabels:
+              app: payment-processor
+      ports:
+        - port: 8080
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
               app: kafka
       ports:
         - port: 29092
@@ -205,6 +293,17 @@ spec:
               app: postgres
       ports:
         - port: 5432
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: jaeger
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+        - port: 14268
           protocol: TCP
     - to:
         - namespaceSelector:

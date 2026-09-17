@@ -21,7 +21,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @QuarkusTest
-@QuarkusTestResource(KafkaTestResource.class)
+@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class FraudEngineRouteE2E {
 

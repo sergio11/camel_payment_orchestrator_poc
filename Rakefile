@@ -5,8 +5,7 @@
 # Quickstart:
 #   rake infra:start       # local infra (compose)
 #   rake test:run          # all tests + coverage gate 98%
-#   rake k8s:build         # images into Kind (APP= to filter)
-#   rake k8s:deploy        # full deploy (OVERLAY=dev|prod)
+#   rake k8s:deploy        # full deploy (auto-creates Kind cluster + infra + apps)
 #   rake k8s:check SMOKE=1 # verify pods + e2e payment
 #   rake k8s:undeploy      # remove everything (APPS_ONLY=1 for apps only)
 #   rake help              # full list with flags
@@ -236,6 +235,23 @@ end
 # Kubernetes Tasks (Kind) — no raw kubectl/kind needed
 # ──────────────────────────────────────────────────────────────────────────────
 namespace :k8s do
+  desc 'Create Kind cluster if it does not exist'
+  task :cluster do
+    unless kind_cluster_exists?
+      puts "Creating Kind cluster #{CLUSTER}..."
+      run_cmd("kind create cluster --name #{CLUSTER}")
+      puts "Waiting for node to be Ready..."
+      30.times do
+        status = `kubectl get nodes -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>&1`.strip
+        break if status == "True"
+        sleep 2
+      end
+      puts "\e[32mKind cluster #{CLUSTER} ready.\e[0m"
+    else
+      puts "Kind cluster #{CLUSTER} already exists."
+    end
+  end
+
   task :namespace do
     run_cmd("kubectl create namespace #{NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -", fail: false)
   end
@@ -253,9 +269,7 @@ namespace :k8s do
 
   desc 'Deploy to Kubernetes'
   task :deploy do
-    unless kind_cluster_exists?
-      raise "No Kind cluster #{CLUSTER}: create it first, then rake k8s:deploy"
-    end
+    Rake::Task['k8s:cluster'].invoke
     unless Dir.exist?(OVERLAY_DIR)
       raise "Overlay not found: #{OVERLAY_DIR} (use OVERLAY=dev|prod)"
     end
@@ -355,6 +369,9 @@ namespace :k8s do
 
   desc 'Build and load container images (APP=gateway|processor|all)'
   task :build do
+    puts "\n=== Building JARs locally (prod profile) ==="
+    mvn("clean package -DskipTests -Dquarkus.profile=prod -pl shared,test-support,backend,payment-processor -am")
+    puts "\n=== Building Docker images ==="
     names = app_targets(ENV['APP']).map(&:first)
     names.each do |name|
       short = "poc-camel/#{name}:dev"
@@ -364,9 +381,7 @@ namespace :k8s do
   end
 
   task :load do
-    unless kind_cluster_exists?
-      raise "No Kind cluster #{CLUSTER}: create it first, then rake k8s:build"
-    end
+    Rake::Task['k8s:cluster'].invoke unless kind_cluster_exists?
     names = app_targets(ENV['APP']).map(&:first)
     names.flat_map { |n| ["poc-camel/#{n}:dev", "localhost/poc-camel/#{n}:dev"] }.each do |img|
       tar = File.join(Dir.tmpdir, "kind-load-#{img.gsub(/[\/:]/, '_')}.tar")
@@ -389,8 +404,8 @@ namespace :k8s do
     sleep 6
     begin
       key = SecureRandom.uuid
-      payload = { amount: 42.50, currency: "EUR", customerId: "qa-smoke",
-                  paymentMethod: "CARD", country: "ES" }
+      payload = { amount: 42.50, currency: "EUR", customer_id: "qa-smoke",
+                  payment_method: "CARD", country: "ES" }
       uri = URI("http://localhost:8080/payments")
       req = Net::HTTP::Post.new(uri, { "Content-Type" => "application/json",
                                        "Idempotency-Key" => key })
@@ -473,8 +488,9 @@ task :help do
       rake test:run          Run all tests (unit + integration + e2e) with coverage gate 98%
       rake adr:validate      Validate Architecture Decision Records in openspec/adrs
       rake spec:validate     Validate OpenAPI, AsyncAPI and ADR specifications
-      rake k8s:build         Build and load container images (APP=gateway|processor|all)
-      rake k8s:deploy        Deploy to Kubernetes (OVERLAY=dev|prod, RESTART_ONLY=1)
+      rake k8s:cluster        Create Kind cluster (idempotent)
+      rake k8s:build         Build JARs + Docker images + load into Kind
+      rake k8s:deploy        Deploy to Kubernetes (auto-creates cluster)
       rake k8s:undeploy      Undeploy from Kubernetes (APPS_ONLY=1, CLUSTER_DELETE=1)
       rake k8s:check         Verify pods + log asserts (APP=, EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1)
 

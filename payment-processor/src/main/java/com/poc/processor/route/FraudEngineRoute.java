@@ -16,7 +16,7 @@ import java.util.List;
 public class FraudEngineRoute extends RouteBuilder {
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @Override
     public void configure() {

@@ -16,10 +16,10 @@ public class PaymentProcessingService implements ProcessPaymentUseCase {
     private static final Logger LOG = Logger.getLogger(PaymentProcessingService.class);
 
     @Inject
-    EnrichPaymentUseCase enrichPaymentUseCase;
+    private EnrichPaymentUseCase enrichPaymentUseCase;
 
     @Inject
-    EvaluateFraudUseCase evaluateFraudUseCase;
+    private EvaluateFraudUseCase evaluateFraudUseCase;
 
     @Override
     public void execute(PaymentMessage message) {

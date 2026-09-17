@@ -51,6 +51,8 @@ spec:
               name: http
               protocol: TCP
           env:
+            - name: QUARKUS_PROFILE
+              value: "prod"
             - name: QUARKUS_HTTP_HOST
               value: "0.0.0.0"
             - name: QUARKUS_HTTP_PORT

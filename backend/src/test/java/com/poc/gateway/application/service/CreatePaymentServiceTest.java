@@ -9,7 +9,7 @@ import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
-import jakarta.enterprise.inject.Instance;
+import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,15 +43,14 @@ class CreatePaymentServiceTest {
     PaymentEventSerializer serializer;
 
     @Mock
-    Instance<CreatePaymentService> self;
+    KafkaTopicConfig topicConfig;
 
     @InjectMocks
     CreatePaymentService service;
 
     @BeforeEach
     void setUp() {
-        service.self = self;
-        lenient().when(self.get()).thenReturn(service);
+        lenient().when(topicConfig.received()).thenReturn("payments.events.received");
     }
 
     private CreatePaymentCommand createCommand() {
@@ -160,7 +159,7 @@ class CreatePaymentServiceTest {
     }
 
     @Test
-    @DisplayName("Should log error but still return payment when Kafka publish fails")
+    @DisplayName("Should log error but still return payment when Kafka publish returns false")
     void execute_publishFails_logsError() {
         CreatePaymentCommand command = createCommand();
         String key = "idem-key-456";
@@ -180,5 +179,30 @@ class CreatePaymentServiceTest {
 
         assertNotNull(result);
         verify(outboxRepo, never()).markSent(any());
+    }
+
+    @Test
+    @DisplayName("Should log error but still return payment when Kafka publish throws exception")
+    void execute_publishThrowsException_logsErrorAndReturnsPayment() {
+        CreatePaymentCommand command = createCommand();
+        String key = "idem-key-789";
+
+        Payment savedPayment = new Payment(
+            UUID.randomUUID(), new BigDecimal("100.00"), "USD", "cust-1",
+            "CREDIT_CARD", "US", PaymentStatus.PENDING,
+            null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
+        );
+
+        when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+        when(paymentRepo.save(any(Payment.class), eq(key))).thenReturn(savedPayment);
+        when(serializer.serialize(any(Payment.class))).thenReturn("{}");
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class)))
+            .thenThrow(new RuntimeException("Kafka broker unreachable"));
+
+        Payment result = service.execute(command, key);
+
+        assertNotNull(result);
+        assertEquals("USD", result.currency());
+        verify(outboxRepo).persist(any());
     }
 }

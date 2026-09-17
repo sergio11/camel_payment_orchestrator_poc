@@ -1,20 +1,44 @@
 package com.poc.processor;
 
+import com.poc.processor.config.FraudRulesConfig;
 import com.poc.processor.processor.ContentBasedRouterBean;
-import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-@QuarkusTest
+// Pure unit test: no @QuarkusTest. Booting the whole Quarkus app (plus the
+// globally-applied KafkaTestResource Testcontainer) for a stateless routing
+// bean made this suite flaky and slow. Thresholds mirror
+// src/main/resources/application.properties (cbr-high=10000, cbr-wallet=5000,
+// high-risk=XX,YY,ZZ,WW).
+@ExtendWith(MockitoExtension.class)
 class ContentBasedRouterTest {
 
-    @Inject
+    @Mock
+    FraudRulesConfig config;
+
     ContentBasedRouterBean routerBean;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        lenient().when(config.cbrHighAmountThreshold()).thenReturn(new BigDecimal("10000"));
+        lenient().when(config.cbrWalletAmountThreshold()).thenReturn(new BigDecimal("5000"));
+        lenient().when(config.highRiskCountries()).thenReturn(List.of("XX", "YY", "ZZ", "WW"));
+
+        routerBean = new ContentBasedRouterBean();
+        var field = ContentBasedRouterBean.class.getDeclaredField("config");
+        field.setAccessible(true);
+        field.set(routerBean, config);
+    }
 
     @Test
     @DisplayName("3.41: Verify high amount (>10000) routes to fraud-review")

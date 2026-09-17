@@ -19,24 +19,20 @@ import org.apache.camel.builder.RouteBuilder;
 public class PaymentProcessorRoute extends RouteBuilder {
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @Inject
-    FraudRoutingService fraudRoutingService;
+    private FraudRoutingService fraudRoutingService;
 
     @Inject
-    EnrichPaymentUseCase enrichPaymentUseCase;
+    private EnrichPaymentUseCase enrichPaymentUseCase;
 
     @Inject
-    EvaluateFraudUseCase evaluateFraudUseCase;
+    private EvaluateFraudUseCase evaluateFraudUseCase;
 
     public static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
-        if (exchange.getMessage().getHeader("OriginalPaymentId") == null) {
-            Object key = exchange.getMessage().getHeader("kafka.KEY");
-            if (key != null) {
-                exchange.getMessage().setHeader("OriginalPaymentId", key.toString());
-            }
-        }
+        CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID,
+            exchange.getMessage().getHeader(CamelRouteConstants.HEADER_KAFKA_KEY));
     }
 
     @Override
@@ -49,7 +45,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .logRetryAttempted(true)
             .logExhausted(true));
 
-        onException(JsonProcessingException.class, com.poc.processor.domain.exception.PaymentProcessingException.class)
+        onException(JsonProcessingException.class, com.poc.processor.domain.exception.PaymentProcessingException.class, com.poc.shared.exception.InvalidPaymentException.class)
             .handled(true)
             .maximumRedeliveries(0)
             .logExhausted(true)
@@ -64,11 +60,11 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .unmarshal(paymentJson)
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
-                exchange.getIn().setHeader("OriginalPaymentId", msg.paymentId());
-                exchange.getIn().setHeader("OriginalEventId", msg.eventId());
-                PaymentProcessingService.validatePaymentMessage(msg);
+                msg.validate();
+                CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID, msg.paymentId());
+                CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID, msg.eventId());
             })
-            .log("Received payment: ${header.OriginalPaymentId}")
+            .log("Received payment: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
                 PaymentMessage enriched = enrichPaymentUseCase.enrich(msg);
@@ -77,35 +73,35 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .wireTap("direct:audit-pipeline")
             .process(exchange -> {
                 PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
-                exchange.getIn().setHeader("OriginalPaymentMessage", msg);
+                exchange.getIn().setHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE, msg);
 
                 FraudEvaluation evaluation = evaluateFraudUseCase.evaluate(msg);
                 exchange.setProperty("FraudEvaluation", evaluation);
 
                 FraudRoutingDecision decision = fraudRoutingService.route(msg, evaluation);
-                exchange.getIn().setHeader("CamelFraudAction", decision.action().name());
-                exchange.getIn().setHeader("CamelRiskScore", decision.evaluation().riskScore());
-                exchange.getIn().setHeader("FraudRouteTarget", decision.routeTarget());
+                exchange.getIn().setHeader(CamelRouteConstants.HEADER_FRAUD_ACTION, decision.action().name());
+                exchange.getIn().setHeader(CamelRouteConstants.HEADER_RISK_SCORE, decision.evaluation().riskScore());
+                exchange.getIn().setHeader(CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET, decision.routeTarget());
             })
-            .log("Fraud route target: ${header.FraudRouteTarget} for ${body.paymentId}")
+            .log("Fraud route target: ${header." + CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET + "} for ${body.paymentId}")
             .choice()
-                .when(header("FraudRouteTarget").isEqualTo(CamelRouteConstants.DIRECT_FRAUD_REVIEW))
+                .when(header(CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET).isEqualTo(CamelRouteConstants.DIRECT_FRAUD_REVIEW))
                     .log("High amount or WALLET payment, routing to fraud review: ${body.paymentId}")
                     .to(CamelRouteConstants.DIRECT_FRAUD_REVIEW)
                 .otherwise()
                     .log("Standard payment, routing to fraud check: ${body.paymentId}")
                     .to(CamelRouteConstants.DIRECT_FRAUD_CHECK)
             .end()
-            .log("Payment processed: ${header.OriginalPaymentId} -> ${header.CamelFraudAction}");
+            .log("Payment processed: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "} -> ${header." + CamelRouteConstants.HEADER_FRAUD_ACTION + "}");
 
         from(CamelRouteConstants.DIRECT_FRAUD_REVIEW)
             .routeId("fraud-review-high-value")
             .log("Fraud evaluation already done for high-value payment: ${body.paymentId}")
             .choice()
-                .when(header("CamelFraudAction").isEqualTo(FraudAction.REJECT.name()))
+                .when(header(CamelRouteConstants.HEADER_FRAUD_ACTION).isEqualTo(com.poc.processor.domain.FraudAction.REJECT.name()))
                     .log("Fraud REJECT for high-value payment: ${body.paymentId}")
                     .to("direct:fraud-reject")
-                .when(header("CamelFraudAction").isEqualTo(FraudAction.REVIEW.name()))
+                .when(header(CamelRouteConstants.HEADER_FRAUD_ACTION).isEqualTo(com.poc.processor.domain.FraudAction.REVIEW.name()))
                     .log("Fraud REVIEW for high-value payment: ${body.paymentId}")
                     .to("direct:fraud-review-queue")
                 .otherwise()
@@ -117,10 +113,10 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("fraud-check-standard")
             .log("Fraud evaluation already done for standard payment: ${body.paymentId}")
             .choice()
-                .when(header("CamelFraudAction").isEqualTo(FraudAction.REJECT.name()))
+                .when(header(CamelRouteConstants.HEADER_FRAUD_ACTION).isEqualTo(com.poc.processor.domain.FraudAction.REJECT.name()))
                     .log("Fraud REJECT: ${body.paymentId}")
                     .to("direct:fraud-reject")
-                .when(header("CamelFraudAction").isEqualTo(FraudAction.REVIEW.name()))
+                .when(header(CamelRouteConstants.HEADER_FRAUD_ACTION).isEqualTo(com.poc.processor.domain.FraudAction.REVIEW.name()))
                     .log("Fraud REVIEW: ${body.paymentId}")
                     .to("direct:fraud-review-queue")
                 .otherwise()
@@ -131,46 +127,46 @@ public class PaymentProcessorRoute extends RouteBuilder {
         from(CamelRouteConstants.DIRECT_RETRY_HANDLER)
             .routeId("retry-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
-            .log("Exhausted retries for payment ${header.OriginalPaymentId}: ${exception.message}")
+            .log("Exhausted retries for payment ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}: ${exception.message}")
             .choice()
                 .when(body().isInstanceOf(PaymentMessage.class))
                     .marshal(paymentJson)
             .end()
-            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+            .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID))
             .to(CamelRouteConstants.RETRY_TOPIC_URI)
             .log("Published to retry topic");
 
         from(CamelRouteConstants.DIRECT_POISON_DLQ)
             .routeId("poison-dlq-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
-            .log("Poison payment ${header.OriginalPaymentId}: ${exception.message}")
-            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+            .log("Poison payment ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}: ${exception.message}")
+            .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID))
             .to(CamelRouteConstants.DEAD_LETTER_TOPIC_URI)
             .log("Published poison to dead letter queue");
 
         from(CamelRouteConstants.DIRECT_DLQ_HANDLER)
             .routeId("error-dlq-handler")
             .process(PaymentProcessorRoute::restorePaymentIdFromKafkaKey)
-            .log("Error processing payment ${header.OriginalPaymentId}: ${exception.message}")
-            .setHeader("kafka.KEY", header("OriginalPaymentId"))
+            .log("Error processing payment ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}: ${exception.message}")
+            .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID))
             .to(CamelRouteConstants.DEAD_LETTER_TOPIC_URI)
             .log("Published to dead letter queue");
 
         from("kafka:{{kafka.topic.payments.retry}}?groupId=payment-processor-retry-group&autoCommitEnable=false&autoOffsetReset=earliest")
             .routeId("retry-consumer")
             .autoStartup("{{camel.route.retry-consumer.auto-startup:true}}")
-            .log("Retrying payment from retry topic: ${header.kafka.KEY}")
+            .log("Retrying payment from retry topic: ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")
             .process(exchange -> {
-                Integer retryCount = exchange.getIn().getHeader("retryCount", 0, Integer.class);
-                exchange.getIn().setHeader("retryCount", retryCount + 1);
+                Integer retryCount = exchange.getIn().getHeader(CamelRouteConstants.HEADER_RETRY_COUNT, 0, Integer.class);
+                exchange.getIn().setHeader(CamelRouteConstants.HEADER_RETRY_COUNT, retryCount + 1);
             })
             .choice()
-                .when(header("retryCount").isLessThan(3))
-                    .log("Retry attempt ${header.retryCount} for ${header.kafka.KEY}")
+                .when(header(CamelRouteConstants.HEADER_RETRY_COUNT).isLessThan(3))
+                    .log("Retry attempt ${header." + CamelRouteConstants.HEADER_RETRY_COUNT + "} for ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")
                     .to("kafka:{{kafka.topic.payments.received}}")
                 .otherwise()
-                    .log("Max retries exceeded for ${header.kafka.KEY}, sending to DLQ")
-                    .setHeader("kafka.KEY", header("kafka.KEY"))
+                    .log("Max retries exceeded for ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}, sending to DLQ")
+                    .setHeader(CamelRouteConstants.HEADER_KAFKA_KEY, header(CamelRouteConstants.HEADER_KAFKA_KEY))
                     .to(CamelRouteConstants.DEAD_LETTER_TOPIC_URI)
             .end();
     }

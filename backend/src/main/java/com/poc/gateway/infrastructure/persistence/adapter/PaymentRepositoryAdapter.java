@@ -24,10 +24,10 @@ public class PaymentRepositoryAdapter implements PaymentRepositoryPort {
     private static final Logger LOG = Logger.getLogger(PaymentRepositoryAdapter.class);
 
     @Inject
-    EntityManager em;
+    private EntityManager em;
 
     @Inject
-    PaymentPersistenceMapper persistenceMapper;
+    private PaymentPersistenceMapper persistenceMapper;
 
     @Override
     @Transactional

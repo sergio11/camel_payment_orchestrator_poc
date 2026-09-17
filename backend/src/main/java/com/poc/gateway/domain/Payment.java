@@ -27,6 +27,7 @@ public record Payment(
         String country,
         PaymentMetadata metadata
     ) {
+        LocalDateTime now = LocalDateTime.now();
         return new Payment(
             UUID.randomUUID(),
             amount,
@@ -38,8 +39,8 @@ public record Payment(
             null,
             null,
             metadata,
-            LocalDateTime.now(),
-            LocalDateTime.now()
+            now,
+            now
         );
     }
 

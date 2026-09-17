@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 public class ContentBasedRouterBean implements RoutingDecisionPort {
 
     @Inject
-    FraudRulesConfig config;
+    private FraudRulesConfig config;
 
     @Override
     public String resolveFraudRoute(BigDecimal amount, String paymentMethod, String country) {

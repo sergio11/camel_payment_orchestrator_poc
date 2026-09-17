@@ -4,7 +4,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import com.poc.camel.testsupport.container.KafkaTestContainer;
@@ -12,6 +14,7 @@ import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.errors.TopicExistsException;
 import org.testcontainers.containers.KafkaContainer;
 
 public class KafkaTestResource implements QuarkusTestResourceLifecycleManager {
@@ -60,15 +63,32 @@ public class KafkaTestResource implements QuarkusTestResourceLifecycleManager {
     private void preCreateTopics(String bootstrapServers) {
         Properties props = new Properties();
         props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 15000);
         try (AdminClient admin = AdminClient.create(props)) {
+            // Fail fast when the broker is unreachable instead of letting tests
+            // run against a half-ready broker (that produced the NPE cascade
+            // in QuarkusTestExtension with runningQuarkusApplication == null).
+            admin.describeCluster().nodes().get(60, TimeUnit.SECONDS);
             List<NewTopic> newTopics = TOPICS.stream()
                 .map(name -> new NewTopic(name, 1, (short) 1))
                 .collect(Collectors.toList());
-            // createTopics is idempotent for already-existing topics when ignoring errors
-            admin.createTopics(newTopics).all().get(30, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            // Topics may already exist (e.g. second test class in same JVM) — that's fine
-            System.out.println("[KafkaTestResource] Topic pre-creation note: " + e.getMessage());
+            try {
+                admin.createTopics(newTopics).all().get(60, TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                if (e.getCause() instanceof TopicExistsException) {
+                    // Singleton container shared across test classes in the same
+                    // JVM: topics created by a previous class are reused.
+                    System.out.println("[KafkaTestResource] Topics already exist, reusing them");
+                } else {
+                    throw new RuntimeException(
+                        "Kafka topic pre-creation failed on " + bootstrapServers, e);
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while waiting for Kafka test broker", e);
+        } catch (ExecutionException | TimeoutException e) {
+            throw new RuntimeException("Kafka test broker not ready: " + bootstrapServers, e);
         }
     }
 

@@ -23,6 +23,7 @@ import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
@@ -39,19 +40,19 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 public class PaymentResource {
 
     @Inject
-    CreatePaymentUseCase createPayment;
+    private CreatePaymentUseCase createPayment;
 
     @Inject
-    GetPaymentUseCase getPayment;
+    private GetPaymentUseCase getPayment;
 
     @Inject
-    ListPaymentsUseCase listPayments;
+    private ListPaymentsUseCase listPayments;
 
     @Inject
-    UpdatePaymentStatusUseCase updateStatus;
+    private UpdatePaymentStatusUseCase updateStatus;
 
     @Inject
-    PaymentMapper mapper;
+    private PaymentMapper mapper;
 
     @POST
     @Operation(summary = "Create a new payment", description = "Creates a new payment with idempotency support")
@@ -67,7 +68,7 @@ public class PaymentResource {
     @GET
     @Path("/{id}")
     @Operation(summary = "Get payment by ID", description = "Retrieves a payment by its unique identifier")
-    public Response getById(@jakarta.ws.rs.PathParam("id") String id) {
+    public Response getById(@PathParam("id") String id) {
         UUID uuid = UUID.fromString(id);
         Payment result = getPayment.execute(uuid);
         PaymentResponseDTO response = mapper.toResponseDTO(result);
@@ -97,7 +98,7 @@ public class PaymentResource {
     @Path("/{id}/status")
     @Operation(summary = "Update payment status", description = "Updates the status of an existing payment")
     public Response updateStatus(
-            @jakarta.ws.rs.PathParam("id") String id,
+            @PathParam("id") String id,
             @Valid UpdatePaymentStatusRequestDTO body) {
         UUID uuid = UUID.fromString(id);
         PaymentStatus newStatus = PaymentStatus.fromString(body.status())
@@ -110,7 +111,7 @@ public class PaymentResource {
     @GET
     @Path("/idempotency/{key}")
     @Operation(summary = "Get payment by idempotency key", description = "Retrieves a payment by its idempotency key")
-    public Response getByIdempotencyKey(@jakarta.ws.rs.PathParam("key") String key) {
+    public Response getByIdempotencyKey(@PathParam("key") String key) {
         return getPayment.executeByIdempotencyKey(key)
             .map(payment -> {
                 PaymentResponseDTO response = mapper.toResponseDTO(payment);

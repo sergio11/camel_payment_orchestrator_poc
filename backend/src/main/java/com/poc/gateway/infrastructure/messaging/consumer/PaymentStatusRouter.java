@@ -14,10 +14,10 @@ public class PaymentStatusRouter {
     private static final Logger LOG = Logger.getLogger(PaymentStatusRouter.class);
 
     @Inject
-    PaymentStatusHandler handler;
+    private PaymentStatusHandler handler;
 
     @Inject
-    KafkaTopicConfig topicConfig;
+    private KafkaTopicConfig topicConfig;
 
     public void route(ConsumerRecord<String, String> record) {
         Optional<PaymentStatus> status = topicConfig.resolveStatus(record.topic());

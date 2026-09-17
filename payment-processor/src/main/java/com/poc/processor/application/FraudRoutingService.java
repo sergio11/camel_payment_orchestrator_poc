@@ -11,7 +11,7 @@ import jakarta.inject.Inject;
 public class FraudRoutingService {
 
     @Inject
-    RoutingDecisionPort routingPort;
+    private RoutingDecisionPort routingPort;
 
     public FraudRoutingDecision route(PaymentMessage message, FraudEvaluation evaluation) {
         String target = routingPort.resolveFraudRoute(

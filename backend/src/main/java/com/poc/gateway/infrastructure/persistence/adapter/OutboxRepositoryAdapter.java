@@ -17,10 +17,10 @@ import java.util.UUID;
 public class OutboxRepositoryAdapter implements OutboxRepositoryPort {
 
     @Inject
-    EntityManager em;
+    private EntityManager em;
 
     @Inject
-    OutboxEventMapper mapper;
+    private OutboxEventMapper mapper;
 
     @Override
     @Transactional

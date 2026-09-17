@@ -51,6 +51,8 @@ spec:
               name: http
               protocol: TCP
           env:
+            - name: QUARKUS_PROFILE
+              value: "prod"
             - name: QUARKUS_HTTP_HOST
               value: "0.0.0.0"
             - name: QUARKUS_HTTP_PORT
@@ -75,13 +77,22 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: PROVIDER_B_URL
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: password
           envFrom:
+            - configMapRef:
+                name: app-config
             - configMapRef:
                 name: fraud-rules-config
             - configMapRef:
                 name: jaeger-config
             - secretRef:
                 name: provider-secrets
+            - secretRef:
+                name: postgres-secrets
           resources:
             requests:
               cpu: "250m"

@@ -9,8 +9,9 @@ import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
+import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
+import com.poc.shared.util.IdempotencyKeyUtils;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.util.Optional;
@@ -22,23 +23,23 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     private static final Logger LOG = Logger.getLogger(CreatePaymentService.class);
 
     @Inject
-    PaymentRepositoryPort paymentRepo;
+    private PaymentRepositoryPort paymentRepo;
 
     @Inject
-    OutboxRepositoryPort outboxRepo;
+    private OutboxRepositoryPort outboxRepo;
 
     @Inject
-    EventPublisherPort eventPublisher;
+    private EventPublisherPort eventPublisher;
 
     @Inject
-    PaymentEventSerializer serializer;
+    private PaymentEventSerializer serializer;
 
     @Inject
-    Instance<CreatePaymentService> self;
+    private KafkaTopicConfig topicConfig;
 
     @Override
     public Payment execute(CreatePaymentCommand command, String idempotencyKey) {
-        String key = normalizeKey(idempotencyKey);
+        String key = IdempotencyKeyUtils.normalize(idempotencyKey);
 
         Optional<Payment> existing = paymentRepo.findByIdempotencyKey(key);
         if (existing.isPresent()) {
@@ -51,7 +52,7 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             command.paymentMethod(), command.country(), command.metadata()
         );
 
-        Payment saved = self.get().persistWithOutbox(domainPayment, key);
+        Payment saved = persistWithOutbox(domainPayment, key);
         attemptKafkaPublish(saved);
         return saved;
     }
@@ -60,7 +61,7 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     Payment persistWithOutbox(Payment domainPayment, String idempotencyKey) {
         Payment saved = paymentRepo.save(domainPayment, idempotencyKey);
         String payload = serializer.serialize(saved);
-        OutboxEvent event = OutboxEvent.create(saved.id(), "payments.events.received", payload, idempotencyKey);
+        OutboxEvent event = OutboxEvent.create(saved.id(), topicConfig.received(), payload, idempotencyKey);
         outboxRepo.persist(event);
         return saved;
     }
@@ -71,12 +72,5 @@ public class CreatePaymentService implements CreatePaymentUseCase {
         } catch (Exception e) {
             LOG.errorf(e, "Kafka publish attempt failed for payment %s, outbox relay will handle delivery", payment.id());
         }
-    }
-
-    private String normalizeKey(String key) {
-        if (key == null || key.isBlank()) {
-            return java.util.UUID.randomUUID().toString();
-        }
-        return key.trim();
     }
 }

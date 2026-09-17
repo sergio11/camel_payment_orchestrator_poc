@@ -19,13 +19,13 @@ public class OutboxRelayScheduler {
     private static final Logger LOG = Logger.getLogger(OutboxRelayScheduler.class);
 
     @Inject
-    OutboxRepositoryPort outboxRepo;
+    private OutboxRepositoryPort outboxRepo;
 
     @Inject
-    EventPublisherPort eventPublisher;
+    private EventPublisherPort eventPublisher;
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @ConfigProperty(name = "outbox.relay.batch-size", defaultValue = "50")
     int batchSize;

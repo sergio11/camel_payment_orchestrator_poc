@@ -10,7 +10,7 @@ import org.apache.camel.component.jackson.JacksonDataFormat;
 public class AuditPipelineRoute extends RouteBuilder {
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @Override
     public void configure() {

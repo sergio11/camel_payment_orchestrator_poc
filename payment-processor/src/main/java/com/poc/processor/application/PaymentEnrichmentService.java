@@ -13,45 +13,24 @@ import jakarta.inject.Inject;
 public class PaymentEnrichmentService implements EnrichPaymentUseCase {
 
     @Inject
-    CustomerRiskPort customerRiskPort;
+    private CustomerRiskPort customerRiskPort;
 
     @Inject
-    GeoRiskPort geoRiskPort;
+    private GeoRiskPort geoRiskPort;
 
     @Inject
-    VelocityPort velocityPort;
+    private VelocityPort velocityPort;
 
     @Override
     public PaymentMessage enrich(PaymentMessage message) {
         PaymentMetadataDTO enrichedMetadata = enrichWithRiskData(message);
-
-        return new PaymentMessage(
-            message.eventId(),
-            message.paymentId(),
-            message.amount(),
-            message.currency(),
-            message.customerId(),
-            message.paymentMethod(),
-            message.country(),
-            message.attemptCount(),
-            message.isNewPaymentMethod(),
-            message.customerAgeDays(),
-            message.timeZone(),
-            enrichedMetadata,
-            message.timestamp()
-        );
+        return message.withMetadata(enrichedMetadata);
     }
 
     private PaymentMetadataDTO enrichWithRiskData(PaymentMessage message) {
         PaymentMetadataDTO source = message.metadata() != null ? message.metadata() : PaymentMetadataDTO.empty();
-
-        return new PaymentMetadataDTO(
-            source.orderId(),
-            source.attempts(),
-            source.isNewPaymentMethod(),
-            source.paymentMethodAgeDays(),
+        return source.conEnrichment(
             customerRiskPort.determineRiskTier(message.customerId()),
-            java.time.LocalDateTime.now().toString(),
             velocityPort.calculateVelocityScore(message.customerId()),
             geoRiskPort.calculateGeoRiskScore(message.country())
         );

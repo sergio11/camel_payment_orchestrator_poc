@@ -12,7 +12,11 @@ public class MarkerBasedClassifier implements ExceptionClassifier {
         "JsonMappingException",
         "IllegalArgumentException",
         "NumberFormatException",
-        "DateTimeParseException"
+        "DateTimeParseException",
+        "ConstraintViolationException",
+        "ValidationException",
+        "BadRequest",
+        "ViolationException"
     );
 
     private static final List<String> CONSTRAINT_MARKERS = List.of(
@@ -39,6 +43,9 @@ public class MarkerBasedClassifier implements ExceptionClassifier {
             String msg = throwable.getMessage().toLowerCase();
             if (CONSTRAINT_MARKERS.stream().anyMatch(msg::contains)) {
                 return ExceptionCategory.CONFLICT;
+            }
+            if (msg.contains("400") || msg.contains("bad request")) {
+                return ExceptionCategory.BAD_REQUEST;
             }
         }
 

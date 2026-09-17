@@ -14,7 +14,7 @@ public class JacksonPaymentEventSerializer implements PaymentEventSerializer {
     private static final Logger LOG = Logger.getLogger(JacksonPaymentEventSerializer.class);
 
     @Inject
-    ObjectMapper objectMapper;
+    private ObjectMapper objectMapper;
 
     @Override
     public String serialize(Payment payment) {

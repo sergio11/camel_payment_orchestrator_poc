@@ -1,13 +1,14 @@
 package com.poc.gateway.infrastructure.messaging.consumer;
 
+import com.poc.shared.util.KafkaConfigHelper;
+import io.quarkus.runtime.StartupEvent;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.Properties;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -21,13 +22,19 @@ public class KafkaConsumerManager {
     private static final Logger LOG = Logger.getLogger(KafkaConsumerManager.class);
 
     @Inject
-    PaymentStatusRouter router;
+    private PaymentStatusRouter router;
 
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
-    @ConfigProperty(name = "kafka.topic.payments.processed")
+    @ConfigProperty(name = "kafka.topic.payments.processed", defaultValue = "payments.events.processed")
     String processedTopic;
+
+    @ConfigProperty(name = "kafka.topic.payments.failed", defaultValue = "payments.events.failed")
+    String failedTopic;
+
+    @ConfigProperty(name = "kafka.topic.payments.review", defaultValue = "payments.events.review")
+    String reviewTopic;
 
     @ConfigProperty(name = "kafka.group.id", defaultValue = "payment-status-consumer")
     String groupId;
@@ -36,26 +43,25 @@ public class KafkaConsumerManager {
     private ExecutorService executor;
     private volatile boolean running;
 
-    @PostConstruct
-    void start() {
-        Properties props = new Properties();
-        props.put("bootstrap.servers", bootstrapServers);
-        props.put("group.id", groupId);
-        props.put("enable.auto.commit", "false");
-        props.put("auto.offset.reset", "earliest");
-        props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+    void onStart(@Observes StartupEvent ev) {
+        try {
+            LOG.info("KafkaConsumerManager: Initializing Kafka consumer...");
+            LOG.infof("KafkaConsumerManager: Bootstrap=%s, GroupId=%s", bootstrapServers, groupId);
+            consumer = new KafkaConsumer<>(KafkaConfigHelper.consumerConfig(bootstrapServers, groupId));
+            consumer.subscribe(Arrays.asList(processedTopic, failedTopic, reviewTopic));
+            LOG.infof("KafkaConsumerManager: Subscribed to topics: %s, %s, %s", processedTopic, failedTopic, reviewTopic);
 
-        consumer = new KafkaConsumer<>(props);
-        consumer.subscribe(Collections.singletonList(processedTopic));
-
-        running = true;
-        executor = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "kafka-consumer");
-            t.setDaemon(true);
-            return t;
-        });
-        executor.submit(this::pollLoop);
+            running = true;
+            executor = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "kafka-status-consumer");
+                t.setDaemon(true);
+                return t;
+            });
+            executor.submit(this::pollLoop);
+            LOG.info("KafkaConsumerManager: Started successfully");
+        } catch (Exception e) {
+            LOG.errorf(e, "KafkaConsumerManager: Failed to start");
+        }
     }
 
     @PreDestroy
