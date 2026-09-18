@@ -7,6 +7,8 @@ import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
 import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
 import com.poc.shared.util.KafkaConfigHelper;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.instrumentation.kafkaclients.v2_6.TracingProducerInterceptor;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -35,6 +37,9 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
     @Inject
     private PaymentEventSerializer serializer;
 
+    @Inject
+    private OpenTelemetry openTelemetry;
+
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
 
@@ -42,7 +47,9 @@ public class KafkaEventPublisherAdapter implements EventPublisherPort {
 
     @PostConstruct
     void init() {
-        producer = new KafkaProducer<>(KafkaConfigHelper.producerConfig(bootstrapServers));
+        var props = KafkaConfigHelper.producerConfig(bootstrapServers);
+        props.put("interceptor.classes", TracingProducerInterceptor.class.getName());
+        producer = new KafkaProducer<>(props);
     }
 
     @PreDestroy

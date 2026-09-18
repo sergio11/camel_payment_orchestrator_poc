@@ -7,4 +7,5 @@ metadata:
     app: poc-camel
     component: tracing
 data:
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4317"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"

@@ -1,6 +1,8 @@
 package com.poc.gateway.infrastructure.messaging.consumer;
 
 import com.poc.shared.util.KafkaConfigHelper;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.instrumentation.kafkaclients.v2_6.TracingConsumerInterceptor;
 import io.quarkus.runtime.StartupEvent;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.annotation.PreDestroy;
@@ -23,6 +25,9 @@ public class KafkaConsumerManager {
 
     @Inject
     private PaymentStatusRouter router;
+
+    @Inject
+    private OpenTelemetry openTelemetry;
 
     @ConfigProperty(name = "kafka.bootstrap.servers")
     String bootstrapServers;
@@ -47,7 +52,9 @@ public class KafkaConsumerManager {
         try {
             LOG.info("KafkaConsumerManager: Initializing Kafka consumer...");
             LOG.infof("KafkaConsumerManager: Bootstrap=%s, GroupId=%s", bootstrapServers, groupId);
-            consumer = new KafkaConsumer<>(KafkaConfigHelper.consumerConfig(bootstrapServers, groupId));
+            var props = KafkaConfigHelper.consumerConfig(bootstrapServers, groupId);
+            props.put("interceptor.classes", TracingConsumerInterceptor.class.getName());
+            consumer = new KafkaConsumer<>(props);
             consumer.subscribe(Arrays.asList(processedTopic, failedTopic, reviewTopic));
             LOG.infof("KafkaConsumerManager: Subscribed to topics: %s, %s, %s", processedTopic, failedTopic, reviewTopic);
 

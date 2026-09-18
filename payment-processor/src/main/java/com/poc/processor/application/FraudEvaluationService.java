@@ -51,7 +51,7 @@ public class FraudEvaluationService implements EvaluateFraudUseCase {
             triggeredRules.add(RULE_HIGH_AMOUNT);
         }
 
-        if (config.highRiskCountries().contains(message.country())) {
+        if (message.country() != null && config.highRiskCountries().contains(message.country())) {
             score += 30;
             triggeredRules.add(RULE_HIGH_RISK_COUNTRY);
         }

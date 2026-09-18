@@ -19,6 +19,8 @@ require "net/http"
 require "json"
 require "securerandom"
 require "tmpdir"
+require "socket"
+require "time"
 
 CONTAINER_ENGINE = ENV['CONTAINER_ENGINE'] || 'podman'
 PODMAN_DOCKER_HOST = "npipe:////./pipe/podman-machine-default"
@@ -37,6 +39,17 @@ IMAGES = {
 def setup_podman_env
   ENV['DOCKER_HOST'] ||= PODMAN_DOCKER_HOST
   ENV['TESTCONTAINERS_RYUK_DISABLED'] = 'true'
+end
+
+# Auto-configure Podman socket so every kubectl backtick/system call works
+# without the caller needing to export DOCKER_HOST manually.
+setup_podman_env
+
+# Run kubectl and return stdout (stderr suppressed). Used by ps/kafka tasks.
+def kc_out(args)
+  require 'open3'
+  out, _err, _st = Open3.capture3(ENV, "kubectl #{args}")
+  out
 end
 
 def run_cmd(cmd, fail: true)
@@ -347,9 +360,342 @@ namespace :k8s do
     Rake::Task['k8s:smoke'].invoke if ENV['SMOKE'] == '1'
   end
 
-  task :status do
-    run_cmd("kubectl get pods -n #{NAMESPACE} -o wide", fail: false)
-    run_cmd("kubectl get svc -n #{NAMESPACE}", fail: false)
+  desc 'Show pods + services status as formatted tables'
+  task :status => [:ps] do end
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # rake k8s:ps — rich pod/service/hpa status table (hides kubectl complexity)
+  # ────────────────────────────────────────────────────────────────────────────
+  desc 'Rich formatted table of pods, services and HPAs in the namespace'
+  task :ps do
+    # helpers
+    def col(text, width, align: :left)
+      s = (text || '').to_s.gsub(/\e\[[0-9;]*m/, '')   # strip ANSI for measuring
+      padded = align == :right ? s.rjust(width) : s.ljust(width)
+      text.to_s.include?("\e[") ? text.to_s + (' ' * [width - s.length, 0].max) : padded
+    end
+    def bar(widths); "+#{widths.map { |w| '-' * (w + 2) }.join('+')}+"; end
+    def row(cells, widths)
+      "| #{cells.each_with_index.map { |c, i| col(c, widths[i]) }.join(' | ')} |"
+    end
+    def section(title)
+      puts
+      puts "\e[1m\e[36m  #{title}\e[0m"
+    end
+
+    # ── PODS ──────────────────────────────────────────────────────────────────
+    section("PODS  (namespace: #{NAMESPACE})")
+    raw = kc_out("get pods -n #{NAMESPACE} -o json")
+    begin
+      items = JSON.parse(raw)['items'] || []
+    rescue JSON::ParserError
+      puts "  \e[31mERROR: could not parse pod list — is kubectl context set?\e[0m"
+      items = []
+    end
+
+    STATUS_COLOR = {
+      'Running'   => "\e[32m",   # green
+      'Pending'   => "\e[33m",   # yellow
+      'Succeeded' => "\e[90m",   # grey
+      'Completed' => "\e[90m",
+      'Failed'    => "\e[31m",   # red
+      'Unknown'   => "\e[35m",   # magenta
+      'Terminating' => "\e[31m",
+    }.freeze
+
+    pod_rows = items.map do |p|
+      name      = p.dig('metadata', 'name')
+      phase     = p.dig('status', 'phase') || 'Unknown'
+      # override phase if pod is being deleted
+      phase     = 'Terminating' if p.dig('metadata', 'deletionTimestamp')
+      ctrs      = p.dig('status', 'containerStatuses') || []
+      ready_n   = ctrs.count { |c| c['ready'] }
+      total_n   = ctrs.size
+      ready_s   = "#{ready_n}/#{total_n}"
+      restarts  = ctrs.sum { |c| c.dig('restartCount') || 0 }
+      age_s     = begin
+        created = Time.parse(p.dig('metadata', 'creationTimestamp'))
+        secs    = (Time.now - created).to_i
+        if    secs < 120   then "#{secs}s"
+        elsif secs < 7200  then "#{secs / 60}m"
+        elsif secs < 86400 then "#{secs / 3600}h"
+        else "#{secs / 86400}d"
+        end
+      rescue
+        '?'
+      end
+      ip        = p.dig('status', 'podIP') || '<none>'
+      node      = p.dig('spec', 'nodeName') || '<none>'
+      color     = STATUS_COLOR[phase] || ''
+      reset     = "\e[0m"
+      phase_col = "#{color}#{phase}#{reset}"
+      # readiness coloring
+      ready_col = (ready_n == total_n && total_n > 0) ?
+        "\e[32m#{ready_s}\e[0m" : "\e[33m#{ready_s}\e[0m"
+      rst_col   = restarts > 0 ? "\e[33m#{restarts}\e[0m" : "\e[90m#{restarts}\e[0m"
+      [name, ready_col, phase_col, rst_col, age_s, ip, node]
+    end
+
+    hdrs  = %w[NAME READY STATUS RESTARTS AGE POD-IP NODE]
+    # compute column widths from plain-text content
+    plain_rows = items.map do |p|
+      name     = p.dig('metadata', 'name') || ''
+      phase    = p.dig('status', 'phase') || 'Unknown'
+      phase    = 'Terminating' if p.dig('metadata', 'deletionTimestamp')
+      ctrs     = p.dig('status', 'containerStatuses') || []
+      ready_n  = ctrs.count { |c| c['ready'] }
+      total_n  = ctrs.size
+      restarts = ctrs.sum { |c| c.dig('restartCount') || 0 }
+      [name, "#{ready_n}/#{total_n}", phase, restarts.to_s, '', p.dig('status','podIP')||'<none>', p.dig('spec','nodeName')||'<none>']
+    end
+    all_text_rows = [hdrs] + plain_rows
+    widths = hdrs.each_with_index.map { |h, i| all_text_rows.map { |r| (r[i] || '').length }.max }
+
+    puts bar(widths)
+    puts row(hdrs.map { |h| "\e[1m#{h}\e[0m" }, widths)
+    puts bar(widths)
+    if pod_rows.empty?
+      puts row(["(no pods found in namespace #{NAMESPACE})", '', '', '', '', '', ''], widths)
+    else
+      pod_rows.each { |r| puts row(r, widths) }
+    end
+    puts bar(widths)
+    puts "  Total: #{pod_rows.size} pod(s)"
+
+    # ── SERVICES ──────────────────────────────────────────────────────────────
+    section("SERVICES")
+    svc_raw = kc_out("get svc -n #{NAMESPACE} -o json")
+    begin
+      svcs = JSON.parse(svc_raw)['items'] || []
+    rescue JSON::ParserError
+      svcs = []
+    end
+
+
+    svc_rows = svcs.map do |s|
+      name      = s.dig('metadata', 'name')
+      type      = s.dig('spec', 'type') || 'ClusterIP'
+      cluster_ip = s.dig('spec', 'clusterIP') || '<none>'
+      ext_ip    = (s.dig('status', 'loadBalancer', 'ingress') || []).map { |i| i['ip'] || i['hostname'] }.join(',')
+      ext_ip    = '<none>' if ext_ip.empty?
+      ports     = (s.dig('spec', 'ports') || []).map do |p|
+        np   = p['nodePort'] ? ":#{p['nodePort']}" : ''
+        "#{p['port']}#{np}/#{p['protocol']}"
+      end.join(', ')
+      type_col  = type == 'NodePort' ? "\e[33m#{type}\e[0m" : type
+      [name, type_col, cluster_ip, ext_ip, ports]
+    end
+
+    sh  = %w[NAME TYPE CLUSTER-IP EXTERNAL-IP PORT(S)]
+    sw  = [sh, svcs.map { |s|
+      [
+        s.dig('metadata','name')||'',
+        s.dig('spec','type')||'ClusterIP',
+        s.dig('spec','clusterIP')||'',
+        '<none>',
+        (s.dig('spec','ports')||[]).map{|p|"#{p['port']}/#{p['protocol']}"}.join(', ')
+      ]
+    }].flatten(1).then { |all| sh.each_with_index.map { |h, i| all.map { |r| (r[i]||'').length }.max } }
+
+    puts bar(sw)
+    puts row(sh.map { |h| "\e[1m#{h}\e[0m" }, sw)
+    puts bar(sw)
+    svc_rows.empty? ? puts(row(['(none)', '', '', '', ''], sw)) : svc_rows.each { |r| puts row(r, sw) }
+    puts bar(sw)
+
+    # ── HPAs ──────────────────────────────────────────────────────────────────
+    section("HORIZONTAL POD AUTOSCALERS")
+    hpa_raw = kc_out("get hpa -n #{NAMESPACE} -o json")
+    begin
+      hpas = JSON.parse(hpa_raw)['items'] || []
+    rescue JSON::ParserError
+      hpas = []
+    end
+
+
+    hpa_rows = hpas.map do |h|
+      name    = h.dig('metadata', 'name')
+      target  = "#{h.dig('spec','scaleTargetRef','kind')}/#{h.dig('spec','scaleTargetRef','name')}"
+      min_r   = h.dig('spec', 'minReplicas')
+      max_r   = h.dig('spec', 'maxReplicas')
+      curr_r  = h.dig('status', 'currentReplicas')
+      desired = h.dig('status', 'desiredReplicas')
+      metrics = (h.dig('status', 'currentMetrics') || []).map do |m|
+        case m['type']
+        when 'Resource'
+          r = m.dig('resource')
+          "#{r['name']}=#{r.dig('current','averageUtilization') || '?'}%"
+        else
+          m['type']
+        end
+      end.join(', ')
+      metrics = '(metrics-server unavailable)' if metrics.empty?
+      [name, target, min_r.to_s, max_r.to_s, curr_r.to_s, desired.to_s, metrics]
+    end
+
+    hh  = ['NAME', 'TARGET', 'MIN', 'MAX', 'CURRENT', 'DESIRED', 'METRICS']
+    hw  = [hh, hpa_rows.map { |r| r }].flatten(1).then { |all| hh.each_with_index.map { |_, i| all.map { |r| (r[i]||'').gsub(/\e\[[0-9;]*m/,'').length }.max } }
+
+    puts bar(hw)
+    puts row(hh.map { |h| "\e[1m#{h}\e[0m" }, hw)
+    puts bar(hw)
+    hpa_rows.empty? ? puts(row(['(none)', '', '', '', '', '', ''], hw)) : hpa_rows.each { |r| puts row(r, hw) }
+    puts bar(hw)
+    puts
+  end
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # rake k8s:kafka — Kafka topics + consumer groups as formatted tables
+  # Knobs: CONSUMER_GROUPS=1 (show group lag), TOPIC=name (filter)
+  # ────────────────────────────────────────────────────────────────────────────
+  desc 'Show Kafka topics (and optionally consumer group lag) as formatted tables (TOPIC=name, CONSUMER_GROUPS=1)'
+  task :kafka do
+    kafka_pod = 'kafka-stack'
+    kafka_c   = 'kafka'
+    bs        = 'localhost:9092'
+    filter    = ENV['TOPIC'] || ''
+
+    def k_col(text, width)
+      plain = text.to_s.gsub(/\e\[[0-9;]*m/, '')
+      pad   = [width - plain.length, 0].max
+      "#{text}#{' ' * pad}"
+    end
+    def k_bar(widths); "+#{widths.map { |w| '-' * (w + 2) }.join('+')}+"; end
+    def k_row(cells, widths)
+      "| #{cells.each_with_index.map { |c, i| k_col(c, widths[i]) }.join(' | ')} |"
+    end
+
+    # ── TOPICS ────────────────────────────────────────────────────────────────
+    puts
+    puts "\e[1m\e[36m  KAFKA TOPICS  (broker: kafka:9092)\e[0m"
+
+    raw_topics = kc_out("exec #{kafka_pod} -c #{kafka_c} -n #{NAMESPACE} -- kafka-topics --bootstrap-server #{bs} --describe")
+    topic_rows = []
+    current = nil
+    raw_topics.each_line do |line|
+      line = line.strip
+      if line.start_with?('Topic:') && !line.include?('Partition:')
+        # new topic header line:  Topic: name  PartitionCount: N  ReplicationFactor: N  Configs: ...
+        m = line.match(/Topic:\s+(\S+)\s+PartitionCount:\s+(\d+)\s+ReplicationFactor:\s+(\d+)/)
+        next unless m
+        tname = m[1]; parts = m[2]; rf = m[3]
+        next if tname == '__consumer_offsets'
+        next if !filter.empty? && !tname.include?(filter)
+        current = { name: tname, parts: parts, rf: rf, leaders: [], isrs: [] }
+        topic_rows << current
+      elsif line.start_with?('Topic:') && line.include?('Partition:') && current
+        # partition detail line
+        m = line.match(/Leader:\s+(\d+)\s+Replicas:\s+[\d,]+\s+Isr:\s+([\d,]+)/)
+        if m
+          current[:leaders] << m[1]
+          current[:isrs]    << m[2].split(',').size
+        end
+      end
+    end
+
+    # If --describe gave nothing useful, fall back to --list
+    if topic_rows.empty?
+      list = kc_out("exec #{kafka_pod} -c #{kafka_c} -n #{NAMESPACE} -- kafka-topics --bootstrap-server #{bs} --list")
+      list.each_line do |t|
+        t = t.strip
+        next if t.empty? || t == '__consumer_offsets'
+        next if !filter.empty? && !t.include?(filter)
+        topic_rows << { name: t, parts: '?', rf: '?', leaders: [], isrs: [] }
+      end
+    end
+
+
+    EXPECTED_TOPICS = %w[
+      payments.events.received  payments.events.processed payments.events.failed
+      payments.events.review    payments.events.dead-letter payments.events.retry
+      payments.events.audit     payments.events.status.changed fraud.events.detected
+    ].freeze
+
+    th    = ['TOPIC', 'PARTITIONS', 'REP.FACTOR', 'LEADER(S)', 'STATUS']
+    tdata = topic_rows.map do |t|
+      expected = EXPECTED_TOPICS.include?(t[:name])
+      status   = expected ? "\e[32m✓ expected\e[0m" : "\e[90m(extra)\e[0m"
+      leaders  = t[:leaders].uniq.join(',')
+      leaders  = '–' if leaders.empty?
+      [t[:name], t[:parts].to_s, t[:rf].to_s, leaders, status]
+    end
+    tw = th.each_with_index.map do |h, i|
+      ([h] + tdata.map { |r| r[i].gsub(/\e\[[0-9;]*m/, '') }).map(&:length).max
+    end
+
+    puts k_bar(tw)
+    puts k_row(th.map { |h| "\e[1m#{h}\e[0m" }, tw)
+    puts k_bar(tw)
+    if tdata.empty?
+      puts k_row(["(no topics found#{filter.empty? ? '' : " matching '#{filter}'"})", '', '', '', ''], tw)
+    else
+      tdata.each { |r| puts k_row(r, tw) }
+    end
+    puts k_bar(tw)
+
+    # missing expected topics
+    present_names = topic_rows.map { |t| t[:name] }
+    missing = EXPECTED_TOPICS.reject { |e| present_names.include?(e) }
+    if missing.empty?
+      puts "  \e[32m✓ All #{EXPECTED_TOPICS.size} expected topics present\e[0m"
+    else
+      puts "  \e[31m✗ Missing topics (#{missing.size}): #{missing.join(', ')}\e[0m"
+    end
+
+    # ── CONSUMER GROUPS ───────────────────────────────────────────────────────
+    if ENV['CONSUMER_GROUPS'] == '1'
+      puts
+      puts "\e[1m\e[36m  CONSUMER GROUPS & LAG\e[0m"
+
+      groups_raw = kc_out("exec #{kafka_pod} -c #{kafka_c} -n #{NAMESPACE} -- kafka-consumer-groups --bootstrap-server #{bs} --list")
+      groups = groups_raw.lines.map(&:strip).reject(&:empty?).reject { |g| g.include?('Error') || g.include?('WARN') }
+
+      if groups.empty?
+        puts "  \e[90m(no consumer groups found)\e[0m"
+      else
+        cg_rows = []
+        groups.each do |grp|
+          desc = kc_out("exec #{kafka_pod} -c #{kafka_c} -n #{NAMESPACE} -- kafka-consumer-groups --bootstrap-server #{bs} --describe --group \"#{grp}\"")
+
+          desc.each_line do |line|
+            parts = line.split(/\s+/).map(&:strip)
+            # output columns: GROUP TOPIC PARTITION CURRENT-OFFSET LOG-END-OFFSET LAG CONSUMER-ID HOST CLIENT-ID
+            next if parts.size < 6
+            next if parts[0] == 'GROUP' # header
+            next if parts[1].nil? || parts[1].empty? || parts[1] == '-'
+            next if !filter.empty? && !parts[1].include?(filter)
+            lag      = parts[5] || '?'
+            lag_col  = begin
+              lag_i = Integer(lag)
+              lag_i > 100  ? "\e[31m#{lag}\e[0m" :
+              lag_i > 0    ? "\e[33m#{lag}\e[0m" :
+                             "\e[32m#{lag}\e[0m"
+            rescue ArgumentError
+              "\e[90m#{lag}\e[0m"
+            end
+            cg_rows << [grp, parts[1], parts[2], parts[3], parts[4], lag_col]
+          end
+        end
+
+        cgh   = ['GROUP', 'TOPIC', 'PARTITION', 'CURRENT-OFFSET', 'LOG-END', 'LAG']
+        cgw   = cgh.each_with_index.map do |h, i|
+          ([h] + cg_rows.map { |r| r[i].gsub(/\e\[[0-9;]*m/, '') }).map(&:length).max
+        end
+
+        puts k_bar(cgw)
+        puts k_row(cgh.map { |h| "\e[1m#{h}\e[0m" }, cgw)
+        puts k_bar(cgw)
+        if cg_rows.empty?
+          puts k_row(['(no partitions with offsets)', '', '', '', '', ''], cgw)
+        else
+          cg_rows.each { |r| puts k_row(r, cgw) }
+        end
+        puts k_bar(cgw)
+      end
+    else
+      puts "  \e[90mTip: run with CONSUMER_GROUPS=1 to show group lag\e[0m"
+    end
+    puts
   end
 
   task :logs do
@@ -432,6 +778,51 @@ namespace :k8s do
       end
     end
   end
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # E2E Test Helpers
+  # ────────────────────────────────────────────────────────────────────────────
+  E2E_PHASES = %w[infra connectivity happy-path fraud idempotency validation health circuit observability resilience].freeze
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # rake k8s:e2e [PHASE=...]
+  # ────────────────────────────────────────────────────────────────────────────
+  desc 'Run comprehensive E2E tests against K8s deployment (PHASE=infra|connectivity|happy-path|fraud|idempotency|validation|health|circuit|observability|resilience)'
+  task :e2e do
+    raise "No cluster context — is Kind running? (rake k8s:cluster)" unless kc_out("cluster-info").include?("control plane") || kc_out("cluster-info").include?("Kubernetes")
+
+    phase = ENV['PHASE'] || ''
+    phases = phase.empty? ? [] : [phase]
+
+    needs_pf = phases.empty? || (phases & %w[happy-path fraud idempotency validation]).any?
+    pf = nil
+    if needs_pf
+      puts "Starting port-forward to api-gateway:8080..."
+      pf = IO.popen("kubectl port-forward svc/api-gateway-external 8080:8080 -n #{NAMESPACE}")
+      Thread.new { pf.read rescue nil }
+      sleep 5
+      begin
+        require "socket"
+        TCPSocket.new("127.0.0.1", 8080).close
+        puts "Port-forward ready."
+      rescue
+        puts "WARN: port-forward may not be ready, tests may fail"
+      end
+    end
+
+    script = File.join(ROOT, "scripts", "e2e_runner.rb")
+    raise "E2E runner not found: #{script}" unless File.exist?(script)
+
+    cmd = "ruby \"#{script}\""
+    cmd += " PHASE=#{phase}" unless phase.empty?
+    ok = sh(cmd)
+
+  ensure
+    if pf
+      Process.kill("TERM", pf.pid) rescue nil
+      pf.close rescue nil
+    end
+  end
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -488,17 +879,24 @@ task :help do
       rake test:run          Run all tests (unit + integration + e2e) with coverage gate 98%
       rake adr:validate      Validate Architecture Decision Records in openspec/adrs
       rake spec:validate     Validate OpenAPI, AsyncAPI and ADR specifications
-      rake k8s:cluster        Create Kind cluster (idempotent)
+      rake k8s:cluster       Create Kind cluster (idempotent)
       rake k8s:build         Build JARs + Docker images + load into Kind
       rake k8s:deploy        Deploy to Kubernetes (auto-creates cluster)
       rake k8s:undeploy      Undeploy from Kubernetes (APPS_ONLY=1, CLUSTER_DELETE=1)
+      rake k8s:status        Alias for k8s:ps (pods + services + HPAs table)
+      rake k8s:ps            Rich table: pods (ready/status/restarts/age/ip), services, HPAs
+      rake k8s:kafka         Rich table: Kafka topics + optional consumer-group lag
       rake k8s:check         Verify pods + log asserts (APP=, EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1)
+      rake k8s:e2e           Comprehensive E2E tests (PHASE=phase-name)
 
     Flags (ENV, hidden from rake -T):
-      test:run  COVERAGE=0 (skip coverage), SCOPE=processor|backend|shared
-      infra:start SVC=name (follow logs after start)
-      k8s:*     APP=gateway|processor|all, OVERLAY=dev|prod
-      k8s:check EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1
+      test:run     COVERAGE=0 (skip coverage), SCOPE=processor|backend|shared
+      infra:start  SVC=name (follow logs after start)
+      k8s:*        APP=gateway|processor|all, OVERLAY=dev|prod
+      k8s:check    EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1
+      k8s:kafka    TOPIC=<substr>  filter topics by name substring
+                   CONSUMER_GROUPS=1  show per-partition lag for all consumer groups
+      k8s:e2e      PHASE=infra|connectivity|happy-path|fraud|idempotency|validation|health|circuit|observability|resilience
     Env knobs: OVERLAY=#{OVERLAY} CLUSTER=#{CLUSTER} NAMESPACE=#{NAMESPACE} CONTAINER_ENGINE=#{CONTAINER_ENGINE}
   HELP
 end

@@ -45,7 +45,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .logRetryAttempted(true)
             .logExhausted(true));
 
-        onException(JsonProcessingException.class, com.poc.processor.domain.exception.PaymentProcessingException.class, com.poc.shared.exception.InvalidPaymentException.class)
+        onException(JsonProcessingException.class, com.poc.processor.domain.exception.PaymentProcessingException.class, com.poc.shared.exception.InvalidPaymentException.class, com.poc.processor.domain.exception.FraudEvaluationException.class)
             .handled(true)
             .maximumRedeliveries(0)
             .logExhausted(true)
@@ -157,7 +157,17 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .autoStartup("{{camel.route.retry-consumer.auto-startup:true}}")
             .log("Retrying payment from retry topic: ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")
             .process(exchange -> {
-                Integer retryCount = exchange.getIn().getHeader(CamelRouteConstants.HEADER_RETRY_COUNT, 0, Integer.class);
+                Object raw = exchange.getIn().getHeader(CamelRouteConstants.HEADER_RETRY_COUNT);
+                int retryCount = 0;
+                if (raw instanceof Integer) {
+                    retryCount = (Integer) raw;
+                } else if (raw instanceof Number) {
+                    retryCount = ((Number) raw).intValue();
+                } else if (raw instanceof byte[]) {
+                    try { retryCount = Integer.parseInt(new String((byte[]) raw).trim()); } catch (Exception ignored) {}
+                } else if (raw != null) {
+                    try { retryCount = Integer.parseInt(raw.toString().trim()); } catch (Exception ignored) {}
+                }
                 exchange.getIn().setHeader(CamelRouteConstants.HEADER_RETRY_COUNT, retryCount + 1);
             })
             .choice()
