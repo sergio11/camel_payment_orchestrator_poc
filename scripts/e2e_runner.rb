@@ -18,8 +18,9 @@ ENV['TESTCONTAINERS_RYUK_DISABLED'] = 'true'
 
 NAMESPACE = ENV['NAMESPACE'] || 'poc-camel'
 CLUSTER   = ENV['CLUSTER']   || 'poc-camel'
+GATEWAY_PORT = (ENV['GATEWAY_PORT'] || '18080').to_i
 
-ALL_PHASES = %w[infra connectivity happy-path fraud idempotency validation health circuit observability resilience].freeze
+ALL_PHASES = %w[infra connectivity happy-path fraud idempotency validation health circuit observability hardening resilience].freeze
 
 $e2e_pass = 0
 $e2e_fail = 0
@@ -27,6 +28,7 @@ $e2e_failed = []
 $e2e_phase_pass = 0
 $e2e_phase_fail = 0
 $pf_pids = []
+$gateway_pf_pid = nil
 
 def green(s); "\e[32m#{s}\e[0m"; end
 def red(s);   "\e[31m#{s}\e[0m"; end
@@ -48,7 +50,8 @@ end
 
 def phase_header(num, name)
   $e2e_phase_pass = 0; $e2e_phase_fail = 0
-  puts; puts "#{bold("== Phase #{num}/#{ALL_PHASES.length}: #{name} ==")}"
+  phase_num = ALL_PHASES.index(name)&.+(1) || num
+  puts; puts "#{bold("== Phase #{phase_num}/#{ALL_PHASES.length}: #{name} ==")}"
 end
 
 def phase_footer(name)
@@ -70,28 +73,66 @@ def sh!(cmd)
   out.strip
 end
 
+def kubectl_json(resource)
+  out, _err, status = Open3.capture3("kubectl", "get", *resource.split(/\s+/), "-n", NAMESPACE, "-o", "json")
+  return {} unless status.success?
+  JSON.parse(out)
+rescue JSON::ParserError
+  {}
+end
+
 def start_portforward(svc, local_port, remote_port)
-  cmd = "kubectl port-forward svc/#{svc} #{local_port}:#{remote_port} -n #{NAMESPACE}"
-  pf = IO.popen(cmd, :err => File::NULL)
-  Thread.new { pf.read rescue nil }
-  $pf_pids << pf.pid
+  stdin, output, wait_thr = Open3.popen2e("kubectl", "port-forward", "svc/#{svc}", "#{local_port}:#{remote_port}", "-n", NAMESPACE)
+  stdin.close rescue nil
+  pf_output = []
+  Thread.new do
+    output.each_line do |line|
+      pf_output << line.strip
+      pf_output.shift while pf_output.length > 8
+    end
+  rescue IOError
+    nil
+  end
+  $pf_pids << wait_thr.pid
   15.times do
     sleep 1
+    break unless wait_thr.alive?
     begin
       TCPSocket.new("127.0.0.1", local_port.to_i).close
-      return pf.pid
+      return wait_thr.pid if wait_thr.alive?
     rescue Errno::ECONNREFUSED, Errno::EADDRINUSE, Errno::ECONNRESET
       next
     end
   end
   puts "  WARN: port-forward may not be ready"
-  pf.pid
+  pf_output.each { |line| puts "    #{dim(line)}" } unless pf_output.empty?
+  wait_thr.pid
 end
 
 def stop_portforward(pid)
   return unless pid && pid > 0
   Process.kill("TERM", pid) rescue nil
-  sleep 1
+  20.times do
+    begin
+      waited = Process.wait(pid, Process::WNOHANG)
+      return if waited
+    rescue Errno::ECHILD, Errno::ESRCH
+      return
+    end
+    sleep 0.25
+  end
+  Process.kill("KILL", pid) rescue nil
+  sleep 0.5
+end
+
+def ensure_gateway_portforward
+  return $gateway_pf_pid if $gateway_pf_pid
+  $gateway_pf_pid = start_portforward("api-gateway-external", GATEWAY_PORT, 8080)
+end
+
+def stop_gateway_portforward
+  stop_portforward($gateway_pf_pid)
+  $gateway_pf_pid = nil
 end
 
 def http_get(port, path)
@@ -111,16 +152,32 @@ end
 def http_post(port, path, body, headers = {})
   uri = URI("http://127.0.0.1:#{port}#{path}")
   h = { "Content-Type" => "application/json" }.merge(headers)
-  req = Net::HTTP::Post.new(uri, h)
-  req.body = body.to_json
   3.times do |attempt|
     begin
+      req = Net::HTTP::Post.new(uri, h)
+      req.body = body.to_json
       return Net::HTTP.start(uri.hostname, uri.port, open_timeout: 10, read_timeout: 30) { |c| c.request(req) }
     rescue => e
       sleep 2 if attempt < 2
       raise e if attempt == 2
     end
   end
+end
+
+def wait_for_response(expected_code, timeout = 60, interval = 3)
+  deadline = Time.now + timeout
+  last_detail = "no response"
+  while Time.now < deadline
+    begin
+      res = yield
+      return [true, res, "got #{res.code}"] if res.code == expected_code
+      last_detail = "got #{res.code}"
+    rescue => e
+      last_detail = "#{e.class}: #{e.message[0, 120]}"
+    end
+    sleep interval
+  end
+  [false, nil, last_detail]
 end
 
 
@@ -131,7 +188,7 @@ end
 def wait_for_status(payment_id, expected, timeout = 45)
   deadline = Time.now + timeout
   while Time.now < deadline
-    res = http_get(8080, "/payments/#{payment_id}")
+    res = http_get(GATEWAY_PORT, "/payments/#{payment_id}")
     return true if res.code == "200" && json_parse(res)["status"] == expected
     sleep 2
   end
@@ -213,6 +270,7 @@ end
 # ─── Phase 3: Happy Path ─────────────────────────────────────────────────────
 def phase_happy_path
   phase_header(3, "happy-path")
+  ensure_gateway_portforward
 
   key = SecureRandom.uuid
   cid = "qa-e2e-happy-#{Time.now.to_i}"
@@ -220,7 +278,7 @@ def phase_happy_path
               payment_method: "CREDIT_CARD", country: "US",
               metadata: { order_id: "order-e2e-001" } }
 
-  res = http_post(8080, "/payments", payload, { "Idempotency-Key" => key })
+  res = http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
   assert("POST /payments -> 201", res.code == "201", "got #{res.code}")
   body = json_parse(res)
   pid = body["id"]
@@ -229,7 +287,7 @@ def phase_happy_path
   assert("Amount preserved", body["amount"] == 100.0 || body["amount"] == 100)
 
   if pid
-    res2 = http_get(8080, "/payments/#{pid}")
+    res2 = http_get(GATEWAY_PORT, "/payments/#{pid}")
     assert("GET /payments/{id} -> 200", res2.code == "200")
     b2 = json_parse(res2)
     assert("GET returns same id", b2["id"] == pid)
@@ -237,13 +295,13 @@ def phase_happy_path
     puts "  #{dim("Waiting for async processing...")}"
     found = wait_for_status(pid, "APPROVED", 30)
     unless found
-      r = http_get(8080, "/payments/#{pid}")
+      r = http_get(GATEWAY_PORT, "/payments/#{pid}")
       final_status = json_parse(r)["status"]
       found = %w[APPROVED REVIEW FAILED].include?(final_status)
     end
     assert("Payment processed (not PENDING)", found)
 
-    res4 = http_get(8080, "/payments?customerId=#{cid}&limit=10&offset=0")
+    res4 = http_get(GATEWAY_PORT, "/payments?customerId=#{cid}&limit=10&offset=0")
     assert("GET /payments?customerId -> 200", res4.code == "200")
     page = json_parse(res4)
     pmts = page["payments"] || page["data"] || []
@@ -256,19 +314,20 @@ end
 # ─── Phase 4: Fraud Detection ────────────────────────────────────────────────
 def phase_fraud
   phase_header(4, "fraud")
+  ensure_gateway_portforward
 
   # REJECT
   key1 = SecureRandom.uuid
   p1 = { amount: 20000.00, currency: "USD", customer_id: "qa-fraud-reject",
          payment_method: "CREDIT_CARD", country: "XX" }
-  r1 = http_post(8080, "/payments", p1, { "Idempotency-Key" => key1 })
+  r1 = http_post(GATEWAY_PORT, "/payments", p1, { "Idempotency-Key" => key1 })
   assert("Fraud REJECT: POST -> 201", r1.code == "201", "got #{r1.code}")
   pid1 = json_parse(r1)["id"]
   if pid1
     puts "  #{dim("Waiting for fraud REJECT...")}"
     ok1 = wait_for_status(pid1, "FAILED", 30)
     unless ok1
-      r = http_get(8080, "/payments/#{pid1}")
+      r = http_get(GATEWAY_PORT, "/payments/#{pid1}")
       ok1 = json_parse(r)["status"] == "FAILED"
     end
     assert("Fraud REJECT -> FAILED", ok1)
@@ -278,14 +337,14 @@ def phase_fraud
   key2 = SecureRandom.uuid
   p2 = { amount: 20000.00, currency: "USD", customer_id: "qa-fraud-review",
          payment_method: "CREDIT_CARD", country: "US" }
-  r2 = http_post(8080, "/payments", p2, { "Idempotency-Key" => key2 })
+  r2 = http_post(GATEWAY_PORT, "/payments", p2, { "Idempotency-Key" => key2 })
   assert("Fraud REVIEW: POST -> 201", r2.code == "201", "got #{r2.code}")
   pid2 = json_parse(r2)["id"]
   if pid2
     puts "  #{dim("Waiting for fraud REVIEW...")}"
     ok2 = wait_for_status(pid2, "REVIEW", 30)
     unless ok2
-      r = http_get(8080, "/payments/#{pid2}")
+      r = http_get(GATEWAY_PORT, "/payments/#{pid2}")
       final2 = json_parse(r)["status"]
       ok2 = %w[REVIEW FAILED].include?(final2)
     end
@@ -296,14 +355,14 @@ def phase_fraud
   key3 = SecureRandom.uuid
   p3 = { amount: 50.00, currency: "EUR", customer_id: "qa-fraud-approve",
          payment_method: "BANK_TRANSFER", country: "DE" }
-  r3 = http_post(8080, "/payments", p3, { "Idempotency-Key" => key3 })
+  r3 = http_post(GATEWAY_PORT, "/payments", p3, { "Idempotency-Key" => key3 })
   assert("Fraud APPROVE: POST -> 201", r3.code == "201", "got #{r3.code}")
   pid3 = json_parse(r3)["id"]
   if pid3
     puts "  #{dim("Waiting for fraud APPROVE...")}"
     ok3 = wait_for_status(pid3, "APPROVED", 30)
     unless ok3
-      r = http_get(8080, "/payments/#{pid3}")
+      r = http_get(GATEWAY_PORT, "/payments/#{pid3}")
       ok3 = json_parse(r)["status"] == "APPROVED"
     end
     assert("Fraud APPROVE -> APPROVED", ok3)
@@ -313,13 +372,13 @@ def phase_fraud
   key4 = SecureRandom.uuid
   p4 = { amount: 6000.00, currency: "USD", customer_id: "qa-fraud-wallet",
          payment_method: "WALLET", country: "US" }
-  r4 = http_post(8080, "/payments", p4, { "Idempotency-Key" => key4 })
+  r4 = http_post(GATEWAY_PORT, "/payments", p4, { "Idempotency-Key" => key4 })
   assert("WALLET high-value: POST -> 201", r4.code == "201", "got #{r4.code}")
   pid4 = json_parse(r4)["id"]
   if pid4
     puts "  #{dim("Waiting for WALLET fraud...")}"
     sleep 8
-    r = http_get(8080, "/payments/#{pid4}")
+    r = http_get(GATEWAY_PORT, "/payments/#{pid4}")
     f4 = json_parse(r)["status"]
     assert("WALLET high-value processed", %w[APPROVED REVIEW FAILED].include?(f4), "status=#{f4}")
   end
@@ -330,20 +389,21 @@ end
 # ─── Phase 5: Idempotency ────────────────────────────────────────────────────
 def phase_idempotency
   phase_header(5, "idempotency")
+  ensure_gateway_portforward
 
   key = SecureRandom.uuid
   payload = { amount: 77.77, currency: "EUR", customer_id: "qa-e2e-idem",
               payment_method: "DEBIT_CARD", country: "FR" }
 
-  r1 = http_post(8080, "/payments", payload, { "Idempotency-Key" => key })
+  r1 = http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
   assert("1st POST -> 201", r1.code == "201", "got #{r1.code}")
   id1 = json_parse(r1)["id"]
 
-  r2 = http_post(8080, "/payments", payload, { "Idempotency-Key" => key })
+  r2 = http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
   id2 = json_parse(r2)["id"]
   assert("2nd POST same key -> same id", id1 && id1 == id2, "id1=#{id1} id2=#{id2}")
 
-  r3 = http_get(8080, "/payments/idempotency/#{key}")
+  r3 = http_get(GATEWAY_PORT, "/payments/idempotency/#{key}")
   assert("GET /payments/idempotency/{key} -> 200", r3.code == "200", "got #{r3.code}")
   id3 = json_parse(r3)["id"]
   assert("Idempotency lookup returns same id", id1 == id3, "expected=#{id1} got=#{id3}")
@@ -354,25 +414,26 @@ end
 # ─── Phase 6: Validation ─────────────────────────────────────────────────────
 def phase_validation
   phase_header(6, "validation")
+  ensure_gateway_portforward
 
   base = { currency: "USD", customer_id: "x", payment_method: "CREDIT_CARD", country: "US" }
 
-  r1 = http_post(8080, "/payments", base.merge(amount: 0))
+  r1 = http_post(GATEWAY_PORT, "/payments", base.merge(amount: 0))
   assert("amount=0 -> 400", r1.code == "400", "got #{r1.code}")
 
-  r2 = http_post(8080, "/payments", base.merge(amount: -1))
+  r2 = http_post(GATEWAY_PORT, "/payments", base.merge(amount: -1))
   assert("amount=-1 -> 400", r2.code == "400", "got #{r2.code}")
 
-  r3 = http_post(8080, "/payments", base.merge(amount: 10, currency: "INVALID"))
+  r3 = http_post(GATEWAY_PORT, "/payments", base.merge(amount: 10, currency: "INVALID"))
   assert("currency=INVALID -> 400", r3.code == "400", "got #{r3.code}")
 
-  r4 = http_post(8080, "/payments", base.merge(amount: 10, payment_method: "UNKNOWN"))
+  r4 = http_post(GATEWAY_PORT, "/payments", base.merge(amount: 10, payment_method: "UNKNOWN"))
   assert("paymentMethod=UNKNOWN -> accepted (any string allowed)", r4.code == "201", "got #{r4.code}")
 
-  r5 = http_post(8080, "/payments", base.merge(amount: 10, customer_id: ""))
+  r5 = http_post(GATEWAY_PORT, "/payments", base.merge(amount: 10, customer_id: ""))
   assert("customerId empty -> 400", r5.code == "400", "got #{r5.code}")
 
-  uri = URI("http://127.0.0.1:8080/payments")
+  uri = URI("http://127.0.0.1:#{GATEWAY_PORT}/payments")
   req = Net::HTTP::Post.new(uri, { "Content-Type" => "application/json" })
   req.body = "{ invalid json :::: {{{ "
   begin
@@ -457,7 +518,7 @@ def phase_observability
     res2 = http_get(16687, "/api/services")
     assert("Jaeger /api/services -> 200", res2.code == "200", "got #{res2.code}")
     data2 = json_parse(res2)
-    services = (data2["data"] || []).compact.map { |s| s["serviceName"] }.compact
+    services = (data2["data"] || []).compact.map { |s| s.is_a?(Hash) ? s["serviceName"] : s.to_s }.compact
     has_gw = services.any? { |s| s.include?("payment-gateway") || s.include?("api-gateway") }
     has_pp = services.any? { |s| s.include?("payment-processor") }
     assert("Jaeger has api-gateway traces", has_gw, "services=#{services.first(5).join(', ')}")
@@ -470,25 +531,122 @@ def phase_observability
 end
 
 # ─── Phase 10: Resilience ────────────────────────────────────────────────────
+def phase_hardening
+  phase_header(10, "hardening")
+
+  deployments = kubectl_json("deploy")["items"] || []
+  by_name = deployments.to_h { |d| [d.dig("metadata", "name"), d] }
+
+  %w[api-gateway payment-processor].each do |name|
+    dep = by_name[name]
+    assert("#{name} deployment exists", !dep.nil?)
+    next unless dep
+
+    desired = dep.dig("spec", "replicas").to_i
+    ready = dep.dig("status", "readyReplicas").to_i
+    updated = dep.dig("status", "updatedReplicas").to_i
+    available = dep.dig("status", "availableReplicas").to_i
+    assert("#{name} replicas ready", desired > 0 && ready == desired && updated == desired && available == desired,
+           "desired=#{desired} ready=#{ready} updated=#{updated} available=#{available}")
+    assert("#{name} uses RollingUpdate", dep.dig("spec", "strategy", "type") == "RollingUpdate")
+
+    pod_spec = dep.dig("spec", "template", "spec") || {}
+    pod_sc = pod_spec["securityContext"] || {}
+    assert("#{name} serviceAccount is non-default", pod_spec["serviceAccountName"] == "poc-camel-sa",
+           "serviceAccountName=#{pod_spec["serviceAccountName"]}")
+    assert("#{name} pod runs as non-root", pod_sc["runAsNonRoot"] == true && pod_sc["runAsUser"].to_i > 0)
+    assert("#{name} has pod anti-affinity", !!pod_spec.dig("affinity", "podAntiAffinity"))
+
+    annotations = dep.dig("spec", "template", "metadata", "annotations") || {}
+    assert("#{name} has Prometheus scrape annotations",
+           annotations["prometheus.io/scrape"] == "true" && annotations["prometheus.io/port"] == "8080")
+
+    container = (pod_spec["containers"] || []).find { |c| c["name"] == name } || (pod_spec["containers"] || []).first || {}
+    assert("#{name} has liveness/readiness/startup probes",
+           %w[livenessProbe readinessProbe startupProbe].all? { |probe| container[probe]&.dig("httpGet", "path") })
+
+    resources = container["resources"] || {}
+    assert("#{name} has CPU/memory requests and limits",
+           resources.dig("requests", "cpu") && resources.dig("requests", "memory") &&
+           resources.dig("limits", "cpu") && resources.dig("limits", "memory"))
+
+    sc = container["securityContext"] || {}
+    hardened = sc["allowPrivilegeEscalation"] == false &&
+               sc["readOnlyRootFilesystem"] == true &&
+               sc["runAsNonRoot"] == true &&
+               Array(sc.dig("capabilities", "drop")).include?("ALL") &&
+               sc.dig("seccompProfile", "type") == "RuntimeDefault"
+    assert("#{name} container securityContext hardened", hardened)
+
+    env_names = Array(container["env"]).map { |e| e["name"] }
+    assert("#{name} has OpenTelemetry service name", env_names.include?("OTEL_SERVICE_NAME"))
+  end
+
+  hpas = (kubectl_json("hpa")["items"] || []).to_h { |h| [h.dig("metadata", "name"), h] }
+  {
+    "api-gateway-hpa" => ["api-gateway", 1],
+    "payment-processor-hpa" => ["payment-processor", 2],
+  }.each do |hpa_name, (target, min_replicas)|
+    hpa = hpas[hpa_name]
+    assert("#{hpa_name} exists", !hpa.nil?)
+    next unless hpa
+    metrics = Array(hpa.dig("spec", "metrics")).map { |m| m.dig("resource", "name") }
+    assert("#{hpa_name} targets #{target}", hpa.dig("spec", "scaleTargetRef", "name") == target)
+    assert("#{hpa_name} min/max sane", hpa.dig("spec", "minReplicas").to_i >= min_replicas &&
+                                      hpa.dig("spec", "maxReplicas").to_i > hpa.dig("spec", "minReplicas").to_i)
+    assert("#{hpa_name} has cpu and memory metrics", metrics.include?("cpu") && metrics.include?("memory"))
+  end
+
+  %w[api-gateway api-gateway-external payment-processor kafka postgres prometheus jaeger].each do |svc|
+    endpoints = kubectl_json("endpoints/#{svc}")
+    addresses = Array(endpoints["subsets"]).flat_map { |s| s["addresses"] || [] }
+    assert("#{svc} service has ready endpoints", addresses.any?, "addresses=#{addresses.length}")
+  end
+
+  network_policies = (kubectl_json("networkpolicy")["items"] || []).map { |np| np.dig("metadata", "name") }
+  expected_policies = %w[
+    default-deny-all allow-infra-egress allow-apps-to-kafka allow-apps-to-postgres
+    allow-apps-to-jaeger allow-gateway-to-processor allow-gateway-egress allow-processor-egress
+    allow-prometheus-scrape allow-monitoring-egress
+  ]
+  missing_policies = expected_policies - network_policies
+  assert("NetworkPolicies cover default deny and app flows", missing_policies.empty?,
+         missing_policies.empty? ? nil : "missing=#{missing_policies.join(', ')}")
+
+  out, _ = sh("kubectl auth can-i list pods --as system:serviceaccount:#{NAMESPACE}:poc-camel-sa -n #{NAMESPACE}")
+  assert("Application ServiceAccount has least-privilege RBAC", out.strip == "no", "can-i=#{out.strip}")
+
+  phase_footer("hardening")
+end
+
 def phase_resilience
-  phase_header(10, "resilience")
+  phase_header(11, "resilience")
+  stop_gateway_portforward
 
   puts "  #{dim("Restarting api-gateway...")}"
   sh!("kubectl rollout restart deployment/api-gateway -n #{NAMESPACE}")
   sh!("kubectl rollout status deployment/api-gateway -n #{NAMESPACE} --timeout=120s")
-  r1 = http_get(8080, "/payments?limit=1")
-  assert("api-gateway survived rollout restart", r1.code == "200", "got #{r1.code}")
+
+  pf_pid = ensure_gateway_portforward
+  ok1, _r1, detail1 = wait_for_response("200", 90) do
+    http_get(GATEWAY_PORT, "/payments?limit=1")
+  end
+  assert("api-gateway survived rollout restart", ok1, detail1)
 
   puts "  #{dim("Restarting payment-processor...")}"
   sh!("kubectl rollout restart deployment/payment-processor -n #{NAMESPACE}")
   sh!("kubectl rollout status deployment/payment-processor -n #{NAMESPACE} --timeout=120s")
+  sleep 5
   key = SecureRandom.uuid
-  r2 = http_post(8080, "/payments",
-    { amount: 25.00, currency: "GBP", customer_id: "qa-resilience",
-      payment_method: "BANK_TRANSFER", country: "GB" },
-    { "Idempotency-Key" => key })
-  assert("POST after processor restart -> 201", r2.code == "201", "got #{r2.code}")
+  payload = { amount: 25.00, currency: "GBP", customer_id: "qa-resilience",
+              payment_method: "BANK_TRANSFER", country: "GB" }
+  ok2, _r2, detail2 = wait_for_response("201", 90) do
+    http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
+  end
+  assert("POST after processor restart -> 201", ok2, detail2)
 
+  stop_portforward(pf_pid)
+  $gateway_pf_pid = nil
   phase_footer("resilience")
 end
 
@@ -503,6 +661,7 @@ PHASE_METHODS = {
   "health"        => method(:phase_health),
   "circuit"       => method(:phase_circuit),
   "observability" => method(:phase_observability),
+  "hardening"     => method(:phase_hardening),
   "resilience"    => method(:phase_resilience),
 }
 
@@ -533,6 +692,7 @@ puts
 begin
   phases.each { |p| PHASE_METHODS[p].call }
 ensure
+  stop_gateway_portforward
   $pf_pids.each { |pid| stop_portforward(pid) }
 end
 

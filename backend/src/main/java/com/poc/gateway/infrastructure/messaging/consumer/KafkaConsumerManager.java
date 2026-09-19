@@ -99,6 +99,9 @@ public class KafkaConsumerManager {
         while (running) {
             try {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+                if (records == null) {
+                    continue;
+                }
                 records.forEach(record -> {
                     try {
                         router.route(record);

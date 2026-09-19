@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.MockedConstruction;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import io.quarkus.runtime.StartupEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Duration;
@@ -50,15 +51,17 @@ class KafkaConsumerManagerTest {
     }
 
     private void invokeStart() throws Exception {
-        Method start = KafkaConsumerManager.class.getDeclaredMethod("start");
+        Method start = KafkaConsumerManager.class.getDeclaredMethod("onStart", StartupEvent.class);
         start.setAccessible(true);
-        start.invoke(manager);
+        start.invoke(manager, mock(StartupEvent.class));
     }
 
     @Test
     void start_createsConsumerWithCorrectPropertiesAndStartsThread() throws Exception {
         manager.bootstrapServers = "localhost:9092";
         manager.processedTopic = "payments.processed";
+        manager.failedTopic = "payments.failed";
+        manager.reviewTopic = "payments.review";
         manager.groupId = "test-group";
 
         try (MockedConstruction<KafkaConsumer> mocked = mockConstruction(KafkaConsumer.class,
@@ -70,7 +73,7 @@ class KafkaConsumerManagerTest {
 
             assertEquals(1, mocked.constructed().size());
             KafkaConsumer<?, ?> constructedConsumer = mocked.constructed().get(0);
-            verify(constructedConsumer).subscribe(Collections.singletonList("payments.processed"));
+            verify(constructedConsumer).subscribe(java.util.Arrays.asList("payments.processed", "payments.failed", "payments.review"));
 
             ExecutorService executorService = (ExecutorService) getField("executor");
             assertNotNull(executorService);
@@ -83,6 +86,8 @@ class KafkaConsumerManagerTest {
     void start_withDefaultGroupId_usesConfiguredValue() throws Exception {
         manager.bootstrapServers = "broker1:9093";
         manager.processedTopic = "events.topic";
+        manager.failedTopic = "events.failed";
+        manager.reviewTopic = "events.review";
         manager.groupId = "my-custom-group";
 
         try (MockedConstruction<KafkaConsumer> mocked = mockConstruction(KafkaConsumer.class,
@@ -102,6 +107,8 @@ class KafkaConsumerManagerTest {
     void stop_afterStart_closesConsumerAndInterruptsThread() throws Exception {
         manager.bootstrapServers = "localhost:9092";
         manager.processedTopic = "payments.processed";
+        manager.failedTopic = "payments.failed";
+        manager.reviewTopic = "payments.review";
         manager.groupId = "test-group";
 
         try (MockedConstruction<KafkaConsumer> mocked = mockConstruction(KafkaConsumer.class,
