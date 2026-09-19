@@ -220,7 +220,7 @@ class KafkaConsumerManagerTest {
     }
 
     @Test
-    void pollLoop_routerException_continuesAndCommits() throws Exception {
+    void pollLoop_routerException_doesNotCommitOffsets() throws Exception {
         setField("consumer", kafkaConsumer);
         setField("running", true);
 
@@ -243,7 +243,7 @@ class KafkaConsumerManagerTest {
         setField("running", false);
         t.join(2000);
 
-        verify(kafkaConsumer, atLeastOnce()).commitSync();
+        verify(kafkaConsumer, never()).commitSync();
     }
 
     @Test
@@ -338,6 +338,28 @@ class KafkaConsumerManagerTest {
 
         verify(router, never()).route(any());
         verify(kafkaConsumer, atLeastOnce()).commitSync();
+    }
+
+    @Test
+    void pollLoop_nullRecords_continuesWithoutNPE() throws Exception {
+        setField("consumer", kafkaConsumer);
+        setField("running", true);
+
+        doReturn(null).when(kafkaConsumer).poll(any(Duration.class));
+
+        Thread t = new Thread(() -> {
+            try {
+                invokePollLoop();
+            } catch (Exception ignored) {
+            }
+        });
+        t.start();
+        Thread.sleep(300);
+        setField("running", false);
+        t.join(2000);
+
+        verify(router, never()).route(any());
+        verify(kafkaConsumer, never()).commitSync();
     }
 
     @Test

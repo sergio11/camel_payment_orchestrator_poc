@@ -46,12 +46,34 @@ class PaymentStatusHandlerTest {
         when(paymentIdNode.asText()).thenReturn(paymentId);
 
         when(paymentRepo.updateIfPending(UUID.fromString(paymentId), PaymentStatus.APPROVED))
-            .thenReturn(Optional.empty());
+            .thenReturn(Optional.of(mock(com.poc.gateway.domain.Payment.class)));
 
         handler.processStatusChange(record, PaymentStatus.APPROVED);
 
         verify(paymentRepo).updateIfPending(UUID.fromString(paymentId), PaymentStatus.APPROVED);
         verify(eventPublisher).publishStatusChanged(paymentId, "APPROVED");
+    }
+
+    @Test
+    void processStatusChange_whenPaymentAlreadyTransitioned_doesNotPublishStatusChanged() throws Exception {
+        String paymentId = UUID.randomUUID().toString();
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0, paymentId, "{\"paymentId\":\"" + paymentId + "\"}");
+
+        JsonNode root = mock(JsonNode.class);
+        JsonNode paymentIdNode = mock(JsonNode.class);
+        doReturn(root).when(objectMapper).readTree(anyString());
+        when(root.has("paymentId")).thenReturn(true);
+        when(root.get("paymentId")).thenReturn(paymentIdNode);
+        when(paymentIdNode.asText()).thenReturn(paymentId);
+
+        when(paymentRepo.updateIfPending(UUID.fromString(paymentId), PaymentStatus.APPROVED))
+            .thenReturn(Optional.empty());
+
+        handler.processStatusChange(record, PaymentStatus.APPROVED);
+
+        verify(paymentRepo).updateIfPending(UUID.fromString(paymentId), PaymentStatus.APPROVED);
+        verify(eventPublisher, never()).publishStatusChanged(anyString(), anyString());
+        verify(eventPublisher, never()).publishDeadLetter(any(), any(), any());
     }
 
     @Test
@@ -84,7 +106,7 @@ class PaymentStatusHandlerTest {
         when(root.has("paymentId")).thenReturn(false);
 
         when(paymentRepo.updateIfPending(UUID.fromString(fallbackKey), PaymentStatus.APPROVED))
-            .thenReturn(Optional.empty());
+            .thenReturn(Optional.of(mock(com.poc.gateway.domain.Payment.class)));
 
         handler.processStatusChange(record, PaymentStatus.APPROVED);
 
@@ -100,7 +122,7 @@ class PaymentStatusHandlerTest {
         doThrow(new RuntimeException("Invalid JSON")).when(objectMapper).readTree(anyString());
 
         when(paymentRepo.updateIfPending(UUID.fromString(fallbackKey), PaymentStatus.FAILED))
-            .thenReturn(Optional.empty());
+            .thenReturn(Optional.of(mock(com.poc.gateway.domain.Payment.class)));
 
         handler.processStatusChange(record, PaymentStatus.FAILED);
 
@@ -118,7 +140,7 @@ class PaymentStatusHandlerTest {
         when(root.has("paymentId")).thenReturn(false);
 
         when(paymentRepo.updateIfPending(UUID.fromString(key), PaymentStatus.REJECTED))
-            .thenReturn(Optional.empty());
+            .thenReturn(Optional.of(mock(com.poc.gateway.domain.Payment.class)));
 
         handler.processStatusChange(record, PaymentStatus.REJECTED);
 
@@ -187,7 +209,7 @@ class PaymentStatusHandlerTest {
         when(paymentIdNode.asText()).thenReturn(paymentId);
 
         when(paymentRepo.updateIfPending(UUID.fromString(paymentId), PaymentStatus.REVIEW))
-            .thenReturn(Optional.empty());
+            .thenReturn(Optional.of(mock(com.poc.gateway.domain.Payment.class)));
 
         handler.processStatusChange(record, PaymentStatus.REVIEW);
 

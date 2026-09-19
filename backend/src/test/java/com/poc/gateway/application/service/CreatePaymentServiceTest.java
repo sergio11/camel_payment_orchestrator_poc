@@ -3,13 +3,11 @@ package com.poc.gateway.application.service;
 import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.PaymentMetadata;
 import com.poc.gateway.domain.model.CreatePaymentCommand;
-import com.poc.gateway.domain.model.PaymentReceivedEvent;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.outbound.PaymentRepositoryPort;
 import com.poc.gateway.domain.port.outbound.OutboxRepositoryPort;
-import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentEventSerializer;
-import com.poc.gateway.infrastructure.messaging.config.KafkaTopicConfig;
+import com.poc.gateway.domain.port.outbound.PaymentEventTopicPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -37,20 +35,17 @@ class CreatePaymentServiceTest {
     OutboxRepositoryPort outboxRepo;
 
     @Mock
-    EventPublisherPort eventPublisher;
-
-    @Mock
     PaymentEventSerializer serializer;
 
     @Mock
-    KafkaTopicConfig topicConfig;
+    PaymentEventTopicPort topicPort;
 
     @InjectMocks
     CreatePaymentService service;
 
     @BeforeEach
     void setUp() {
-        lenient().when(topicConfig.received()).thenReturn("payments.events.received");
+        lenient().when(topicPort.receivedTopic()).thenReturn("payments.events.received");
     }
 
     private CreatePaymentCommand createCommand() {
@@ -60,8 +55,8 @@ class CreatePaymentServiceTest {
     }
 
     @Test
-    @DisplayName("Should create payment and publish event on new payment")
-    void execute_createsPaymentAndPublishesEvent() {
+    @DisplayName("Should create payment and persist outbox event on new payment")
+    void execute_createsPaymentAndPersistsOutboxEvent() {
         CreatePaymentCommand command = createCommand();
         String key = "idem-key-123";
 
@@ -74,7 +69,6 @@ class CreatePaymentServiceTest {
         when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.empty());
         when(paymentRepo.save(any(Payment.class), eq(key))).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         Payment result = service.execute(command, key);
 
@@ -84,7 +78,6 @@ class CreatePaymentServiceTest {
         assertEquals(PaymentStatus.PENDING, result.status());
         verify(paymentRepo).save(any(Payment.class), eq(key));
         verify(outboxRepo).persist(any());
-        verify(eventPublisher).publishPaymentReceived(any(PaymentReceivedEvent.class));
     }
 
     @Test
@@ -124,7 +117,6 @@ class CreatePaymentServiceTest {
         when(paymentRepo.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
         when(paymentRepo.save(any(Payment.class), anyString())).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         Payment result = service.execute(command, "  ");
 
@@ -148,7 +140,6 @@ class CreatePaymentServiceTest {
         when(paymentRepo.findByIdempotencyKey(anyString())).thenReturn(Optional.empty());
         when(paymentRepo.save(any(Payment.class), anyString())).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
 
         Payment result = service.execute(command, null);
 
@@ -159,8 +150,8 @@ class CreatePaymentServiceTest {
     }
 
     @Test
-    @DisplayName("Should log error but still return payment when Kafka publish returns false")
-    void execute_publishFails_logsError() {
+    @DisplayName("Should return payment after persisting outbox event")
+    void execute_persistsOutboxAndReturnsPayment() {
         CreatePaymentCommand command = createCommand();
         String key = "idem-key-456";
 
@@ -173,17 +164,17 @@ class CreatePaymentServiceTest {
         when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.empty());
         when(paymentRepo.save(any(Payment.class), eq(key))).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(false);
 
         Payment result = service.execute(command, key);
 
         assertNotNull(result);
+        verify(outboxRepo).persist(any());
         verify(outboxRepo, never()).markSent(any());
     }
 
     @Test
-    @DisplayName("Should log error but still return payment when Kafka publish throws exception")
-    void execute_publishThrowsException_logsErrorAndReturnsPayment() {
+    @DisplayName("Should not publish directly to Kafka from create service")
+    void execute_doesNotUseDirectKafkaPublisher() {
         CreatePaymentCommand command = createCommand();
         String key = "idem-key-789";
 
@@ -196,8 +187,6 @@ class CreatePaymentServiceTest {
         when(paymentRepo.findByIdempotencyKey(key)).thenReturn(Optional.empty());
         when(paymentRepo.save(any(Payment.class), eq(key))).thenReturn(savedPayment);
         when(serializer.serialize(any(Payment.class))).thenReturn("{}");
-        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class)))
-            .thenThrow(new RuntimeException("Kafka broker unreachable"));
 
         Payment result = service.execute(command, key);
 

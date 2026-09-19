@@ -1,5 +1,6 @@
 package com.poc.gateway.infrastructure.messaging.consumer;
 
+import com.poc.gateway.domain.Payment;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.port.outbound.EventPublisherPort;
 import com.poc.gateway.domain.port.outbound.PaymentWriteRepository;
@@ -7,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.util.Optional;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.jboss.logging.Logger;
@@ -34,7 +36,12 @@ public class PaymentStatusHandler {
         }
 
         try {
-            paymentRepo.updateIfPending(UUID.fromString(paymentId), newStatus);
+            Optional<Payment> updated = paymentRepo.updateIfPending(UUID.fromString(paymentId), newStatus);
+            if (updated.isEmpty()) {
+                LOG.infof("Ignoring status change for payment %s to %s because it is already transitioned or missing",
+                    paymentId, newStatus);
+                return;
+            }
             eventPublisher.publishStatusChanged(paymentId, newStatus.name());
             LOG.infof("Processed status change for payment %s to %s", paymentId, newStatus);
         } catch (Exception e) {

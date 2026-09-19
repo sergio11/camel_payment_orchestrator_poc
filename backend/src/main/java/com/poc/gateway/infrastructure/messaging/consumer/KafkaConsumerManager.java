@@ -106,16 +106,25 @@ public class KafkaConsumerManager {
                     try {
                         router.route(record);
                     } catch (Exception e) {
-                        LOG.errorf(e, "Error processing record from topic %s partition %d offset %d",
-                            record.topic(), record.partition(), record.offset());
+                        throw new RecordProcessingException(e);
                     }
                 });
                 consumer.commitSync();
+            } catch (RecordProcessingException e) {
+                if (running) {
+                    LOG.errorf(e.getCause(), "Error processing Kafka record; offsets will not be committed");
+                }
             } catch (Exception e) {
                 if (running) {
                     LOG.errorf(e, "Error in consumer poll loop");
                 }
             }
+        }
+    }
+
+    private static final class RecordProcessingException extends RuntimeException {
+        private RecordProcessingException(Throwable cause) {
+            super(cause);
         }
     }
 }
