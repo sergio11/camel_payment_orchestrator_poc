@@ -132,7 +132,12 @@ def stop_portforward(pid)
 end
 
 def ensure_gateway_portforward
-  return $gateway_pf_pid if $gateway_pf_pid
+  # Reuse only if the local port actually answers; otherwise recreate (stale pid).
+  return $gateway_pf_pid if $gateway_pf_pid && local_port_open?(GATEWAY_PORT)
+  if $gateway_pf_pid
+    stop_portforward($gateway_pf_pid)
+    $gateway_pf_pid = nil
+  end
   $gateway_pf_pid = start_portforward("api-gateway-external", GATEWAY_PORT, 8080)
 end
 
@@ -213,8 +218,9 @@ def phase_infra
   pods.lines.map(&:strip).reject(&:empty?).each do |line|
     parts = line.split(/\s+/)
     name = parts[0]; ready = parts[1]; status = parts[2]
-    next if status == "Completed"
-    assert("Pod #{name} Ready (#{ready} #{status})", ready.include?("/") && status == "Running")
+    next if status == "Completed" || name.start_with?("test-")
+    fully_ready = status == "Running" && ready.split("/")[0] == ready.split("/")[1]
+    assert("Pod #{name} Ready (#{ready} #{status})", fully_ready)
   end
 
   svc_count = sh!("kubectl get svc -n #{NAMESPACE} --no-headers").lines.count
@@ -278,13 +284,29 @@ def phase_happy_path
   phase_header(3, "happy-path")
   ensure_gateway_portforward
 
+  # Readiness gate: fail fast with an assert instead of crashing on ECONNREFUSED
+  gw_ok, _, gw_detail = wait_for_response("200", 60) do
+    http_get(GATEWAY_PORT, "/payments?limit=1")
+  end
+  assert("Gateway reachable before POST", gw_ok, gw_detail)
+  unless gw_ok
+    phase_footer("happy-path")
+    return
+  end
+
   key = SecureRandom.uuid
   cid = "qa-e2e-happy-#{Time.now.to_i}"
   payload = { amount: 100.00, currency: "USD", customer_id: cid,
               payment_method: "CREDIT_CARD", country: "US",
               metadata: { order_id: "order-e2e-001" } }
 
-  res = http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
+  begin
+    res = http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
+  rescue => e
+    assert("POST /payments -> 201", false, "#{e.class}: #{e.message[0, 120]}")
+    phase_footer("happy-path")
+    return
+  end
   assert("POST /payments -> 201", res.code == "201", "got #{res.code}")
   body = json_parse(res)
   pid = body["id"]
@@ -495,11 +517,11 @@ def phase_circuit
     puts "  #{dim("WARN: no fallback keywords found in recent logs; retry/DLQ topics remain authoritative")}"
   end
 
-  dlq_out, _ = sh("kubectl exec kafka-stack -c kafka -n #{NAMESPACE} -- timeout 5 kafka-console-consumer --bootstrap-server localhost:9092 --topic payments.events.dead-letter --from-beginning")
+  dlq_out, _ = sh("kubectl exec kafka-stack -c kafka -n #{NAMESPACE} -- timeout 10 kafka-console-consumer --bootstrap-server localhost:9092 --topic payments.events.dead-letter --from-beginning --max-messages 50 --timeout-ms 5000")
   dlq_count = dlq_out.lines.count
   assert("Dead-letter queue has messages", dlq_count > 0, "count=#{dlq_count}")
 
-  retry_out, _ = sh("kubectl exec kafka-stack -c kafka -n #{NAMESPACE} -- timeout 5 kafka-console-consumer --bootstrap-server localhost:9092 --topic payments.events.retry --from-beginning")
+  retry_out, _ = sh("kubectl exec kafka-stack -c kafka -n #{NAMESPACE} -- timeout 10 kafka-console-consumer --bootstrap-server localhost:9092 --topic payments.events.retry --from-beginning --max-messages 50 --timeout-ms 5000")
   retry_count = retry_out.lines.count
   assert("Retry topic has messages", retry_count > 0, "count=#{retry_count}")
 
@@ -644,15 +666,55 @@ def phase_resilience
 
   puts "  #{dim("Restarting payment-processor...")}"
   sh!("kubectl rollout restart deployment/payment-processor -n #{NAMESPACE}")
-  sh!("kubectl rollout status deployment/payment-processor -n #{NAMESPACE} --timeout=120s")
+  sh!("kubectl rollout status deployment/payment-processor -n #{NAMESPACE} --timeout=180s")
+  sh!("kubectl wait --for=condition=ready pod -l app=payment-processor -n #{NAMESPACE} --timeout=120s")
   sleep 5
   key = SecureRandom.uuid
   payload = { amount: 25.00, currency: "GBP", customer_id: "qa-resilience",
               payment_method: "BANK_TRANSFER", country: "GB" }
-  ok2, _r2, detail2 = wait_for_response("201", 90) do
-    http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
+
+  # 3 rounds: re-ensure PF (it may drop during long rollouts) + short wait.
+  # A 201 only proves gateway+DB; waiting until the payment leaves PENDING
+  # proves the outbox -> Kafka -> processor pipeline resumed after restart.
+  res = nil
+  post_detail = "no attempt"
+  3.times do |i|
+    pf_pid = ensure_gateway_portforward
+    begin
+      ok_round, r_round, d_round = wait_for_response("201", 30) do
+        http_post(GATEWAY_PORT, "/payments", payload, { "Idempotency-Key" => key })
+      end
+      if ok_round
+        res = r_round
+        post_detail = d_round
+        break
+      end
+      post_detail = d_round
+    rescue => e
+      post_detail = "#{e.class}: #{e.message[0, 120]}"
+    end
+    puts "  #{dim("POST attempt #{i + 1}/3 failed (#{post_detail}), re-ensuring port-forward...")}" if i < 2
+    sleep 3 if i < 2
   end
-  assert("POST after processor restart -> 201", ok2, detail2)
+  assert("POST after processor restart -> 201", !res.nil?, post_detail)
+
+  if res
+    pid = json_parse(res)["id"]
+    if pid
+      puts "  #{dim("Waiting for pipeline to resume (#{pid})...")}"
+      # Post-restart the consumer drains backlog + rebalances; allow up to 3 min.
+      processed = wait_for_status(pid, "APPROVED", 180)
+      unless processed
+        r = http_get(GATEWAY_PORT, "/payments/#{pid}") rescue nil
+        final = r ? json_parse(r)["status"] : "unknown"
+        processed = %w[APPROVED REVIEW FAILED].include?(final)
+        puts "  #{dim("Final status: #{final}")}"
+      end
+      assert("Pipeline resumed after processor restart (not PENDING)", processed, "payment=#{pid}")
+    else
+      assert("Pipeline resumed after processor restart (not PENDING)", false, "no payment id in 201")
+    end
+  end
 
   stop_portforward(pf_pid)
   $gateway_pf_pid = nil
@@ -683,9 +745,16 @@ unless invalid.empty?
   exit 1
 end
 
-# Check cluster
-out, ok = sh("kubectl cluster-info")
-unless ok
+# Check cluster (retry: cluster-info can flap transiently on Kind/Podman)
+cluster_ok = false
+cluster_out = ""
+3.times do |i|
+  cluster_out, cluster_ok = sh("kubectl cluster-info --request-timeout=5s")
+  break if cluster_ok && (cluster_out.include?("control plane") || cluster_out.include?("Kubernetes"))
+  cluster_ok = false
+  sleep 2 if i < 2
+end
+unless cluster_ok
   $stderr.puts red("No cluster context. Is Kind running? (rake k8s:cluster)")
   exit 1
 end

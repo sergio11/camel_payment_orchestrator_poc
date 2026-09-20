@@ -782,46 +782,32 @@ namespace :k8s do
   # ────────────────────────────────────────────────────────────────────────────
   # E2E Test Helpers
   # ────────────────────────────────────────────────────────────────────────────
-  E2E_PHASES = %w[infra connectivity happy-path fraud idempotency validation health circuit observability resilience].freeze
+  E2E_PHASES = %w[infra connectivity happy-path fraud idempotency validation health circuit observability hardening resilience].freeze
 
   # ────────────────────────────────────────────────────────────────────────────
   # rake k8s:e2e [PHASE=...]
   # ────────────────────────────────────────────────────────────────────────────
-  desc 'Run comprehensive E2E tests against K8s deployment (PHASE=infra|connectivity|happy-path|fraud|idempotency|validation|health|circuit|observability|resilience)'
+  desc 'Run comprehensive E2E tests against K8s deployment (PHASE=infra|connectivity|happy-path|fraud|idempotency|validation|health|circuit|observability|hardening|resilience)'
   task :e2e do
-    raise "No cluster context — is Kind running? (rake k8s:cluster)" unless kc_out("cluster-info").include?("control plane") || kc_out("cluster-info").include?("Kubernetes")
+    cluster_out = ""
+    3.times do |i|
+      cluster_out = kc_out("cluster-info --request-timeout=5s")
+      break if cluster_out.include?("control plane") || cluster_out.include?("Kubernetes")
+      sleep 2 if i < 2
+    end
+    raise "No cluster context — is Kind running? (rake k8s:cluster)" unless cluster_out.include?("control plane") || cluster_out.include?("Kubernetes")
 
     phase = ENV['PHASE'] || ''
-    phases = phase.empty? ? [] : [phase]
 
-    needs_pf = phases.empty? || (phases & %w[happy-path fraud idempotency validation]).any?
-    pf = nil
-    if needs_pf
-      puts "Starting port-forward to api-gateway:8080..."
-      pf = IO.popen("kubectl port-forward svc/api-gateway-external 8080:8080 -n #{NAMESPACE}")
-      Thread.new { pf.read rescue nil }
-      sleep 5
-      begin
-        require "socket"
-        TCPSocket.new("127.0.0.1", 8080).close
-        puts "Port-forward ready."
-      rescue
-        puts "WARN: port-forward may not be ready, tests may fail"
-      end
-    end
+    # Port-forward is self-managed by scripts/e2e_runner.rb (GATEWAY_PORT, default 18080).
+    # No legacy pre-PF here to avoid occupying 8080 / conflicting with the runner.
 
     script = File.join(ROOT, "scripts", "e2e_runner.rb")
     raise "E2E runner not found: #{script}" unless File.exist?(script)
 
     cmd = "ruby \"#{script}\""
     cmd += " PHASE=#{phase}" unless phase.empty?
-    ok = sh(cmd)
-
-  ensure
-    if pf
-      Process.kill("TERM", pf.pid) rescue nil
-      pf.close rescue nil
-    end
+    sh(cmd)
   end
 end
 
@@ -896,7 +882,7 @@ task :help do
       k8s:check    EXPECT_ABSENT=, EXPECT_PRESENT=, SMOKE=1
       k8s:kafka    TOPIC=<substr>  filter topics by name substring
                    CONSUMER_GROUPS=1  show per-partition lag for all consumer groups
-      k8s:e2e      PHASE=infra|connectivity|happy-path|fraud|idempotency|validation|health|circuit|observability|resilience
+      k8s:e2e      PHASE=infra|connectivity|happy-path|fraud|idempotency|validation|health|circuit|observability|hardening|resilience
     Env knobs: OVERLAY=#{OVERLAY} CLUSTER=#{CLUSTER} NAMESPACE=#{NAMESPACE} CONTAINER_ENGINE=#{CONTAINER_ENGINE}
   HELP
 end
