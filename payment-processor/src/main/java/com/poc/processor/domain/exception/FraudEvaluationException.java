@@ -1,19 +1,11 @@
 package com.poc.processor.domain.exception;
 
-public class FraudEvaluationException extends RuntimeException {
-    private final String paymentId;
-
+public class FraudEvaluationException extends ProcessorDomainException {
     public FraudEvaluationException(String paymentId, String message) {
-        super(message);
-        this.paymentId = paymentId;
+        super(paymentId, message);
     }
 
     public FraudEvaluationException(String paymentId, String message, Throwable cause) {
-        super(message, cause);
-        this.paymentId = paymentId;
-    }
-
-    public String getPaymentId() {
-        return paymentId;
+        super(paymentId, message, cause);
     }
 }

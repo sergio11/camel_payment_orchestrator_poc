@@ -1,7 +1,9 @@
 package com.poc.backend.integration;
 
+import com.poc.camel.testsupport.container.KafkaTestContainer;
 import com.poc.camel.testsupport.container.PostgresTestContainer;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
+import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.util.Map;
@@ -17,6 +19,7 @@ public class BackendIntegrationTest implements QuarkusTestResourceLifecycleManag
     }
 
     private PostgreSQLContainer<?> postgres;
+    private KafkaContainer kafka;
 
     @Override
     public Map<String, String> start() {
@@ -25,11 +28,19 @@ public class BackendIntegrationTest implements QuarkusTestResourceLifecycleManag
             postgres.start();
         }
 
+        kafka = KafkaTestContainer.getInstance();
+        if (!kafka.isRunning()) {
+            kafka.start();
+        }
+        String bootstrapServers = kafka.getBootstrapServers();
+
         return Map.of(
             "quarkus.datasource.jdbc.url", postgres.getJdbcUrl(),
             "quarkus.datasource.username", postgres.getUsername(),
             "quarkus.datasource.password", postgres.getPassword(),
-            "quarkus.datasource.db-kind", "postgresql"
+            "quarkus.datasource.db-kind", "postgresql",
+            "kafka.bootstrap.servers", bootstrapServers,
+            "camel.component.kafka.brokers", bootstrapServers
         );
     }
 

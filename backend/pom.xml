@@ -214,7 +214,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <argLine>${argLine} -XX:+EnableDynamicAgentLoading</argLine>
+                            <argLine>@{failsafeArgLine} -XX:+EnableDynamicAgentLoading</argLine>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <quarkus.datasource.devservices.enabled>false</quarkus.datasource.devservices.enabled>
@@ -244,7 +244,7 @@
                                 <include>**/*IT.java</include>
                                 <include>**/*E2E.java</include>
                             </includes>
-                            <argLine>${argLine} -XX:+EnableDynamicAgentLoading</argLine>
+                    <argLine>@{surefireArgLine} -XX:+EnableDynamicAgentLoading</argLine>
                             <systemPropertyVariables>
                                 <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                                 <quarkus.datasource.devservices.enabled>false</quarkus.datasource.devservices.enabled>

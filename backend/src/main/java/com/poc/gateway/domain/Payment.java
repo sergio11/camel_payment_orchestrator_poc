@@ -1,6 +1,7 @@
 package com.poc.gateway.domain;
 
 import com.poc.gateway.domain.model.PaymentStatus;
+import com.poc.gateway.domain.exception.InvalidPaymentTransitionException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -45,6 +46,9 @@ public record Payment(
     }
 
     public Payment withStatus(PaymentStatus newStatus) {
+        if (!status.canTransitionTo(newStatus)) {
+            throw new InvalidPaymentTransitionException(status, newStatus);
+        }
         return new Payment(
             id, amount, currency, customerId, paymentMethod,
             country, newStatus, provider, failureReason,

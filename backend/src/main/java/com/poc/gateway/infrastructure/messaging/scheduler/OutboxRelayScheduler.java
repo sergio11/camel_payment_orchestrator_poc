@@ -10,7 +10,6 @@ import jakarta.inject.Inject;
 import io.quarkus.scheduler.Scheduled;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-import java.math.BigDecimal;
 import java.util.List;
 
 @ApplicationScoped
@@ -58,16 +57,10 @@ public class OutboxRelayScheduler {
     }
 
     private void publishEvent(OutboxEvent event) throws Exception {
-        PaymentReceivedEvent paymentEvent;
-        try {
-            paymentEvent = objectMapper.readValue(event.payload(), PaymentReceivedEvent.class);
-        } catch (Exception e) {
-            LOG.warnf(e, "Failed to deserialize outbox event %s, using fallback", event.id());
-            paymentEvent = new PaymentReceivedEvent(
-                event.aggregateId().toString(),
-                BigDecimal.ZERO, "", "", "", "", null
-            );
+        PaymentReceivedEvent paymentEvent = objectMapper.readValue(event.payload(), PaymentReceivedEvent.class);
+        boolean published = eventPublisher.publishPaymentReceived(paymentEvent);
+        if (!published) {
+            throw new RuntimeException("Event publisher returned false for event " + event.id());
         }
-        eventPublisher.publishPaymentReceived(paymentEvent);
     }
 }

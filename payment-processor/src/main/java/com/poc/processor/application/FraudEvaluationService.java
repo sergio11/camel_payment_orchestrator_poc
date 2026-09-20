@@ -2,6 +2,7 @@ package com.poc.processor.application;
 
 import com.poc.processor.config.FraudRulesConfig;
 import com.poc.processor.domain.FraudAction;
+import com.poc.processor.domain.FraudRule;
 import com.poc.processor.domain.exception.FraudEvaluationException;
 import com.poc.processor.domain.FraudEvaluation;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
@@ -16,13 +17,6 @@ import java.util.List;
 
 @ApplicationScoped
 public class FraudEvaluationService implements EvaluateFraudUseCase {
-
-    public static final String RULE_HIGH_AMOUNT = "HIGH_AMOUNT";
-    public static final String RULE_HIGH_RISK_COUNTRY = "HIGH_RISK_COUNTRY";
-    public static final String RULE_UNUSUAL_HOUR = "UNUSUAL_HOUR";
-    public static final String RULE_RAPID_RETRY = "RAPID_RETRY";
-    public static final String RULE_NEW_PAYMENT_METHOD = "NEW_PAYMENT_METHOD";
-    public static final String RULE_HIGH_RISK_TIER = "HIGH_RISK_TIER";
 
     @Inject
     private FraudRulesConfig config;
@@ -48,12 +42,12 @@ public class FraudEvaluationService implements EvaluateFraudUseCase {
 
         if (message.amount().compareTo(config.highAmountThreshold()) > 0) {
             score += 50;
-            triggeredRules.add(RULE_HIGH_AMOUNT);
+            triggeredRules.add(FraudRule.HIGH_AMOUNT.getRuleName());
         }
 
         if (message.country() != null && config.highRiskCountries().contains(message.country())) {
             score += 30;
-            triggeredRules.add(RULE_HIGH_RISK_COUNTRY);
+            triggeredRules.add(FraudRule.HIGH_RISK_COUNTRY.getRuleName());
         }
 
         int hour;
@@ -64,7 +58,7 @@ public class FraudEvaluationService implements EvaluateFraudUseCase {
         }
         if (hour >= config.unusualHourStart() && hour <= config.unusualHourEnd()) {
             score += 15;
-            triggeredRules.add(RULE_UNUSUAL_HOUR);
+            triggeredRules.add(FraudRule.UNUSUAL_HOUR.getRuleName());
         }
 
         PaymentMetadataDTO metadata = message.metadata();
@@ -72,20 +66,20 @@ public class FraudEvaluationService implements EvaluateFraudUseCase {
             int attempts = metadata.attempts() != null ? metadata.attempts() : 0;
             if (attempts > config.rapidRetryThreshold()) {
                 score += 25;
-                triggeredRules.add(RULE_RAPID_RETRY);
+                triggeredRules.add(FraudRule.RAPID_RETRY.getRuleName());
             }
 
             boolean isNewMethod = metadata.isNewPaymentMethod() != null && metadata.isNewPaymentMethod();
             int methodAge = metadata.paymentMethodAgeDays() != null ? metadata.paymentMethodAgeDays() : Integer.MAX_VALUE;
             if (isNewMethod && methodAge < config.newMethodDaysThreshold()) {
                 score += 20;
-                triggeredRules.add(RULE_NEW_PAYMENT_METHOD);
+                triggeredRules.add(FraudRule.NEW_PAYMENT_METHOD.getRuleName());
             }
 
             String riskTier = metadata.customerRiskTier();
             if ("HIGH".equalsIgnoreCase(riskTier)) {
                 score += 10;
-                triggeredRules.add(RULE_HIGH_RISK_TIER);
+                triggeredRules.add(FraudRule.HIGH_RISK_TIER.getRuleName());
             }
         }
 

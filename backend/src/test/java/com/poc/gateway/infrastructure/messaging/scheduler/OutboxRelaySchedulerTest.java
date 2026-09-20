@@ -153,7 +153,7 @@ class OutboxRelaySchedulerTest {
     }
 
     @Test
-    void processPendingEvents_withIncompletePayload_usesFallbackValues() throws Exception {
+    void processPendingEvents_withDeserializationFailure_doesNotMarkSent() throws Exception {
         UUID aggregateId = UUID.randomUUID();
         String payload = "{}";
         OutboxEvent event = OutboxEvent.create(aggregateId, "payments.events.received", payload, "key-1");
@@ -163,11 +163,32 @@ class OutboxRelaySchedulerTest {
         when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class)))
             .thenThrow(new RuntimeException("Deserialization failed"));
 
-        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(true);
+        scheduler.processPendingEvents();
+
+        verifyNoInteractions(eventPublisher);
+        verify(outboxRepo, never()).markSent(event.id());
+    }
+
+    @Test
+    void processPendingEvents_whenPublishReturnsFalse_doesNotMarkSent() throws Exception {
+        String paymentId = UUID.randomUUID().toString();
+        String payload = String.format(
+            "{\"paymentId\":\"%s\",\"amount\":\"100.00\",\"currency\":\"USD\",\"customerId\":\"cust-1\",\"paymentMethod\":\"CARD\",\"country\":\"US\"}",
+            paymentId
+        );
+        OutboxEvent event = OutboxEvent.create(UUID.randomUUID(), "payments.events.received", payload, "key-1");
+
+        when(outboxRepo.findPending(50)).thenReturn(List.of(event));
+
+        PaymentReceivedEvent expectedEvent = new PaymentReceivedEvent(
+            paymentId, new java.math.BigDecimal("100.00"), "USD", "cust-1", "CARD", "US", null
+        );
+        when(objectMapper.readValue(eq(payload), eq(PaymentReceivedEvent.class))).thenReturn(expectedEvent);
+        when(eventPublisher.publishPaymentReceived(any(PaymentReceivedEvent.class))).thenReturn(false);
 
         scheduler.processPendingEvents();
 
-        verify(eventPublisher).publishPaymentReceived(any(PaymentReceivedEvent.class));
-        verify(outboxRepo).markSent(event.id());
+        verify(eventPublisher).publishPaymentReceived(expectedEvent);
+        verify(outboxRepo, never()).markSent(event.id());
     }
 }

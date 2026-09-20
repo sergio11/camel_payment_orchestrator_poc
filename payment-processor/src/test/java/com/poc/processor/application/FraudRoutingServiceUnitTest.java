@@ -2,6 +2,7 @@ package com.poc.processor.application;
 
 import com.poc.processor.domain.FraudAction;
 import com.poc.processor.domain.FraudEvaluation;
+import com.poc.processor.port.inbound.RouteFraudUseCase.FraudRoutingDecision;
 import com.poc.processor.port.outbound.RoutingDecisionPort;
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
@@ -44,7 +45,7 @@ class FraudRoutingServiceUnitTest {
         when(routingPort.resolveFraudRoute(msg.amount(), msg.paymentMethod(), msg.country()))
             .thenReturn("direct:fraud-check");
 
-        FraudRoutingService.FraudRoutingDecision result = service.route(msg, evaluation);
+        FraudRoutingDecision result = service.route(msg, evaluation);
 
         assertEquals(FraudAction.APPROVE, result.action());
         assertEquals("direct:fraud-check", result.routeTarget());
@@ -68,7 +69,7 @@ class FraudRoutingServiceUnitTest {
         when(routingPort.resolveFraudRoute(msg.amount(), msg.paymentMethod(), msg.country()))
             .thenReturn("direct:fraud-review");
 
-        FraudRoutingService.FraudRoutingDecision result = service.route(msg, evaluation);
+        FraudRoutingDecision result = service.route(msg, evaluation);
 
         assertEquals(FraudAction.REJECT, result.action());
         assertEquals("direct:fraud-review", result.routeTarget());

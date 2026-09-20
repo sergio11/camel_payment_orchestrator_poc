@@ -145,4 +145,39 @@ class ProviderRouterBeanUnitTest {
         assertEquals(orig, exchange.getMessage().getBody());
         assertEquals("pay-3", exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID));
     }
+
+    @Test
+    @DisplayName("restoreHeadersAfterHttpCall restores all headers from properties")
+    void testRestoreHeadersAfterHttpCall_allSet() {
+        PaymentMessage orig = payment("pay-4");
+        Exchange exchange = exchangeWith("http-response");
+        exchange.setProperty(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID, "pay-4");
+        exchange.setProperty(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE, orig);
+        exchange.setProperty(CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID, "event-1");
+        bean.restoreHeadersAfterHttpCall(exchange);
+        assertEquals("pay-4", exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID));
+        assertEquals(orig, exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE));
+        assertEquals("event-1", exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID));
+    }
+
+    @Test
+    @DisplayName("restoreHeadersAfterHttpCall does nothing without properties")
+    void testRestoreHeadersAfterHttpCall_noneSet() {
+        Exchange exchange = exchangeWith("http-response");
+        bean.restoreHeadersAfterHttpCall(exchange);
+        assertNull(exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID));
+        assertNull(exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE));
+        assertNull(exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID));
+    }
+
+    @Test
+    @DisplayName("restoreHeadersAfterHttpCall restores only paymentId when others missing")
+    void testRestoreHeadersAfterHttpCall_partial() {
+        Exchange exchange = exchangeWith("http-response");
+        exchange.setProperty(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID, "pay-5");
+        bean.restoreHeadersAfterHttpCall(exchange);
+        assertEquals("pay-5", exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID));
+        assertNull(exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE));
+        assertNull(exchange.getMessage().getHeader(CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID));
+    }
 }

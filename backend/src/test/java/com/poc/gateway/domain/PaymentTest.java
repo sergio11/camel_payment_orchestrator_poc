@@ -34,8 +34,8 @@ class PaymentTest {
     @Test
     void withStatus_returnsNewPaymentWithStatus() {
         Payment p = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
-        Payment updated = p.withStatus(PaymentStatus.APPROVED);
-        assertEquals(PaymentStatus.APPROVED, updated.status());
+        Payment updated = p.withStatus(PaymentStatus.PROCESSING);
+        assertEquals(PaymentStatus.PROCESSING, updated.status());
         assertEquals(p.id(), updated.id());
         assertNotNull(updated.updatedAt());
     }
@@ -43,13 +43,57 @@ class PaymentTest {
     @Test
     void withStatus_preservesAllOtherFields() {
         Payment p = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
-        Payment updated = p.withStatus(PaymentStatus.REJECTED);
+        Payment updated = p.withStatus(PaymentStatus.FAILED);
         assertEquals(p.amount(), updated.amount());
         assertEquals(p.currency(), updated.currency());
         assertEquals(p.customerId(), updated.customerId());
         assertEquals(p.paymentMethod(), updated.paymentMethod());
         assertEquals(p.country(), updated.country());
         assertEquals(p.createdAt(), updated.createdAt());
+    }
+
+    @Test
+    void withStatus_throwsExceptionForInvalidTransition() {
+        Payment p = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
+        com.poc.gateway.domain.exception.InvalidPaymentTransitionException ex = assertThrows(
+            com.poc.gateway.domain.exception.InvalidPaymentTransitionException.class,
+            () -> p.withStatus(PaymentStatus.APPROVED)
+        );
+        assertEquals(PaymentStatus.PENDING, ex.getFrom());
+        assertEquals(PaymentStatus.APPROVED, ex.getTo());
+        assertTrue(ex.getMessage().contains("PENDING"));
+        assertTrue(ex.getMessage().contains("APPROVED"));
+    }
+
+    @Test
+    void withStatus_throwsExceptionForApprovedToPending() {
+        Payment p = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
+        Payment approved = p.withStatus(PaymentStatus.PROCESSING).withStatus(PaymentStatus.APPROVED);
+        com.poc.gateway.domain.exception.InvalidPaymentTransitionException ex = assertThrows(
+            com.poc.gateway.domain.exception.InvalidPaymentTransitionException.class,
+            () -> approved.withStatus(PaymentStatus.PENDING)
+        );
+        assertEquals(PaymentStatus.APPROVED, ex.getFrom());
+        assertEquals(PaymentStatus.PENDING, ex.getTo());
+    }
+
+    @Test
+    void withStatus_allowsValidTransitionsFromProcessing() {
+        Payment p = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
+        Payment processing = p.withStatus(PaymentStatus.PROCESSING);
+
+        Payment approved = processing.withStatus(PaymentStatus.APPROVED);
+        assertEquals(PaymentStatus.APPROVED, approved.status());
+
+        Payment p2 = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
+        Payment processing2 = p2.withStatus(PaymentStatus.PROCESSING);
+        Payment rejected = processing2.withStatus(PaymentStatus.REJECTED);
+        assertEquals(PaymentStatus.REJECTED, rejected.status());
+
+        Payment p3 = Payment.create(new BigDecimal("100"), "USD", "c1", "CARD", "US", PaymentMetadata.empty());
+        Payment processing3 = p3.withStatus(PaymentStatus.PROCESSING);
+        Payment review = processing3.withStatus(PaymentStatus.REVIEW);
+        assertEquals(PaymentStatus.REVIEW, review.status());
     }
 
     @Test

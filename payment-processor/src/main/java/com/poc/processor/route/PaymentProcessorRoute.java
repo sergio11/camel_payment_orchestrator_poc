@@ -2,8 +2,8 @@ package com.poc.processor.route;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.poc.processor.application.FraudRoutingService;
-import com.poc.processor.application.FraudRoutingService.FraudRoutingDecision;
+import com.poc.processor.port.inbound.RouteFraudUseCase;
+import com.poc.processor.port.inbound.RouteFraudUseCase.FraudRoutingDecision;
 import com.poc.processor.route.CamelRouteConstants;
 import com.poc.processor.port.inbound.EnrichPaymentUseCase;
 import com.poc.processor.port.inbound.EvaluateFraudUseCase;
@@ -22,7 +22,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
     private ObjectMapper objectMapper;
 
     @Inject
-    private FraudRoutingService fraudRoutingService;
+    private RouteFraudUseCase fraudRoutingService;
 
     @Inject
     private EnrichPaymentUseCase enrichPaymentUseCase;
@@ -33,6 +33,47 @@ public class PaymentProcessorRoute extends RouteBuilder {
     public static void restorePaymentIdFromKafkaKey(org.apache.camel.Exchange exchange) {
         CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID,
             exchange.getMessage().getHeader(CamelRouteConstants.HEADER_KAFKA_KEY));
+    }
+
+    public static void validateAndInitHeaders(org.apache.camel.Exchange exchange) {
+        PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+        msg.validate();
+        CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID, msg.paymentId());
+        CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID, msg.eventId());
+    }
+
+    public void enrichPayment(org.apache.camel.Exchange exchange) {
+        PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+        PaymentMessage enriched = enrichPaymentUseCase.enrich(msg);
+        exchange.getIn().setBody(enriched);
+    }
+
+    public void evaluateAndRoute(org.apache.camel.Exchange exchange) {
+        PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
+        exchange.getIn().setHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE, msg);
+
+        FraudEvaluation evaluation = evaluateFraudUseCase.evaluate(msg);
+        exchange.setProperty("FraudEvaluation", evaluation);
+
+        FraudRoutingDecision decision = fraudRoutingService.route(msg, evaluation);
+        exchange.getIn().setHeader(CamelRouteConstants.HEADER_FRAUD_ACTION, decision.action().name());
+        exchange.getIn().setHeader(CamelRouteConstants.HEADER_RISK_SCORE, decision.evaluation().riskScore());
+        exchange.getIn().setHeader(CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET, decision.routeTarget());
+    }
+
+    public static void incrementRetryCount(org.apache.camel.Exchange exchange) {
+        Object raw = exchange.getIn().getHeader(CamelRouteConstants.HEADER_RETRY_COUNT);
+        int retryCount = 0;
+        if (raw instanceof Integer) {
+            retryCount = (Integer) raw;
+        } else if (raw instanceof Number) {
+            retryCount = ((Number) raw).intValue();
+        } else if (raw instanceof byte[]) {
+            try { retryCount = Integer.parseInt(new String((byte[]) raw).trim()); } catch (Exception ignored) {}
+        } else if (raw != null) {
+            try { retryCount = Integer.parseInt(raw.toString().trim()); } catch (Exception ignored) {}
+        }
+        exchange.getIn().setHeader(CamelRouteConstants.HEADER_RETRY_COUNT, retryCount + 1);
     }
 
     @Override
@@ -58,31 +99,11 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("payment-processor")
             .autoStartup("{{camel.route.payment-processor.auto-startup:true}}")
             .unmarshal(paymentJson)
-            .process(exchange -> {
-                PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
-                msg.validate();
-                CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID, msg.paymentId());
-                CamelRouteConstants.setHeaderIfAbsent(exchange, CamelRouteConstants.HEADER_ORIGINAL_EVENT_ID, msg.eventId());
-            })
+            .process(PaymentProcessorRoute::validateAndInitHeaders)
             .log("Received payment: ${header." + CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_ID + "}")
-            .process(exchange -> {
-                PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
-                PaymentMessage enriched = enrichPaymentUseCase.enrich(msg);
-                exchange.getIn().setBody(enriched);
-            })
+            .process(this::enrichPayment)
             .wireTap("direct:audit-pipeline")
-            .process(exchange -> {
-                PaymentMessage msg = exchange.getIn().getBody(PaymentMessage.class);
-                exchange.getIn().setHeader(CamelRouteConstants.HEADER_ORIGINAL_PAYMENT_MESSAGE, msg);
-
-                FraudEvaluation evaluation = evaluateFraudUseCase.evaluate(msg);
-                exchange.setProperty("FraudEvaluation", evaluation);
-
-                FraudRoutingDecision decision = fraudRoutingService.route(msg, evaluation);
-                exchange.getIn().setHeader(CamelRouteConstants.HEADER_FRAUD_ACTION, decision.action().name());
-                exchange.getIn().setHeader(CamelRouteConstants.HEADER_RISK_SCORE, decision.evaluation().riskScore());
-                exchange.getIn().setHeader(CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET, decision.routeTarget());
-            })
+            .process(this::evaluateAndRoute)
             .log("Fraud route target: ${header." + CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET + "} for ${body.paymentId}")
             .choice()
                 .when(header(CamelRouteConstants.HEADER_FRAUD_ROUTE_TARGET).isEqualTo(CamelRouteConstants.DIRECT_FRAUD_REVIEW))
@@ -156,20 +177,7 @@ public class PaymentProcessorRoute extends RouteBuilder {
             .routeId("retry-consumer")
             .autoStartup("{{camel.route.retry-consumer.auto-startup:true}}")
             .log("Retrying payment from retry topic: ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")
-            .process(exchange -> {
-                Object raw = exchange.getIn().getHeader(CamelRouteConstants.HEADER_RETRY_COUNT);
-                int retryCount = 0;
-                if (raw instanceof Integer) {
-                    retryCount = (Integer) raw;
-                } else if (raw instanceof Number) {
-                    retryCount = ((Number) raw).intValue();
-                } else if (raw instanceof byte[]) {
-                    try { retryCount = Integer.parseInt(new String((byte[]) raw).trim()); } catch (Exception ignored) {}
-                } else if (raw != null) {
-                    try { retryCount = Integer.parseInt(raw.toString().trim()); } catch (Exception ignored) {}
-                }
-                exchange.getIn().setHeader(CamelRouteConstants.HEADER_RETRY_COUNT, retryCount + 1);
-            })
+            .process(PaymentProcessorRoute::incrementRetryCount)
             .choice()
                 .when(header(CamelRouteConstants.HEADER_RETRY_COUNT).isLessThan(3))
                     .log("Retry attempt ${header." + CamelRouteConstants.HEADER_RETRY_COUNT + "} for ${header." + CamelRouteConstants.HEADER_KAFKA_KEY + "}")

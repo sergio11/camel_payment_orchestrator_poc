@@ -8,7 +8,7 @@
 [![Kafka](https://img.shields.io/badge/Apache_Kafka-3.x-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.28-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-624+-brightgreen?style=for-the-badge)](#-testing)
+[![Tests](https://img.shields.io/badge/Tests-640+-brightgreen?style=for-the-badge)](#-testing)
 
 A proof-of-concept **Payment Orchestration Layer** built with Apache Camel, Quarkus, and Kafka — demonstrating event-driven architecture, fraud detection, circuit breaker patterns, provider failover, and Kubernetes-native deployment.
 

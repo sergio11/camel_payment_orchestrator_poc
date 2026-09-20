@@ -196,4 +196,80 @@ class FraudEvaluationServiceUnitTest {
         assertNotNull(eval.action());
         assertTrue(eval.isApprove() || eval.isReview() || eval.isReject());
     }
+
+    @Test
+    @DisplayName("null country skips HIGH_RISK_COUNTRY rule")
+    void evaluate_nullCountry_skipsCountryRule() {
+        PaymentMessage msg = new PaymentMessage(
+            "evt-1", "pay-1", new BigDecimal("100"), "USD", "cust-1",
+            "CARD", null, 0, false, 0, "UTC",
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        FraudEvaluation eval = service.evaluate(msg);
+
+        assertFalse(eval.triggeredRules().contains("HIGH_RISK_COUNTRY"));
+    }
+
+    @Test
+    @DisplayName("null timeZone falls back to UTC")
+    void evaluate_nullTimeZone_fallsBackToUtc() {
+        PaymentMessage msg = new PaymentMessage(
+            "evt-1", "pay-1", new BigDecimal("100"), "USD", "cust-1",
+            "CARD", "US", 0, false, 0, null,
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        FraudEvaluation eval = service.evaluate(msg);
+
+        assertNotNull(eval.action());
+    }
+
+    @Test
+    @DisplayName("unknown timeZone falls back to UTC")
+    void evaluate_unknownTimeZone_fallsBackToUtc() {
+        PaymentMessage msg = new PaymentMessage(
+            "evt-1", "pay-1", new BigDecimal("100"), "USD", "cust-1",
+            "CARD", "US", 0, false, 0, "Mars/Olympus",
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        FraudEvaluation eval = service.evaluate(msg);
+
+        assertNotNull(eval.action());
+    }
+
+    @Test
+    @DisplayName("full-day unusual-hour window always triggers UNUSUAL_HOUR rule")
+    void evaluate_fullDayWindow_triggersUnusualHour() {
+        when(config.unusualHourStart()).thenReturn(0);
+        when(config.unusualHourEnd()).thenReturn(23);
+
+        PaymentMessage msg = new PaymentMessage(
+            "evt-1", "pay-1", new BigDecimal("100"), "USD", "cust-1",
+            "CARD", "US", 0, false, 0, "UTC",
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        FraudEvaluation eval = service.evaluate(msg);
+
+        assertTrue(eval.triggeredRules().contains("UNUSUAL_HOUR"));
+    }
+
+    @Test
+    @DisplayName("inverted unusual-hour window never triggers UNUSUAL_HOUR rule")
+    void evaluate_invertedWindow_skipsUnusualHour() {
+        when(config.unusualHourStart()).thenReturn(24);
+        when(config.unusualHourEnd()).thenReturn(23);
+
+        PaymentMessage msg = new PaymentMessage(
+            "evt-1", "pay-1", new BigDecimal("100"), "USD", "cust-1",
+            "CARD", "US", 0, false, 0, "UTC",
+            PaymentMetadataDTO.empty(), LocalDateTime.now()
+        );
+
+        FraudEvaluation eval = service.evaluate(msg);
+
+        assertFalse(eval.triggeredRules().contains("UNUSUAL_HOUR"));
+    }
 }

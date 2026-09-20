@@ -18,6 +18,11 @@ public class ProviderSelectionRoute extends RouteBuilder {
     @Inject
     private ProviderConfig providerConfig;
 
+    public static void failOnProviderError(org.apache.camel.Exchange exchange, String providerName) {
+        ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
+        throw new RuntimeException(providerName + " error: " + resp.errorMessage());
+    }
+
     @Override
     public void configure() {
         JacksonDataFormat paymentJson = new JacksonDataFormat(objectMapper, PaymentMessage.class);
@@ -72,10 +77,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                             .to("kafka:{{kafka.topic.payments.processed}}")
                         .otherwise()
                             .log("Provider A returned error: ${body.errorCode}")
-                            .process(exchange -> {
-                                ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
-                                throw new RuntimeException("Provider A error: " + resp.errorMessage());
-                            })
+                            .process(exchange -> failOnProviderError(exchange, "Provider A"))
                     .end()
             .end();
 
@@ -120,10 +122,7 @@ public class ProviderSelectionRoute extends RouteBuilder {
                             .to("kafka:{{kafka.topic.payments.processed}}")
                         .otherwise()
                             .log("Provider B returned error: ${body.errorCode}")
-                            .process(exchange -> {
-                                ProviderResponse resp = exchange.getMessage().getBody(ProviderResponse.class);
-                                throw new RuntimeException("Provider B error: " + resp.errorMessage());
-                            })
+                            .process(exchange -> failOnProviderError(exchange, "Provider B"))
                     .end()
             .end();
 

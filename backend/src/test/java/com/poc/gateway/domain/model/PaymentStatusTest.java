@@ -54,4 +54,112 @@ class PaymentStatusTest {
     void valueOf_invalidName_throwsException() {
         assertThrows(IllegalArgumentException.class, () -> PaymentStatus.valueOf("TYPO"));
     }
+
+    // ========== canTransitionTo ==========
+
+    @Test
+    void canTransitionTo_pendingAllowsProcessing() {
+        assertTrue(PaymentStatus.PENDING.canTransitionTo(PaymentStatus.PROCESSING));
+    }
+
+    @Test
+    void canTransitionTo_pendingAllowsFailed() {
+        assertTrue(PaymentStatus.PENDING.canTransitionTo(PaymentStatus.FAILED));
+    }
+
+    @Test
+    void canTransitionTo_pendingAllowsRejected() {
+        assertTrue(PaymentStatus.PENDING.canTransitionTo(PaymentStatus.REJECTED));
+    }
+
+    @Test
+    void canTransitionTo_pendingRejectsApproved() {
+        assertFalse(PaymentStatus.PENDING.canTransitionTo(PaymentStatus.APPROVED));
+    }
+
+    @Test
+    void canTransitionTo_pendingRejectsReview() {
+        assertFalse(PaymentStatus.PENDING.canTransitionTo(PaymentStatus.REVIEW));
+    }
+
+    @Test
+    void canTransitionTo_processingAllowsApproved() {
+        assertTrue(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.APPROVED));
+    }
+
+    @Test
+    void canTransitionTo_processingAllowsRejected() {
+        assertTrue(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.REJECTED));
+    }
+
+    @Test
+    void canTransitionTo_processingAllowsFailed() {
+        assertTrue(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.FAILED));
+    }
+
+    @Test
+    void canTransitionTo_processingAllowsReview() {
+        assertTrue(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.REVIEW));
+    }
+
+    @Test
+    void canTransitionTo_processingRejectsPending() {
+        assertFalse(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.PENDING));
+    }
+
+    @Test
+    void canTransitionTo_reviewAllowsProcessing() {
+        assertTrue(PaymentStatus.REVIEW.canTransitionTo(PaymentStatus.PROCESSING));
+    }
+
+    @Test
+    void canTransitionTo_reviewAllowsApproved() {
+        assertTrue(PaymentStatus.REVIEW.canTransitionTo(PaymentStatus.APPROVED));
+    }
+
+    @Test
+    void canTransitionTo_reviewAllowsRejected() {
+        assertTrue(PaymentStatus.REVIEW.canTransitionTo(PaymentStatus.REJECTED));
+    }
+
+    @Test
+    void canTransitionTo_reviewAllowsFailed() {
+        assertTrue(PaymentStatus.REVIEW.canTransitionTo(PaymentStatus.FAILED));
+    }
+
+    @Test
+    void canTransitionTo_reviewRejectsPending() {
+        assertFalse(PaymentStatus.REVIEW.canTransitionTo(PaymentStatus.PENDING));
+    }
+
+    @Test
+    void canTransitionTo_failedAllowsPending() {
+        assertTrue(PaymentStatus.FAILED.canTransitionTo(PaymentStatus.PENDING));
+    }
+
+    @Test
+    void canTransitionTo_failedRejectsAllOthers() {
+        assertFalse(PaymentStatus.FAILED.canTransitionTo(PaymentStatus.PROCESSING));
+        assertFalse(PaymentStatus.FAILED.canTransitionTo(PaymentStatus.APPROVED));
+        assertFalse(PaymentStatus.FAILED.canTransitionTo(PaymentStatus.REJECTED));
+        assertFalse(PaymentStatus.FAILED.canTransitionTo(PaymentStatus.REVIEW));
+    }
+
+    @Test
+    void canTransitionTo_approvedIsTerminal() {
+        assertFalse(PaymentStatus.APPROVED.canTransitionTo(PaymentStatus.PENDING));
+        assertFalse(PaymentStatus.APPROVED.canTransitionTo(PaymentStatus.PROCESSING));
+        assertFalse(PaymentStatus.APPROVED.canTransitionTo(PaymentStatus.REJECTED));
+        assertFalse(PaymentStatus.APPROVED.canTransitionTo(PaymentStatus.FAILED));
+        assertFalse(PaymentStatus.APPROVED.canTransitionTo(PaymentStatus.REVIEW));
+    }
+
+    @Test
+    void canTransitionTo_rejectedIsTerminal() {
+        assertFalse(PaymentStatus.REJECTED.canTransitionTo(PaymentStatus.PENDING));
+        assertFalse(PaymentStatus.REJECTED.canTransitionTo(PaymentStatus.PROCESSING));
+        assertFalse(PaymentStatus.REJECTED.canTransitionTo(PaymentStatus.APPROVED));
+        assertFalse(PaymentStatus.REJECTED.canTransitionTo(PaymentStatus.FAILED));
+        assertFalse(PaymentStatus.REJECTED.canTransitionTo(PaymentStatus.REVIEW));
+    }
 }

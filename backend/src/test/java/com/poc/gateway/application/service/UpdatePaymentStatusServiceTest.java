@@ -35,14 +35,14 @@ class UpdatePaymentStatusServiceTest {
             "CREDIT_CARD", "US", PaymentStatus.PENDING,
             null, null, PaymentMetadata.empty(), LocalDateTime.now(), LocalDateTime.now()
         );
-        Payment updated = payment.withStatus(PaymentStatus.APPROVED);
+        Payment updated = payment.withStatus(PaymentStatus.PROCESSING);
 
-        when(paymentRepo.update(id, PaymentStatus.APPROVED)).thenReturn(updated);
+        when(paymentRepo.update(id, PaymentStatus.PROCESSING)).thenReturn(updated);
 
-        Payment result = service.execute(id, PaymentStatus.APPROVED);
+        Payment result = service.execute(id, PaymentStatus.PROCESSING);
 
         assertNotNull(result);
-        assertEquals(PaymentStatus.APPROVED, result.status());
+        assertEquals(PaymentStatus.PROCESSING, result.status());
     }
 
     @Test

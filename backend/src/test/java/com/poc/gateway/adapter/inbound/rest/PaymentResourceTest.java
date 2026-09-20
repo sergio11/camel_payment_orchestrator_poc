@@ -11,6 +11,8 @@ import com.poc.gateway.domain.model.PaymentPageResult;
 import com.poc.gateway.domain.model.PaymentStatus;
 import com.poc.gateway.domain.model.CreatePaymentCommand;
 import com.poc.shared.dto.PaymentResponseDTO;
+import com.poc.backend.integration.BackendIntegrationTest;
+import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.InjectMock;
 import io.restassured.http.ContentType;
@@ -25,6 +27,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
+@QuarkusTestResource(BackendIntegrationTest.class)
 class PaymentResourceTest {
 
     @InjectMock

@@ -33,6 +33,7 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     private PaymentEventTopicPort topicPort;
 
     @Override
+    @Transactional
     public Payment execute(CreatePaymentCommand command, String idempotencyKey) {
         String key = IdempotencyKeyUtils.normalize(idempotencyKey);
 
@@ -51,8 +52,7 @@ public class CreatePaymentService implements CreatePaymentUseCase {
         return saved;
     }
 
-    @Transactional
-    Payment persistWithOutbox(Payment domainPayment, String idempotencyKey) {
+    private Payment persistWithOutbox(Payment domainPayment, String idempotencyKey) {
         Payment saved = paymentRepo.save(domainPayment, idempotencyKey);
         String payload = serializer.serialize(saved);
         OutboxEvent event = OutboxEvent.create(saved.id(), topicPort.receivedTopic(), payload, idempotencyKey);

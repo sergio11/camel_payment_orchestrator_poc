@@ -2,6 +2,7 @@ package com.poc.processor.domain;
 
 import com.poc.shared.dto.PaymentMetadataDTO;
 import com.poc.shared.event.PaymentMessage;
+import com.poc.processor.port.inbound.RouteFraudUseCase.FraudRoutingDecision;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -209,5 +210,85 @@ class DomainLayerTest {
         assertEquals("Failed", ex.getMessage());
         assertEquals("pay-1", ex.getPaymentId());
         assertEquals(cause, ex.getCause());
+    }
+
+    // ========== ProcessorDomainException ==========
+
+    @Test
+    @DisplayName("ProcessorDomainException with message")
+    void processorDomainException_message() {
+        var ex = new com.poc.processor.domain.exception.ProcessorDomainException("pay-1", "Domain error");
+        assertEquals("Domain error", ex.getMessage());
+        assertEquals("pay-1", ex.getPaymentId());
+    }
+
+    @Test
+    @DisplayName("ProcessorDomainException with cause")
+    void processorDomainException_cause() {
+        var cause = new RuntimeException("root cause");
+        var ex = new com.poc.processor.domain.exception.ProcessorDomainException("pay-1", "Failed", cause);
+        assertEquals("Failed", ex.getMessage());
+        assertEquals("pay-1", ex.getPaymentId());
+        assertEquals(cause, ex.getCause());
+    }
+
+    @Test
+    @DisplayName("PaymentProcessingException extends ProcessorDomainException")
+    void paymentProcessingException_extendsBase() {
+        var ex = new com.poc.processor.domain.exception.PaymentProcessingException("pay-1", "error");
+        assertInstanceOf(com.poc.processor.domain.exception.ProcessorDomainException.class, ex);
+        assertInstanceOf(RuntimeException.class, ex);
+    }
+
+    @Test
+    @DisplayName("FraudEvaluationException extends ProcessorDomainException")
+    void fraudEvaluationException_extendsBase() {
+        var ex = new com.poc.processor.domain.exception.FraudEvaluationException("pay-1", "error");
+        assertInstanceOf(com.poc.processor.domain.exception.ProcessorDomainException.class, ex);
+        assertInstanceOf(RuntimeException.class, ex);
+    }
+
+    // ========== FraudRule ==========
+
+    @Test
+    @DisplayName("FraudRule has all 6 constants")
+    void fraudRule_allValues() {
+        assertEquals(6, FraudRule.values().length);
+    }
+
+    @Test
+    @DisplayName("FraudRule.getRuleName returns correct names")
+    void fraudRule_getRuleName() {
+        assertEquals("HIGH_AMOUNT", FraudRule.HIGH_AMOUNT.getRuleName());
+        assertEquals("HIGH_RISK_COUNTRY", FraudRule.HIGH_RISK_COUNTRY.getRuleName());
+        assertEquals("UNUSUAL_HOUR", FraudRule.UNUSUAL_HOUR.getRuleName());
+        assertEquals("RAPID_RETRY", FraudRule.RAPID_RETRY.getRuleName());
+        assertEquals("NEW_PAYMENT_METHOD", FraudRule.NEW_PAYMENT_METHOD.getRuleName());
+        assertEquals("HIGH_RISK_TIER", FraudRule.HIGH_RISK_TIER.getRuleName());
+    }
+
+    // ========== FraudRoutingDecision ==========
+
+    @Test
+    @DisplayName("FraudRoutingDecision record construction")
+    void fraudRoutingDecision_construction() {
+        FraudEvaluation eval = new FraudEvaluation(
+            "pay-1", new BigDecimal("100"), "cust-1", 30, FraudAction.APPROVE, "Low risk", List.of()
+        );
+        FraudRoutingDecision decision = new FraudRoutingDecision(FraudAction.APPROVE, "direct:fraud-check", eval);
+        assertEquals(FraudAction.APPROVE, decision.action());
+        assertEquals("direct:fraud-check", decision.routeTarget());
+        assertEquals(eval, decision.evaluation());
+    }
+
+    @Test
+    @DisplayName("FraudRoutingDecision record equality")
+    void fraudRoutingDecision_equality() {
+        FraudEvaluation eval = new FraudEvaluation(
+            "pay-1", new BigDecimal("100"), "cust-1", 30, FraudAction.APPROVE, "Low risk", List.of()
+        );
+        FraudRoutingDecision d1 = new FraudRoutingDecision(FraudAction.APPROVE, "direct:fraud-check", eval);
+        FraudRoutingDecision d2 = new FraudRoutingDecision(FraudAction.APPROVE, "direct:fraud-check", eval);
+        assertEquals(d1, d2);
     }
 }
