@@ -59,6 +59,11 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-context</artifactId>
+                <version>1.43.0</version>
+            </dependency>
+            <dependency>
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-bom</artifactId>
                 <version>${resilience4j.version}</version>

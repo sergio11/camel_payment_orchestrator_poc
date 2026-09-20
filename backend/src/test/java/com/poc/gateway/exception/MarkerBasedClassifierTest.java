@@ -62,6 +62,16 @@ class MarkerBasedClassifierTest {
         assertEquals(ExceptionCategory.INTERNAL, classifier.classify(new RuntimeException("")));
     }
 
+    @Test
+    void classify_messageContains400_returnsBadRequest() {
+        assertEquals(ExceptionCategory.BAD_REQUEST, classifier.classify(new RuntimeException("HTTP 400 error")));
+    }
+
+    @Test
+    void classify_messageContainsBadRequest_returnsBadRequest() {
+        assertEquals(ExceptionCategory.BAD_REQUEST, classifier.classify(new RuntimeException("bad request")));
+    }
+
     private static class DuplicateKeyException extends RuntimeException {
         DuplicateKeyException(String message) {
             super(message);

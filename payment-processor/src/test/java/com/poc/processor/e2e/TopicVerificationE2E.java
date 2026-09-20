@@ -21,7 +21,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @QuarkusTest
-@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
+@QuarkusTestResource(KafkaTestResource.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TopicVerificationE2E {
 

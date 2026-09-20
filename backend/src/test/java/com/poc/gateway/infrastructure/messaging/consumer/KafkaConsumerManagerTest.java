@@ -439,6 +439,39 @@ class KafkaConsumerManagerTest {
         verify(kafkaConsumer).close();
     }
 
+    @Test
+    void pollLoop_routerExceptionWhileStopped_doesNotLog() throws Exception {
+        setField("consumer", kafkaConsumer);
+        setField("running", true);
+
+        java.util.concurrent.CountDownLatch routeStarted = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch exceptionReady = new java.util.concurrent.CountDownLatch(1);
+
+        doAnswer(invocation -> {
+            routeStarted.countDown();
+            exceptionReady.await(5, java.util.concurrent.TimeUnit.SECONDS);
+            throw new RuntimeException("route error");
+        }).when(router).route(any());
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("topic", 0, 0L, "key", "value");
+        ConsumerRecords<String, String> records = new ConsumerRecords<>(Map.of(
+            new TopicPartition("topic", 0), Collections.singletonList(record)
+        ));
+        doReturn(records).when(kafkaConsumer).poll(any(Duration.class));
+
+        Thread t = new Thread(() -> {
+            try {
+                invokePollLoop();
+            } catch (Exception ignored) {
+            }
+        });
+        t.start();
+        routeStarted.await(2, java.util.concurrent.TimeUnit.SECONDS);
+        setField("running", false);
+        exceptionReady.countDown();
+        t.join(3000);
+    }
+
     private void assertThatRunningIsFalse() throws Exception {
         Field field = KafkaConsumerManager.class.getDeclaredField("running");
         field.setAccessible(true);

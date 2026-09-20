@@ -30,7 +30,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
+@QuarkusTestResource(KafkaTestResource.class)
 @TestInstance(Lifecycle.PER_CLASS)
 @TestMethodOrder(OrderAnnotation.class)
 class ProviderSelectionRouteTest {

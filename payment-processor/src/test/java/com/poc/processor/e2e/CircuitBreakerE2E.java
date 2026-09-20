@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 @QuarkusTest
-@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
+@QuarkusTestResource(KafkaTestResource.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CircuitBreakerE2E {
 

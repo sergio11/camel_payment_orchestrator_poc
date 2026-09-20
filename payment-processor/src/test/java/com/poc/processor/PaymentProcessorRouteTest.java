@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
-@QuarkusTestResource(value = KafkaTestResource.class, restrictToAnnotatedClass = true)
+@QuarkusTestResource(KafkaTestResource.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PaymentProcessorRouteTest {
 
