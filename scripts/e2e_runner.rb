@@ -405,10 +405,14 @@ def phase_fraud
   pid4 = json_parse(r4)["id"]
   if pid4
     puts "  #{dim("Waiting for WALLET fraud...")}"
-    sleep 8
-    r = http_get(GATEWAY_PORT, "/payments/#{pid4}")
-    f4 = json_parse(r)["status"]
-    assert("WALLET high-value processed", %w[APPROVED REVIEW FAILED].include?(f4), "status=#{f4}")
+    ok4 = wait_for_status(pid4, "APPROVED", 30)
+    f4 = nil
+    unless ok4
+      r = http_get(GATEWAY_PORT, "/payments/#{pid4}")
+      f4 = json_parse(r)["status"]
+      ok4 = %w[APPROVED REVIEW FAILED].include?(f4)
+    end
+    assert("WALLET high-value processed", ok4, ok4 ? nil : "status=#{f4}")
   end
 
   phase_footer("fraud")

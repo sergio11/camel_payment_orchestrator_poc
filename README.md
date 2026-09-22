@@ -81,6 +81,37 @@ Kubernetes provides production-grade orchestration:
 - **Secrets**: Secure storage for provider credentials
 - **Health Probes**: Liveness, readiness, and startup probes for reliable deployments
 
+### 🤔 Why Not Spring?
+
+**Spring Boot is an equally valid choice** — this POC picked Quarkus + Camel based on explicit trade-offs, not because Spring is inferior. The patterns used here (hexagonal architecture, transactional outbox, idempotency, EIPs, DLQ/retry, HPA) are **framework-agnostic** and would port cleanly to a Spring stack.
+
+**Stack selection criteria used in this POC:**
+
+| Criterion | Quarkus + Camel (chosen) | Spring Boot equivalent | Edge |
+|-----------|--------------------------|------------------------|------|
+| Container footprint | Fast startup (~2–7s JVM), low memory, build-time init | Solid, but heavier warmup and memory | **Quarkus** |
+| Camel integration | `camel-quarkus`: first-class ("blessed"), build-time route optimization, route health checks | `camel-spring-boot`: mature, same DSL, runtime reflection | **Quarkus** (slight) |
+| Ecosystem & talent pool | Jakarta/EE standards (CDI, JAX-RS, MicroProfile), smaller community | Vast ecosystem (Security, Data, Cloud) and larger talent pool | **Spring** |
+| K8s observability | MicroProfile Health + Micrometer + OpenTelemetry out of the box | Actuator + Micrometer Tracing — feature parity | **Tie** |
+| Native image (GraalVM) | Designed for it from day one | Possible via Spring AOT, more friction | **Quarkus** |
+| Vendor neutrality | Portable Jakarta standards | Spring-idiomatic APIs (soft lock-in) | **Quarkus** |
+
+**Choosing the right Spring-based counterpart** (if the team or stack were Spring):
+
+| This project uses | Spring-based alternative | Notes |
+|--------------------|--------------------------|-------|
+| Quarkus 3.15 | Spring Boot 3.5+ | Equivalent runtime; probes move to `/actuator/health/*`, metrics to `/actuator/prometheus` |
+| Apache Camel (EIP engine) | **Spring Integration** or `camel-spring-boot` | Spring Integration is Camel's true peer (same EIPs, `MessageChannel`-centric); Spring Cloud Stream sits on top of it |
+| Spring Cloud (sometimes confused with the above) | — | Different layer: gateway/config/discovery — **not** an EIP engine; not a Camel alternative |
+| MicroProfile Config/Health | Spring `@Value`/`@ConfigurationProperties` + Actuator | Same defaults-resolution syntax: `${ENV:default}` |
+| CDI (`@Inject`) | Spring IoC (`@Autowired`) | Same DI concept |
+
+**Decision rule of thumb:**
+- Team/stack already Spring → **Spring Boot + `camel-spring-boot`** (equally valid; leverage existing expertise).
+- New build, cost/latency-sensitive K8s, standards-first → **Quarkus + Camel** (this POC).
+- Simple EIPs, fully Spring → Spring Boot + **Spring Integration** (Camel optional).
+- Maximize runtime portability → pick **Camel first**, choose the runtime second.
+
 ---
 
 ## 💪 Strengths and Weaknesses

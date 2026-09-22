@@ -92,6 +92,8 @@ spec:
                 secretKeyRef:
                   name: postgres-secrets
                   key: password
+            - name: OTEL_SERVICE_NAME
+              value: "payment-gateway"
           envFrom:
             - configMapRef:
                 name: jaeger-config
