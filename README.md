@@ -28,6 +28,10 @@ The fraud detection engine uses simulated risk data. In production, this would b
 
 ---
 
+## More Details 📝
+
+For comprehensive information about this project, check out this [Medium article](https://medium.com/@sanchezsanchezsergio418/enterprise-integration-patterns-in-practice-building-a-resilient-payment-pipeline-with-apache-f1695b124d6e).
+
 ## 🚀 Why This Stack?
 
 ### ☕ Why Java 17?
